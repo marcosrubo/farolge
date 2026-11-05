@@ -2,18 +2,15 @@
 
 Protótipo para apresentar a proposta da plataforma à equipe da escola. Uma aplicação estática em HTML, CSS e JavaScript, organizada por módulos e pronta para publicação no GitHub e na Vercel. Não há dependências de instalação ou etapa de compilação.
 
-## O que pode ser demonstrado
+## Estrutura atual para apresentação
 
+- Logos da plataforma e do colégio, com o nome da instituição em três linhas.
 - Menu: Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, Radar e BI SEED; um divisor separa Configurações.
-- Demandas INSTITUCIONAIS abre a caixa geral e Demandas PESSOAIS abre a caixa individual institucional, ambas com três colunas, busca e prioridade. São espaços fictícios, sem contas conectadas.
-- BI SEED é uma tela de apresentação em preparação, sem conteúdo ou integração real.
-- Agenda institucional com busca, filtro e detalhes de compromissos, acessível pela visão geral.
-- Frequência com estudantes fictícios, faltas e próximos passos, acessível pela visão geral.
-- Radar com referências ilustrativas a Busca Ativa, SERP e SINAN, sem integração com esses sistemas.
-- Configurações com nome, iniciais e descrição da escola, alteráveis somente na memória da página.
-- Layout responsivo, navegação por teclado, diálogos de detalhes e roteiro de apresentação em “Como apresentar”.
+- Para qualquer opção, a área principal mostra somente “Meu espaço / nome da opção”, sem conteúdo abaixo.
+- O menu destaca a opção ativa e o título da aba acompanha a seleção.
+- Foram retirados cartões, tabelas, exemplos, gráficos, filtros, datas, avisos, ajuda, roteiro de apresentação, formulários, rodapé e textos inferiores da barra lateral.
 
-Todos os registros e indicadores são inventados. A data de referência da apresentação é 04/11/2026; não é uma indicação de atualização em tempo real. Os números apresentados não são estatísticas da escola nem critérios oficiais de acompanhamento. Nenhum formulário envia ou persiste informações.
+A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conteúdo em conjunto com a equipe. Não preencher novamente as telas com exemplos ou sugestões de funcionalidades sem pedido. Não há dados de estudantes ou e-mails, autenticação, conexões ou persistência.
 
 ## Publicação na nuvem
 
@@ -60,11 +57,11 @@ Os marcadores do Gmail definidos para a implementação futura são:
 | `Demandas_que_eu_devo` | DEVO PARA ALGUÉM |
 | `Demandas_arquivadas` | Fora das três colunas, como interpretação inicial a validar |
 
-As categorias e prioridades dos cartões são ilustrativas. A data de um e-mail não deve ser convertida automaticamente em prazo.
+Os marcadores acima permanecem como referência para a implementação futura. A data de um e-mail não deve ser convertida automaticamente em prazo.
 
 ## Limites e próximos passos
 
-Não há autenticação, autorização, persistência, análise de e-mails, notificações nem integração com Gmail, Drive, Google Planilhas ou sistemas de acompanhamento. Este protótipo não deve receber dados reais de estudantes. Alterações na identidade desaparecem ao recarregar a página.
+Não há autenticação, autorização, persistência, análise de e-mails, notificações nem integração com Gmail, Drive, Google Planilhas ou sistemas de acompanhamento. O protótipo atual não tem formulários. A identidade da escola é definida no arquivo config.js.
 
 Antes da implementação real, definir contas e permissões, autorizações oficiais do Google, armazenamento seguro das sessões, origem dos registros, critérios de frequência e acompanhamento e separação entre escolas. O uso de Google Planilhas/Drive para pequenos volumes foi discutido, mas a arquitetura ainda precisa ser validada. Os e-mails permanecerão no Gmail. O login do portal e as conexões com caixas distintas terão autorizações independentes.
 

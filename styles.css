@@ -6,3 +6,9 @@
 
 /* Os títulos completos das demandas podem ocupar duas linhas no menu. */
 .nav-link>span:not(.nav-number){min-width:0;line-height:1.5}.nav-number{flex-shrink:0}
+
+/* Quebras definidas para a identificação da escola. */
+.school-block{padding-left:0;padding-right:0}.school-block .school-name-lines{white-space:pre;font-weight:650;line-height:1.6}
+
+/* Área vazia para construir os módulos em conjunto com a escola. */
+main.empty-workspace{padding:0;min-height:calc(100vh - 76px)}@media(max-width:600px){main.empty-workspace{min-height:calc(100vh - 55px)}}
