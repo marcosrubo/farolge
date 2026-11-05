@@ -36,13 +36,38 @@ function updateSchool(){
   subtitle.hidden=!config.schoolSubtitle;
 }
 
+function renderRadar(){
+  const sources=[
+    ['RCO','Ocorrências registradas'],
+    ['SINAN','Fichas emitidas pelas pedagogas'],
+    ['SERP','Registros de acompanhamento'],
+    ['ATAS','Reuniões e atendimentos'],
+    ['Busca ATIVA','Registros de acompanhamento'],
+    ['Alunos','CGM e NOME']
+  ];
+  return `<section class="radar-flow-scroll" aria-label="Fluxo do Radar: RCO, SINAN, SERP, ATAS, Busca ATIVA e Alunos alimentam ANÁLISES, que gera DOSSIÊ individual e Relação diária de FALTAS">
+    <div class="radar-flow">
+      <ul class="radar-sources">${sources.map(([title,description])=>`<li class="radar-node"><strong>${title}</strong><span>${description}</span></li>`).join('')}</ul>
+      <div class="radar-merge" aria-hidden="true"></div>
+      <div class="radar-analysis">ANÁLISES</div>
+      <div class="radar-branch" aria-hidden="true"></div>
+      <ul class="radar-outputs">
+        <li class="radar-node"><strong>DOSSIÊ individual</strong></li>
+        <li class="radar-node"><strong>Relação diária de FALTAS</strong></li>
+      </ul>
+    </div>
+  </section>`;
+}
+
 function render(){
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const selected=modules.find(item=>item.id===route)||modules[0];
   document.title='FAROL GE · '+selected.label;
   document.querySelector('#breadcrumb-title').textContent=selected.label;
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='configuracoes'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&index<5?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
-  // A área de trabalho fica intencionalmente vazia em todas as opções.
+  const main=document.querySelector('#main');
+  main.classList.toggle('radar-workspace',selected.id==='radar');
+  main.innerHTML=selected.id==='radar'?renderRadar():'';
 }
 window.addEventListener('hashchange',()=>{
   render();

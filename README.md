@@ -6,11 +6,11 @@ Protótipo para apresentar a proposta da plataforma à equipe da escola. Uma apl
 
 - Logos da plataforma e do colégio, com o nome da instituição em três linhas.
 - Menu: Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, Radar e BI SEED; um divisor separa Configurações.
-- Para qualquer opção, a área principal mostra somente “Meu espaço / nome da opção”, sem conteúdo abaixo.
+- As opções mostram “Meu espaço / nome da opção”. Radar também apresenta o fluxo solicitado: RCO, SINAN, SERP, ATAS, Busca ATIVA e Alunos convergem para ANÁLISES, com saídas DOSSIÊ individual e Relação diária de FALTAS.
 - O menu destaca a opção ativa e o título da aba acompanha a seleção.
 - Foram retirados cartões, tabelas, exemplos, gráficos, filtros, datas, avisos, ajuda, roteiro de apresentação, formulários, rodapé e textos inferiores da barra lateral.
 
-A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conteúdo em conjunto com a equipe. Não preencher novamente as telas com exemplos ou sugestões de funcionalidades sem pedido. Não há dados de estudantes ou e-mails, autenticação, conexões ou persistência.
+A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conteúdo em conjunto com a equipe. Posteriormente, Marcos solicitou o fluxograma de Radar. Os quadros são uma estrutura visual, sem abertura de registros ou análises implementadas e sem integração aos sistemas citados. Em telas estreitas, o fluxo pode ser percorrido horizontalmente. As demais opções continuam vazias. Não preencher novamente as telas com exemplos ou sugestões de funcionalidades sem pedido. Não há dados de estudantes ou e-mails, autenticação, conexões ou persistência.
 
 ## Publicação na nuvem
 
