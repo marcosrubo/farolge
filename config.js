@@ -1,8 +1,9 @@
 // Personalização inicial de cada escola. Somente informações públicas, nunca segredos.
 window.FAROL_CONFIG = {
-  schoolName: 'Colégio Thiago Terra',
+  schoolName: 'COLÉGIO ESTADUAL CÍVICO MILITAR THIAGO TERRA',
   schoolInitials: 'TT',
-  schoolSubtitle: 'Ensino Fundamental e Médio',
+  schoolSubtitle: '',
+  schoolLogo: 'arte/thiago-terra-identidade-original.png',
   gmailLabels: {
     incoming: 'Demandas_que_me_devem',
     personal: 'Demandas_minhas',

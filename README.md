@@ -4,10 +4,11 @@ Protótipo para apresentar a proposta da plataforma à equipe da escola. Uma apl
 
 ## O que pode ser demonstrado
 
-- Visão geral com acesso aos quatro módulos e resumo dos exemplos.
-- Demandas com três colunas, busca, filtro de prioridade e seleção entre caixa individual e caixa geral da escola. São espaços fictícios, sem contas conectadas.
-- Agenda institucional com busca, filtro e detalhes de compromissos.
-- Frequência com estudantes fictícios, faltas e próximos passos.
+- Menu: Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, Radar e BI SEED; um divisor separa Configurações.
+- Demandas INSTITUCIONAIS abre a caixa geral e Demandas PESSOAIS abre a caixa individual institucional, ambas com três colunas, busca e prioridade. São espaços fictícios, sem contas conectadas.
+- BI SEED é uma tela de apresentação em preparação, sem conteúdo ou integração real.
+- Agenda institucional com busca, filtro e detalhes de compromissos, acessível pela visão geral.
+- Frequência com estudantes fictícios, faltas e próximos passos, acessível pela visão geral.
 - Radar com referências ilustrativas a Busca Ativa, SERP e SINAN, sem integração com esses sistemas.
 - Configurações com nome, iniciais e descrição da escola, alteráveis somente na memória da página.
 - Layout responsivo, navegação por teclado, diálogos de detalhes e roteiro de apresentação em “Como apresentar”.
@@ -46,7 +47,9 @@ git push
 
 ## Personalização
 
-Editar `config.js` para definir o nome público, as iniciais e a descrição da escola. O símbolo em `arte/` é a marca da plataforma, não o logo da instituição. As artes originais foram preservadas. A fonte DM Sans é carregada do Google Fonts; há alternativa com fontes do sistema.
+Editar `config.js` para definir o nome público, as iniciais, a descrição e o caminho do emblema da escola (`schoolLogo`). Sem descrição, a linha secundária fica oculta. Sem emblema, aparecem as iniciais como alternativa.
+
+A identificação do colégio usa o emblema à esquerda e apenas “COLÉGIO ESTADUAL CÍVICO MILITAR THIAGO TERRA” ao lado. O arquivo `arte/thiago-terra-identidade-original.png` preserva o cabeçalho original enviado por Marcos; o CSS mostra somente o emblema da faixa esquerda, sem redesenhar a arte. O símbolo do farol continua sendo a marca da plataforma. As artes originais foram preservadas. A fonte DM Sans é carregada do Google Fonts; há alternativa com fontes do sistema.
 
 Os marcadores do Gmail definidos para a implementação futura são:
 

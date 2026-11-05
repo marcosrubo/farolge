@@ -13,7 +13,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
-- Uma aplicação, um repositório e um projeto Vercel, com módulos Demandas, Agenda Institucional, Frequência e Radar.
+- Uma aplicação, um repositório e um projeto Vercel. Menu definido: Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, Radar e BI SEED; manter o divisor antes de Configurações. BI SEED ainda aguarda definição de conteúdo.
+- Demandas INSTITUCIONAIS usa a caixa geral; Demandas PESSOAIS usa a caixa individual institucional. Agenda e Frequência permanecem acessíveis pela visão geral.
 - Identidade configurável por escola, com intenção de compartilhar a plataforma com outras instituições. A arquitetura para atender várias escolas ainda não foi aprovada.
 - Demandas usa Gmail; contas pessoais e institucionais serão atendidas. Cada caixa exige autorização própria. Uma sessão no Gmail não comprova autorização do aplicativo.
 - As três colunas e marcadores constam no README. Tratamento de marcadores simultâneos e precedência de arquivadas ainda pendem de validação.
