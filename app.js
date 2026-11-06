@@ -10,9 +10,9 @@ const icons = {
 };
 const modules = [
   {id:'inicio',icon:'inicio',label:'Visão GERAL'},
+  {id:'radar',icon:'radar',label:'Radar'},
   {id:'institucionais',icon:'demandas',label:'Demandas INSTITUCIONAIS'},
   {id:'pessoais',icon:'demandas',label:'Demandas PESSOAIS'},
-  {id:'radar',icon:'radar',label:'Radar'},
   {id:'bi-seed',icon:'indicadores',label:'BI SEED'},
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
@@ -59,6 +59,27 @@ function renderRadar(){
   </section>`;
 }
 
+function renderDevelopment(id){
+  const descriptions={
+    inicio:'Nesta tela serão mostrados indicadores gerais de',
+    institucionais:'Nesta tela serão disponibilizados os recursos de organização das demandas do colégio a partir do e-mail institucional geral LDA....@escola.pr.gov.br.',
+    pessoais:'Nesta tela serão disponibilizados os recursos de organização das demandas pessoais de quem estiver conectado (diretora, secretária, pedagogas e quem mais utilizar o sistema) a partir do e-mail pessoal institucional fulano.ciclano....@escola.pr.gov.br.',
+    configuracoes:'Aqui serão disponibilizados os recursos para conexão com o e-mail institucional geral, pessoal institucional e demais dados de configuração/parametrização do sistema.'
+  };
+  if(!Object.hasOwn(descriptions,id))return '';
+  const indicators=[
+    'Acompanhamento de Alunos',
+    'Resumo das Demandas INSTITUCIONAIS da escola',
+    'Resumo das Demandas PESSOAIS de quem estiver conectado',
+    'Índices do BI da SEED'
+  ];
+  return `<section class="development-content" aria-labelledby="development-title">
+    <h1 id="development-title">em Desenvolvimento</h1>
+    <p>${descriptions[id]}</p>
+    ${id==='inicio'?`<ul>${indicators.map(item=>`<li>${item}</li>`).join('')}</ul>`:''}
+  </section>`;
+}
+
 function render(){
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const selected=modules.find(item=>item.id===route)||modules[0];
@@ -67,7 +88,7 @@ function render(){
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='configuracoes'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&index<5?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
-  main.innerHTML=selected.id==='radar'?renderRadar():'';
+  main.innerHTML=selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
 }
 window.addEventListener('hashchange',()=>{
   render();
