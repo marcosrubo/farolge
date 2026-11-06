@@ -62,6 +62,7 @@ function renderRadar(){
 function renderDevelopment(id){
   const descriptions={
     inicio:'Nesta tela serão mostrados indicadores gerais de',
+    'bi-seed':'Aqui serão apresentados os indicadores/resumos do BI para que possa ter uma visão simplificada da situação da escola.',
     institucionais:'Nesta tela serão disponibilizados os recursos de organização das demandas do colégio a partir do e-mail institucional geral LDA....@escola.pr.gov.br.',
     pessoais:'Nesta tela serão disponibilizados os recursos de organização das demandas pessoais de quem estiver conectado (diretora, secretária, pedagogas e quem mais utilizar o sistema) a partir do e-mail pessoal institucional fulano.ciclano....@escola.pr.gov.br.',
     configuracoes:'Aqui serão disponibilizados os recursos para conexão com o e-mail institucional geral, pessoal institucional e demais dados de configuração/parametrização do sistema.'
