@@ -91,10 +91,25 @@ function render(){
   main.classList.toggle('radar-workspace',selected.id==='radar');
   main.innerHTML=selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
 }
+function setupEmailConnections(){
+  const dialog=document.querySelector('#email-connection-dialog');
+  document.querySelectorAll('[data-connect-email]').forEach(button=>{
+    button.addEventListener('click',()=>{
+      const isGeneral=button.dataset.connectEmail==='general';
+      document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar e-mail institucional geral':'Conectar e-mail pessoal institucional';
+      document.querySelector('#email-connection-description').textContent=isGeneral
+        ?'Esta conexão será usada para consultar as Demandas INSTITUCIONAIS na caixa geral do colégio.'
+        :'Esta conexão será usada para consultar suas Demandas PESSOAIS na sua caixa institucional individual.';
+      dialog.showModal();
+    });
+  });
+}
+
 window.addEventListener('hashchange',()=>{
   render();
   document.querySelector('#main').focus({preventScroll:true});
   window.scrollTo(0,0);
 });
 updateSchool();
+setupEmailConnections();
 render();

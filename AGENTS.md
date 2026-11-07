@@ -13,6 +13,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 07/11/2026, Marcos solicitou um quadro de conexões de e-mails institucionais abaixo do breadcrumb em todos os módulos, com Geral e Pessoal e botões Conectar separados. Até a integração real ser configurada, mostrar “NÃO conectado” e explicar a indisponibilidade ao clicar. Planejamento em CONEXOES_GOOGLE.md; nunca simular sucesso nem pedir senha no portal.
+
 - Em 06/11/2026, Marcos pediu “em Desenvolvimento” com textos específicos em Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, BI SEED e Configurações. Preservar o fluxograma já solicitado no Radar. Esses pedidos complementam a simplificação inicial abaixo, sem implementar integrações ou indicadores reais.
 
 - Em 05/11/2026, Marcos pediu telas vazias: ao selecionar qualquer opção, mostrar somente “Meu espaço / nome da opção”. Preservar logos e menu, sem avisos, perfil de demonstração, slogans inferiores, rodapé, dados de exemplo ou conteúdo nos módulos, inclusive Configurações. Construir os conteúdos com a equipe conforme novos pedidos.

@@ -11,6 +11,17 @@
 .school-block{padding-left:0;padding-right:0}.school-block .school-name-lines{white-space:pre;font-weight:650;line-height:1.6}
 
 /* Área vazia para construir os módulos em conjunto com a escola. */
+.email-connections{margin:24px 38px 0;padding:20px 24px;border:1px solid var(--border);border-radius:12px;background:#fff}
+.email-connections h2{font-size:13px;font-weight:650;line-height:1.5;margin:0 0 12px;color:var(--green)}
+.email-connections-list{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.email-connections-list li{display:grid;grid-template-columns:65px minmax(0,1fr) auto;align-items:center;gap:12px;max-width:640px;font-size:13px}
+.email-connections-list strong{font-weight:600}
+.email-connection-status{color:#728477;overflow-wrap:anywhere}
+.email-connect-button{border:1px solid #cfdbcb;background:#edf2e7;border-radius:7px;padding:9px 16px;color:var(--green);font-weight:600;font-size:12px;min-height:40px}
+.email-connect-button:hover{background:#dce8c9}
+.email-connection-availability{padding:12px 14px;background:#f0f3e9;border-radius:8px}
+@media(max-width:1200px){.email-connections{margin:22px 23px 0}}
+@media(max-width:600px){.email-connections{margin:18px 16px 0;padding:16px}.email-connections-list li{grid-template-columns:55px minmax(0,1fr);gap:8px}.email-connect-button{grid-column:2;justify-self:start}}
 main.empty-workspace{padding:0;min-height:calc(100vh - 76px)}@media(max-width:600px){main.empty-workspace{min-height:calc(100vh - 55px)}}
 
 /* Radar: fontes de registros convergem para análises e seus dois resultados. */
