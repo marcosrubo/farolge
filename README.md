@@ -1,6 +1,6 @@
 # FAROL GE — Farol da Gestão Escolar
 
-Protótipo para apresentar a proposta da plataforma à equipe da escola. Uma aplicação estática em HTML, CSS e JavaScript, organizada por módulos e pronta para publicação no GitHub e na Vercel. Não há dependências de instalação ou etapa de compilação.
+Protótipo para apresentar a proposta da plataforma à equipe da escola. Frontend em HTML, CSS e JavaScript, organizado por módulos, com backend de conexão Google em Vercel Functions. A biblioteca oficial Google é instalada pelo package.json; o frontend não tem etapa de compilação.
 
 ## Estrutura atual para apresentação
 
@@ -9,10 +9,10 @@ Protótipo para apresentar a proposta da plataforma à equipe da escola. Uma apl
 - As opções mostram “Meu espaço / nome da opção”. Radar também apresenta o fluxo solicitado: RCO, SINAN, SERP, ATAS, Busca ATIVA e Alunos convergem para ANÁLISES, com saídas DOSSIÊ individual e Relação diária de FALTAS.
 - Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, BI SEED e Configurações exibem “em Desenvolvimento” e os textos definidos por Marcos em 06/11/2026. A Visão GERAL lista os quatro grupos de indicadores previstos. BI SEED apresenta o texto sobre os indicadores/resumos previstos para uma visão simplificada da situação da escola.
 - O menu destaca a opção ativa e o título da aba acompanha a seleção.
-- Abaixo do breadcrumb, todos os módulos mostram o quadro “conexões ativas / e-mails institucionais”, com Geral e Pessoal em “NÃO conectado” e botões Conectar independentes. No protótipo, cada botão abre uma explicação específica e informa que a conexão Google ainda não está disponível. O fluxo real e suas dependências estão em [CONEXOES_GOOGLE.md](CONEXOES_GOOGLE.md).
+- Abaixo do breadcrumb, todos os módulos mostram o quadro “conexões ativas / e-mails institucionais”, com Geral e Pessoal em “NÃO conectado” e botões Conectar independentes. Cada botão abre uma explicação específica. Quando as variáveis do servidor e o armazenamento exclusivo do FAROL GE estiverem configurados, o fluxo OAuth conecta e confirma a conta, com opções de troca e desconexão. Sem configuração, o botão de autorização fica indisponível. A configuração está em [CONEXOES_GOOGLE.md](CONEXOES_GOOGLE.md).
 - Foram retirados cartões, tabelas, exemplos, gráficos, filtros, datas, avisos, ajuda, roteiro de apresentação, formulários, rodapé e textos inferiores da barra lateral.
 
-A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conteúdo em conjunto com a equipe. Posteriormente, Marcos solicitou o fluxograma de Radar e os textos de desenvolvimento nas demais telas descritas acima. Os quadros são uma estrutura visual, sem abertura de registros ou análises implementadas e sem integração aos sistemas citados. Em telas estreitas, o fluxo pode ser percorrido horizontalmente. Os endereços de e-mail nos textos são ilustrativos. Não preencher novamente as telas com exemplos ou sugestões de funcionalidades sem pedido. Não há dados de estudantes ou e-mails, autenticação, conexões ou persistência.
+A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conteúdo em conjunto com a equipe. Posteriormente, Marcos solicitou o fluxograma de Radar e os textos de desenvolvimento nas demais telas descritas acima. Os quadros são uma estrutura visual, sem abertura de registros ou análises implementadas e sem integração aos sistemas citados. Em telas estreitas, o fluxo pode ser percorrido horizontalmente. Os endereços de e-mail nos textos são ilustrativos. Não preencher novamente as telas com exemplos ou sugestões de funcionalidades sem pedido. Não há dados de estudantes ou mensagens. O backend OAuth foi implementado, mas depende de configuração externa e não foi validado com contas reais. As sessões de conexão são individuais por navegador, sem compartilhamento entre usuários ou escolas.
 
 ## Publicação na nuvem
 
@@ -63,8 +63,8 @@ Os marcadores acima permanecem como referência para a implementação futura. A
 
 ## Limites e próximos passos
 
-Não há autenticação, autorização, persistência, análise de e-mails, notificações nem integração com Gmail, Drive, Google Planilhas ou sistemas de acompanhamento. O único formulário atual fecha o diálogo explicativo de conexão; não solicita credenciais. A identidade da escola é definida no arquivo config.js.
+Não há login do portal, análise de e-mails, notificações nem integração com Drive, Google Planilhas ou sistemas de acompanhamento. Há fluxo OAuth para conexão de duas caixas Gmail, condicionado à configuração descrita em CONEXOES_GOOGLE.md. Ele consulta apenas o perfil da caixa para confirmar o endereço e guarda as autorizações criptografadas no Supabase exclusivo do FAROL GE. A arquitetura para compartilhar conexões por escola ainda não está implementada. A identidade visual da escola continua definida em config.js.
 
-Antes da implementação real, definir contas e permissões, autorizações oficiais do Google, armazenamento seguro das sessões, origem dos registros, critérios de frequência e acompanhamento e separação entre escolas. O uso de Google Planilhas/Drive para pequenos volumes foi discutido, mas a arquitetura ainda precisa ser validada. Os e-mails permanecerão no Gmail. O login do portal e as conexões com caixas distintas terão autorizações independentes.
+Antes da ativação real, configurar o cliente Google OAuth, a tabela e as variáveis do backend e validar as autorizações na Vercel. Antes de compartilhar acesso entre pessoas, definir login do portal, permissões e separação entre escolas. Também faltam origem dos registros e critérios de frequência e acompanhamento. O uso de Google Planilhas/Drive para pequenos volumes foi discutido, mas a arquitetura ainda precisa ser validada. Os e-mails permanecerão no Gmail. O login do portal e as conexões com caixas distintas terão autorizações independentes.
 
 Este projeto é independente do PsicoTarefas. A abertura automática e maximizada no Linux será uma configuração do navegador na máquina, depois de existir um endereço publicado.

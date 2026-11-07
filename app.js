@@ -91,18 +91,118 @@ function render(){
   main.classList.toggle('radar-workspace',selected.id==='radar');
   main.innerHTML=selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
 }
+const connectionMessages={
+  connected:'Conexão confirmada pelo Google.',
+  cancelled:'Autorização cancelada. Nenhuma conexão foi substituída.',
+  invalid_state:'A solicitação expirou ou não pertence a este navegador. Tente conectar novamente.',
+  wrong_account:'Escolha a conta institucional correta para esta conexão.',
+  not_allowed:'Esta conta ainda não está autorizada a participar do FAROL GE.',
+  missing_scope:'É necessário autorizar a consulta ao Gmail para concluir a conexão.',
+  failed:'Não foi possível concluir a conexão com o Google. Tente novamente.',
+  unavailable:'O serviço de conexão está temporariamente indisponível.',
+  not_configured:'A conexão Google ainda precisa ser configurada para este FAROL GE.'
+};
 function setupEmailConnections(){
   const dialog=document.querySelector('#email-connection-dialog');
+  const availability=document.querySelector('#email-connection-availability');
+  const continueButton=document.querySelector('#email-connection-continue');
+  const feedback=document.querySelector('#email-connection-feedback');
+  let configured=false;
+  let selectedType='personal';
+  let statusVersion=0;
+  const types=['general','personal'];
+  async function api(action,body){
+    const response=await fetch('/api/google/'+action,{
+      method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',
+      headers:body?{'Content-Type':'application/json','X-Farol-Request':'1'}:{},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error||'unavailable');
+    return result;
+  }
+  function showAvailability(){
+    availability.textContent=configured
+      ?'Escolha sua conta no Google e autorize a consulta ao Gmail. Cada conexão é independente.'
+      :connectionMessages.not_configured;
+    continueButton.hidden=!configured;
+  }
+  async function refresh(){
+    const version=++statusVersion;
+    try {
+      const result=await api('status');
+      if(version!==statusVersion)return;
+      configured=result.configured===true;
+      for(const type of types){
+        const connection=result.connections?.[type];
+        const email=connection?.email;
+        const connected=configured && typeof email==='string' && /^[^@\s]+@escola\.pr\.gov\.br$/.test(email);
+        const status=document.querySelector('#email-'+type+'-status');
+        status.textContent=connected?email:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
+        status.classList.toggle('is-connected',connected);
+        const button=document.querySelector('[data-connect-email="'+type+'"]');
+        button.textContent=connected?'Trocar conta':'Conectar';
+        document.querySelector('[data-disconnect-email="'+type+'"]').hidden=!connected;
+      }
+      showAvailability();
+    } catch {
+      if(version!==statusVersion)return;
+      configured=false;
+      for(const type of types){
+        const status=document.querySelector('#email-'+type+'-status');
+        status.textContent='Conexão não verificada';
+        status.classList.toggle('is-connected',false);
+        document.querySelector('[data-disconnect-email="'+type+'"]').hidden=true;
+      }
+      availability.textContent=connectionMessages.unavailable;
+      continueButton.hidden=true;
+    }
+  }
   document.querySelectorAll('[data-connect-email]').forEach(button=>{
     button.addEventListener('click',()=>{
-      const isGeneral=button.dataset.connectEmail==='general';
+      selectedType=button.dataset.connectEmail;
+      const isGeneral=selectedType==='general';
       document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar e-mail institucional geral':'Conectar e-mail pessoal institucional';
-      document.querySelector('#email-connection-description').textContent=isGeneral
-        ?'Esta conexão será usada para consultar as Demandas INSTITUCIONAIS na caixa geral do colégio.'
-        :'Esta conexão será usada para consultar suas Demandas PESSOAIS na sua caixa institucional individual.';
+      document.querySelector('#email-connection-description').innerHTML=isGeneral
+        ?'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'
+        :'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL da pessoa que estiver utilizando a aplicação.';
+      showAvailability();
       dialog.showModal();
     });
   });
+  continueButton.addEventListener('click',async()=>{
+    continueButton.disabled=true;
+    availability.textContent='Preparando a conexão com o Google…';
+    try {
+      const result=await api('start',{type:selectedType,route:location.hash.slice(1)});
+      const target=new URL(result.url);
+      if(target.origin!=='https://accounts.google.com' || target.pathname!=='/o/oauth2/v2/auth')throw new Error('failed');
+      window.location.assign(target.href);
+    } catch(error) {
+      availability.textContent=connectionMessages[error.message]||connectionMessages.unavailable;
+    } finally {continueButton.disabled=false;}
+  });
+  document.querySelectorAll('[data-disconnect-email]').forEach(button=>{
+    button.addEventListener('click',async()=>{
+      button.disabled=true;
+      try {
+        await api('disconnect',{type:button.dataset.disconnectEmail});
+        feedback.textContent='Conexão removida deste navegador. A outra conexão foi preservada.';
+        await refresh();
+      } catch {feedback.textContent=connectionMessages.unavailable;}
+      finally {button.disabled=false;}
+    });
+  });
+  const params=new URLSearchParams(location.search);
+  const result=params.get('connection');
+  if(result){
+    feedback.textContent=connectionMessages[result]||connectionMessages.failed;
+    params.delete('connection');
+    params.delete('mailbox');
+    window.history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():'')+location.hash);
+  }
+  window.addEventListener('focus',refresh);
+  refresh();
 }
 
 window.addEventListener('hashchange',()=>{

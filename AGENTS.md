@@ -13,7 +13,7 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
-- Em 07/11/2026, Marcos solicitou um quadro de conexões de e-mails institucionais abaixo do breadcrumb em todos os módulos, com Geral e Pessoal e botões Conectar separados. Até a integração real ser configurada, mostrar “NÃO conectado” e explicar a indisponibilidade ao clicar. Planejamento em CONEXOES_GOOGLE.md; nunca simular sucesso nem pedir senha no portal.
+- Em 07/11/2026, Marcos solicitou um quadro de conexões de e-mails institucionais abaixo do breadcrumb em todos os módulos, com Geral e Pessoal e botões Conectar separados. Backend OAuth implementado para duas caixas independentes, com ativação dependente de configuração Google/Vercel/Supabase exclusiva do FAROL GE. Textos dos diálogos usam “integração entre o Farol GE e a conta INSTITUCIONAL”. Sessões por navegador; não há login/permissões do portal ou compartilhamento por escola. Configuração em CONEXOES_GOOGLE.md; nunca simular sucesso nem pedir senha no portal.
 
 - Em 06/11/2026, Marcos pediu “em Desenvolvimento” com textos específicos em Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, BI SEED e Configurações. Preservar o fluxograma já solicitado no Radar. Esses pedidos complementam a simplificação inicial abaixo, sem implementar integrações ou indicadores reais.
 

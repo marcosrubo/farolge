@@ -24,18 +24,19 @@
     <section class="email-connections" aria-labelledby="email-connections-title">
       <h2 id="email-connections-title">conexões ativas / e-mails institucionais:</h2>
       <ul class="email-connections-list">
-        <li><strong>Geral:</strong><span class="email-connection-status" id="email-general-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="general" aria-label="Conectar e-mail institucional geral" aria-haspopup="dialog">Conectar</button></li>
-        <li><strong>Pessoal:</strong><span class="email-connection-status" id="email-personal-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="personal" aria-label="Conectar e-mail pessoal institucional" aria-haspopup="dialog">Conectar</button></li>
+        <li><strong>Geral:</strong><span class="email-connection-status" id="email-general-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="general" aria-label="Conectar e-mail institucional geral" aria-haspopup="dialog">Conectar</button><button type="button" class="email-disconnect-button" data-disconnect-email="general" aria-label="Desconectar e-mail geral deste navegador" hidden>Desconectar</button></li>
+        <li><strong>Pessoal:</strong><span class="email-connection-status" id="email-personal-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="personal" aria-label="Conectar e-mail pessoal institucional" aria-haspopup="dialog">Conectar</button><button type="button" class="email-disconnect-button" data-disconnect-email="personal" aria-label="Desconectar e-mail pessoal deste navegador" hidden>Desconectar</button></li>
       </ul>
+      <p id="email-connection-feedback" class="email-connection-feedback" role="status"></p>
     </section>
     <main id="main" class="empty-workspace" tabindex="-1" aria-labelledby="breadcrumb-title"></main>
   </div>
   <dialog id="email-connection-dialog" aria-labelledby="email-connection-title" aria-describedby="email-connection-description email-connection-availability">
     <h2 id="email-connection-title">Conectar e-mail institucional</h2>
     <p id="email-connection-description"></p>
-    <p id="email-connection-availability" class="email-connection-availability">A conexão com o Google ainda não está disponível neste protótipo. Sua conta permanece NÃO conectada.</p>
-    <p>Quando disponível, você escolherá a conta @escola.pr.gov.br e autorizará somente a consulta aos e-mails na página do Google. A senha será informada apenas ao Google.</p>
-    <form method="dialog"><button class="button primary" autofocus>Entendi</button></form>
+    <p id="email-connection-availability" class="email-connection-availability">Verificando a disponibilidade da conexão Google…</p>
+    <p>A senha será informada apenas ao Google. O FAROL GE solicitará acesso de consulta ao Gmail, sem permissão de enviar, alterar ou excluir e-mails.</p>
+    <div class="button-row"><button type="button" class="button primary" id="email-connection-continue" hidden>Continuar com Google</button><form method="dialog"><button class="button" autofocus>Fechar</button></form></div>
   </dialog>
 </body>
 </html>

@@ -1,0 +1,14 @@
+{
+  "name": "farolge",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "google-auth-library": "11.3.3"
+  }
+}
