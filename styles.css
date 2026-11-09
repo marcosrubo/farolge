@@ -56,3 +56,9 @@ main.radar-workspace{padding:38px}
 .email-connection-feedback{font-size:12px;line-height:1.6;margin:12px 0 0;color:#52664f}
 .email-connection-feedback:empty{display:none}
 @media(max-width:600px){.email-disconnect-button{grid-column:2;justify-self:start}}
+
+.portal-access{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--border)}
+.portal-access>div{flex:1;min-width:180px}
+.portal-access strong{font-size:14px;overflow-wrap:anywhere}
+.portal-access p{font-size:12px;line-height:1.6;color:#728477;margin:5px 0 0}
+.email-connect-button:disabled{cursor:not-allowed;opacity:.55}

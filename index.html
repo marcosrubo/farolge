@@ -22,20 +22,26 @@
   <div class="workspace">
     <header class="topbar"><div class="breadcrumb">Meu espaço <span>/</span> <strong id="breadcrumb-title" aria-live="polite">Visão GERAL</strong></div></header>
     <section class="email-connections" aria-labelledby="email-connections-title">
-      <h2 id="email-connections-title">conexões ativas / e-mails institucionais:</h2>
+      <div class="portal-access">
+        <div><strong id="portal-user">Entrar no FAROL GE</strong><p id="portal-description">Use sua conta Google para entrar e autorizar Gmail e Drive.</p></div>
+        <button type="button" class="email-connect-button" id="portal-login" disabled>Entrar com Google</button>
+        <button type="button" class="email-disconnect-button" id="portal-logout" hidden>Sair</button>
+      </div>
+      <h2 id="email-connections-title">conexões ativas / e-mails e Drive:</h2>
       <ul class="email-connections-list">
-        <li><strong>Geral:</strong><span class="email-connection-status" id="email-general-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="general" aria-label="Conectar e-mail institucional geral" aria-haspopup="dialog">Conectar</button><button type="button" class="email-disconnect-button" data-disconnect-email="general" aria-label="Desconectar e-mail geral deste navegador" hidden>Desconectar</button></li>
-        <li><strong>Pessoal:</strong><span class="email-connection-status" id="email-personal-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="personal" aria-label="Conectar e-mail pessoal institucional" aria-haspopup="dialog">Conectar</button><button type="button" class="email-disconnect-button" data-disconnect-email="personal" aria-label="Desconectar e-mail pessoal deste navegador" hidden>Desconectar</button></li>
+        <li><strong>Geral:</strong><span class="email-connection-status" id="email-general-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="general" aria-label="Conectar Gmail e Drive da escola" aria-haspopup="dialog" disabled>Conectar</button><button type="button" class="email-disconnect-button" data-disconnect-email="general" aria-label="Desconectar e-mail geral deste navegador" hidden>Desconectar</button></li>
+        <li><strong>Pessoal:</strong><span class="email-connection-status" id="email-personal-status" role="status">NÃO conectado</span><button type="button" class="email-connect-button" data-connect-email="personal" aria-label="Conectar Gmail e Drive pessoais" aria-haspopup="dialog" hidden>Conectar</button><button type="button" class="email-disconnect-button" data-disconnect-email="personal" aria-label="Desconectar e-mail pessoal deste navegador" hidden>Desconectar</button></li>
       </ul>
       <p id="email-connection-feedback" class="email-connection-feedback" role="status"></p>
     </section>
-    <main id="main" class="empty-workspace" tabindex="-1" aria-labelledby="breadcrumb-title"></main>
+    <main hidden id="main" class="empty-workspace" tabindex="-1" aria-labelledby="breadcrumb-title"></main>
   </div>
   <dialog id="email-connection-dialog" aria-labelledby="email-connection-title" aria-describedby="email-connection-description email-connection-availability">
     <h2 id="email-connection-title">Conectar e-mail institucional</h2>
     <p id="email-connection-description"></p>
+    <p id="personal-registration-note">No primeiro acesso pessoal, seu usuário será criado automaticamente, sem formulário de cadastro.</p>
     <p id="email-connection-availability" class="email-connection-availability">Verificando a disponibilidade da conexão Google…</p>
-    <p>A senha será informada apenas ao Google. O FAROL GE solicitará acesso de consulta ao Gmail, sem permissão de enviar, alterar ou excluir e-mails.</p>
+    <p>A senha será informada apenas ao Google. O FAROL GE solicitará consulta ao Gmail e acesso para consultar, criar e alterar arquivos do Drive criados pelo aplicativo ou selecionados para uso nele. Não será solicitado acesso a todo o Drive.</p>
     <div class="button-row"><button type="button" class="button primary" id="email-connection-continue" hidden>Continuar com Google</button><form method="dialog"><button class="button" autofocus>Fechar</button></form></div>
   </dialog>
 </body>

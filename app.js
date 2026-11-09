@@ -92,11 +92,13 @@ function render(){
   main.innerHTML=selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
 }
 const connectionMessages={
-  connected:'Conexão confirmada pelo Google.',
+  connected:'Entrada e permissões confirmadas pelo Google.',
+  partial:'Entrada concluída. Algumas permissões não foram autorizadas; os recursos correspondentes ficam indisponíveis.',
+  login_required:'Entre novamente com Google para continuar.',
   cancelled:'Autorização cancelada. Nenhuma conexão foi substituída.',
   invalid_state:'A solicitação expirou ou não pertence a este navegador. Tente conectar novamente.',
-  wrong_account:'Escolha a conta institucional correta para esta conexão.',
-  not_allowed:'Esta conta ainda não está autorizada a participar do FAROL GE.',
+  wrong_account:'Escolha a conta correta para esta conexão.',
+  not_allowed:'Esta pessoa não tem permissão para conectar a conta geral da escola.',
   missing_scope:'É necessário autorizar a consulta ao Gmail para concluir a conexão.',
   failed:'Não foi possível concluir a conexão com o Google. Tente novamente.',
   unavailable:'O serviço de conexão está temporariamente indisponível.',
@@ -109,6 +111,8 @@ function setupEmailConnections(){
   const feedback=document.querySelector('#email-connection-feedback');
   let configured=false;
   let selectedType='personal';
+  let currentUser=null;
+  let canConnectGeneral=false;
   let statusVersion=0;
   const types=['general','personal'];
   async function api(action,body){
@@ -123,7 +127,7 @@ function setupEmailConnections(){
   }
   function showAvailability(){
     availability.textContent=configured
-      ?'Escolha sua conta no Google e autorize a consulta ao Gmail. Cada conexão é independente.'
+      ?'Escolha sua conta no Google e autorize Gmail e Drive. Você pode revisar as permissões na página do Google.'
       :connectionMessages.not_configured;
     continueButton.hidden=!configured;
   }
@@ -133,42 +137,77 @@ function setupEmailConnections(){
       const result=await api('status');
       if(version!==statusVersion)return;
       configured=result.configured===true;
+      currentUser=result.user||null;
+      canConnectGeneral=result.canConnectGeneral===true;
+      document.querySelector('#main').hidden=!currentUser;
+      document.querySelector('#portal-user').textContent=currentUser?currentUser.email:'Entrar no FAROL GE';
+      document.querySelector('#portal-description').textContent=!configured?'A entrada com Google aguarda configuração na nuvem.':currentUser?'Seu acesso pessoal está identificado pelo Google.':'Use sua conta Google para entrar e autorizar Gmail e Drive.';
+      document.querySelector('#portal-login').textContent=currentUser?'Trocar conta Google':'Entrar com Google';
+      document.querySelector('#portal-login').disabled=!configured;
+      document.querySelector('#portal-logout').hidden=!currentUser;
       for(const type of types){
         const connection=result.connections?.[type];
         const email=connection?.email;
-        const connected=configured && typeof email==='string' && /^[^@\s]+@escola\.pr\.gov\.br$/.test(email);
+        const connected=Boolean(currentUser && configured && typeof email==='string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email));
         const status=document.querySelector('#email-'+type+'-status');
-        status.textContent=connected?email:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
+        status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
         status.classList.toggle('is-connected',connected);
         const button=document.querySelector('[data-connect-email="'+type+'"]');
-        button.textContent=connected?'Trocar conta':'Conectar';
+        button.textContent=connected?'Revisar autorização':'Conectar';
+        button.hidden=type==='personal' && !currentUser;
+        button.disabled=!configured || (type==='general' && !canConnectGeneral);
+        button.title=type==='general' && !canConnectGeneral?'Conexão disponível somente aos responsáveis autorizados pela escola.':'';
         document.querySelector('[data-disconnect-email="'+type+'"]').hidden=!connected;
       }
       showAvailability();
     } catch {
       if(version!==statusVersion)return;
       configured=false;
+      currentUser=null;
+      canConnectGeneral=false;
+      document.querySelector('#main').hidden=true;
+      document.querySelector('#portal-user').textContent='Acesso não verificado';
+      document.querySelector('#portal-description').textContent='Não foi possível verificar a sessão. Tente novamente.';
+      document.querySelector('#portal-login').disabled=true;
+      document.querySelector('#portal-logout').hidden=true;
       for(const type of types){
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent='Conexão não verificada';
         status.classList.toggle('is-connected',false);
         document.querySelector('[data-disconnect-email="'+type+'"]').hidden=true;
+        document.querySelector('[data-connect-email="'+type+'"]').disabled=true;
       }
       availability.textContent=connectionMessages.unavailable;
       continueButton.hidden=true;
     }
   }
+  function openConnection(type){
+    selectedType=type;
+    const isGeneral=type==='general';
+    if(isGeneral && !canConnectGeneral)return;
+    document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar conta geral da escola':'Entrar com Google e conectar sua conta';
+    document.querySelector('#personal-registration-note').hidden=isGeneral;
+    document.querySelector('#email-connection-description').innerHTML=isGeneral
+      ?'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'
+      :'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta Google da pessoa que estiver utilizando a aplicação.';
+    showAvailability();
+    dialog.showModal();
+  }
+  document.querySelector('#portal-login').addEventListener('click',()=>openConnection('personal'));
   document.querySelectorAll('[data-connect-email]').forEach(button=>{
-    button.addEventListener('click',()=>{
-      selectedType=button.dataset.connectEmail;
-      const isGeneral=selectedType==='general';
-      document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar e-mail institucional geral':'Conectar e-mail pessoal institucional';
-      document.querySelector('#email-connection-description').innerHTML=isGeneral
-        ?'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'
-        :'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL da pessoa que estiver utilizando a aplicação.';
-      showAvailability();
-      dialog.showModal();
-    });
+    button.addEventListener('click',()=>openConnection(button.dataset.connectEmail));
+  });
+  document.querySelector('#portal-logout').addEventListener('click',async()=>{
+    const button=document.querySelector('#portal-logout');
+    button.disabled=true;
+    try {
+      ++statusVersion;
+      await api('logout',{});
+      document.querySelector('#main').hidden=true;
+      feedback.textContent='Você saiu do FAROL GE. As autorizações continuam associadas ao seu usuário.';
+      await refresh();
+    } catch {feedback.textContent=connectionMessages.unavailable;}
+    finally {button.disabled=false;}
   });
   continueButton.addEventListener('click',async()=>{
     continueButton.disabled=true;
@@ -187,7 +226,7 @@ function setupEmailConnections(){
       button.disabled=true;
       try {
         await api('disconnect',{type:button.dataset.disconnectEmail});
-        feedback.textContent='Conexão removida deste navegador. A outra conexão foi preservada.';
+        feedback.textContent='Autorização removida do FAROL GE para esta conta. A outra conexão foi preservada.';
         await refresh();
       } catch {feedback.textContent=connectionMessages.unavailable;}
       finally {button.disabled=false;}
