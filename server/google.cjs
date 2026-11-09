@@ -11,7 +11,8 @@ const random = () => crypto.randomBytes(32).toString('base64url');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const routeOf = value => ROUTES.has(value) ? value : 'inicio';
 const cookieName = (kind,type) => `__Host-farol-${kind}-${type}`;
-const PORTAL_COOKIE = '__Host-farol-portal';
+const accountCookie = type => cookieName('account',type);
+const accountKey = (type,id) => hash(`account.${type}.${id}`);
 const validId = value => typeof value === 'string' && /^[\w-]{43}$/.test(value);
 const emailOf = value => String(value || '').trim().toLowerCase();
 function cookies(req) {
@@ -28,10 +29,9 @@ function configuration(env) {
     const origin=new URL(env.FAROL_ORIGIN),storage=new URL(env.FAROL_SUPABASE_URL);
     const key=Buffer.from(env.FAROL_TOKEN_KEY,'base64');
     const general=emailOf(env.FAROL_GENERAL_EMAIL);
-    const generalAdmins=(env.FAROL_GENERAL_ADMIN_EMAILS || '').split(',').map(emailOf).filter(Boolean);
     const validEmail=value=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
-    if([origin,storage].some(url=>url.protocol!=='https:' || url.pathname!=='/' || url.search || url.hash || url.username || url.password) || key.length!==32 || (general && !validEmail(general)) || !generalAdmins.every(validEmail))return null;
-    return {origin:origin.origin,storage:storage.origin,key,clientId:env.GOOGLE_CLIENT_ID,clientSecret:env.GOOGLE_CLIENT_SECRET,serviceKey:env.FAROL_SUPABASE_SERVICE_ROLE_KEY,anonKey:env.FAROL_SUPABASE_ANON_KEY,general,generalAdmins};
+    if([origin,storage].some(url=>url.protocol!=='https:' || url.pathname!=='/' || url.search || url.hash || url.username || url.password) || key.length!==32 || (general && !validEmail(general)))return null;
+    return {origin:origin.origin,storage:storage.origin,key,clientId:env.GOOGLE_CLIENT_ID,clientSecret:env.GOOGLE_CLIENT_SECRET,serviceKey:env.FAROL_SUPABASE_SERVICE_ROLE_KEY,anonKey:env.FAROL_SUPABASE_ANON_KEY,general};
   } catch {return null;}
 }
 function seal(data,key,id) {
@@ -108,7 +108,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     if(!['status','start','callback','disconnect','logout'].includes(action))return reply(404,{error:'not_found'});
     const expected=['start','disconnect','logout'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
-    if(!config)return reply(action==='status'?200:503,{configured:false,user:null,connections:{general:null,personal:null},error:'not_configured'});
+    if(!config)return reply(action==='status'?200:503,{configured:false,canConnectGeneral:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
     const jar=cookies(req),store=storeFactory(config),auth=authFactory(config);
     const finish=(route,type,result)=>{res.statusCode=303;res.setHeader('Location',`${config.origin}/?connection=${result}&mailbox=${type}#${routeOf(route)}`);res.end();};
@@ -118,11 +118,11 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       try {body=typeof req.body==='string'?JSON.parse(req.body):req.body||{};}catch{return reply(400,{error:'invalid_body'});}
       if(action!=='logout' && !TYPES.includes(body.type))return reply(400,{error:'invalid_type'});
     }
-    async function portal() {
-      const id=jar[PORTAL_COOKIE];
+    async function account(type) {
+      const name=accountCookie(type),id=jar[name];
       if(!validId(id))return null;
-      const key=hash('portal.'+id),session=await store.get(key);
-      if(!session || session.version!==2){setCookie(res,PORTAL_COOKIE,'',0);return null;}
+      const key=accountKey(type,id),session=await store.get(key);
+      if(!session || session.version!==3 || session.type!==type || session.expiresAt<=Date.now()){setCookie(res,name,'',0);return null;}
       try {
         if(session.auth.expiresAt<Date.now()+60000) {
           const refreshed=await auth.refresh(session.auth.refreshToken);
@@ -130,12 +130,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           await store.put(key,session,session.expiresAt);
         }
         const user=await auth.user(session.auth.accessToken);
-        if(user.id!==session.user.id)throw new Error('login_required');
+        if(user.id!==session.user.id || emailOf(user.email)!==session.user.email || (type==='general' && emailOf(user.email)!==config.general))throw new Error('login_required');
         session.user={id:user.id,email:emailOf(user.email)};
-        return {id,key,session,user:session.user};
+        return {id,key,type,session,user:session.user};
       } catch(error) {
         if(error.message!=='login_required')throw error;
-        await store.remove(key);setCookie(res,PORTAL_COOKIE,'',0);return null;
+        await store.remove(key);setCookie(res,name,'',0);return null;
       }
     }
     async function saveConnection(owner,type,connection) {
@@ -145,24 +145,23 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       }
       await store.putConnection(owner,type,connection);
     }
-    const canGeneral=user=>Boolean(user && config.general && config.generalAdmins.includes(user.email));
-    async function discardPortal(current) {
+    async function discardAccount(type,current) {
       if(current) {
         await store.remove(current.key);
         // Removing the local capability ends this browser session even if logout is unavailable.
         try {await auth.logout(current.session.auth.accessToken);}catch{}
       }
-      setCookie(res,PORTAL_COOKIE,'',0);
+      setCookie(res,accountCookie(type),'',0);
     }
     try {
       if(action==='start') {
-        const type=body.type,current=type==='general'?await portal():null;
-        if(type==='general' && !current)return reply(401,{error:'login_required'});
-        if(type==='general' && !canGeneral(current.user))return reply(403,{error:'not_allowed'});
+        const type=body.type;
+        if(type==='general' && !config.general)return reply(503,{error:'general_not_configured'});
         await store.cleanup();
         const state=`${type}.${random()}`,binding=random(),nonce=random();
         const client=clientFactory(config),{codeVerifier,codeChallenge}=await client.generateCodeVerifierAsync();
-        await store.put(hash(state),{version:2,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),...(current?{owner:current.user.id,portal:hash(current.id)}:{})},Date.now()+600000);
+        const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
+        await store.put(hash(state),{version:3,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),previous},Date.now()+600000);
         setCookie(res,cookieName('flow',type),binding,600);
         const authUrl=client.generateAuthUrl({scope:SCOPES,access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
           ...(type==='general'?{login_hint:config.general}:{}),code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
@@ -172,13 +171,14 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const state=url.searchParams.get('state')||'',parts=state.split('.'),[type,stateId]=parts;
         if(parts.length!==2 || !TYPES.includes(type) || !validId(stateId))return finish('inicio','personal','invalid_state');
         const flow=await store.get(hash(state)),binding=jar[cookieName('flow',type)];
-        if(!flow || flow.version!==2 || !validId(binding) || flow.binding!==hash(binding) || flow.type!==type)return finish('inicio',type,'invalid_state');
+        if(!flow || flow.version!==3 || !validId(binding) || flow.binding!==hash(binding) || flow.type!==type)return finish('inicio',type,'invalid_state');
         const consumed=await store.take(hash(state));setCookie(res,cookieName('flow',type),'',0);
         if(!consumed)return finish('inicio',type,'invalid_state');
         if(url.searchParams.has('error'))return finish(flow.route,type,'cancelled');
         try {
-          const current=await portal();
-          if(type==='general' && (!current || current.user.id!==flow.owner || hash(current.id)!==flow.portal || !canGeneral(current.user)))throw new Error('login_required');
+          const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
+          if(previous!==flow.previous)throw new Error('invalid_state');
+          const current=await account(type);
           const code=url.searchParams.get('code');if(!code)throw new Error('failed');
           const client=clientFactory(config),{tokens}=await client.getToken({code,codeVerifier:flow.codeVerifier});
           if(!tokens.access_token || !tokens.id_token)throw new Error('failed');
@@ -205,41 +205,41 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
               else throw error;
             }
           }
-          let owner;
-          if(type==='personal') {
-            const session=await auth.signIn(tokens.id_token,tokens.access_token,flow.nonce),user=session.user;
-            const google=user?.identities?.find(item=>item.provider==='google' && String(item.identity_data?.sub)===String(identity.sub));
-            if(!session.access_token || !session.refresh_token || !user?.id || emailOf(user.email)!==email || !google)throw new Error('failed');
-            owner=user.id;
-            await saveConnection(owner,type,{email,capabilities,credentials:credentialsOf(client)});
-            const id=random(),expiresAt=Date.now()+TTL*1000;
-            await store.put(hash('portal.'+id),{version:2,user:{id:owner,email},auth:{accessToken:session.access_token,refreshToken:session.refresh_token,expiresAt:Date.now()+session.expires_in*1000},expiresAt},expiresAt);
-            await discardPortal(current);setCookie(res,PORTAL_COOKIE,id,TTL);
-            // Invalidate browser-only cookies from the prototype; never adopt unowned legacy connections.
-            for(const oldType of TYPES)setCookie(res,cookieName('session',oldType),'',0);
-          } else {
-            owner=current.user.id;
-            await saveConnection(owner,type,{email,capabilities,credentials:credentialsOf(client)});
-          }
+          const session=await auth.signIn(tokens.id_token,tokens.access_token,flow.nonce),user=session.user;
+          const google=user?.identities?.find(item=>item.provider==='google' && String(item.identity_data?.sub)===String(identity.sub));
+          if(!session.access_token || !session.refresh_token || !user?.id || emailOf(user.email)!==email || !google)throw new Error('failed');
+          const owner=user.id;
+          await saveConnection(owner,type,{email,capabilities,credentials:credentialsOf(client)});
+          const id=random(),expiresAt=Date.now()+TTL*1000;
+          await store.put(accountKey(type,id),{version:3,type,user:{id:owner,email},auth:{accessToken:session.access_token,refreshToken:session.refresh_token,expiresAt:Date.now()+session.expires_in*1000},expiresAt},expiresAt);
+          await discardAccount(type,current);setCookie(res,accountCookie(type),id,TTL);
+          // Invalidate browser-only cookies from the prototype; never adopt unowned legacy connections.
+          for(const oldType of TYPES)setCookie(res,cookieName('session',oldType),'',0);
+          setCookie(res,'__Host-farol-portal','',0);
           return finish(flow.route,type,capabilities.gmail && capabilities.drive?'connected':'partial');
         } catch(error) {
-          return finish(flow.route,type,['wrong_account','login_required'].includes(error.message)?error.message:'failed');
+          return finish(flow.route,type,['wrong_account','login_required','invalid_state'].includes(error.message)?error.message:'failed');
         }
       }
-      const current=await portal();
-      if(action==='logout'){await discardPortal(current);return reply(200,{signedOut:true});}
+      if(action==='logout'){
+        for(const type of TYPES)await discardAccount(type,await account(type));
+        return reply(200,{signedOut:true});
+      }
       if(action==='disconnect') {
+        const current=await account(body.type);
         if(!current)return reply(401,{error:'login_required'});
         await store.removeConnection(current.user.id,body.type);
+        await discardAccount(body.type,current);
         return reply(200,{disconnected:true});
       }
       const connections={general:null,personal:null},errors={};
-      if(current)for(const type of TYPES) {
-        if(type==='general' && !canGeneral(current.user))continue;
-        const connection=await store.getConnection(current.user.id,type);
-        if(!connection)continue;
-        if((type==='general' && connection.email!==config.general) || (type==='personal' && connection.email!==current.user.email))continue;
+      for(const type of TYPES) {
+        let current;
         try {
+          current=await account(type);
+          if(!current)continue;
+          const connection=await store.getConnection(current.user.id,type);
+          if(!connection || connection.email!==current.user.email)continue;
           const client=clientFactory(config);client.setCredentials(connection.credentials);
           if(connection.capabilities.gmail) {
             const {data}=await client.request({url:'https://gmail.googleapis.com/gmail/v1/users/me/profile',timeout:10000});
@@ -255,11 +255,13 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         } catch(error) {
           const googleError=error.response?.data?.error;
           if(error.response?.status===401 || googleError==='invalid_grant' || error.message==='wrong_account') {
-            await store.removeConnection(current.user.id,type);errors[type]='reconnect';
+            if(current){await store.removeConnection(current.user.id,type);await discardAccount(type,current);}
+            errors[type]='reconnect';
           } else errors[type]='unavailable';
         }
       }
-      return reply(200,{configured:true,user:current?.user||null,canConnectGeneral:canGeneral(current?.user),connections,errors});
+      const mode=connections.general?(connections.personal?'both':'general'):(connections.personal?'personal':'none');
+      return reply(200,{configured:true,canConnectGeneral:Boolean(config.general),mode,connections,errors});
     } catch {
       // Do not log OAuth exceptions; they may contain credentials, codes or tokens.
       if(action==='callback')return finish('inicio','personal','unavailable');

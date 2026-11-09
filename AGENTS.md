@@ -13,7 +13,9 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
-- Marcos aprovou entrada com qualquer Conta Google, sem cadastro prévio, com usuário criado automaticamente no Supabase Auth e solicitação de Gmail/Drive na mesma jornada. Gmail somente consulta; Drive permite consultar/criar/alterar arquivos criados pelo FAROL ou explicitamente autorizados (drive.file), sem acesso irrestrito. A caixa geral mantém fluxo próprio e permissão específica de responsáveis. Implementação e configuração em CONEXOES_GOOGLE.md. Não ampliar o modelo de múltiplas escolas sem alinhamento.
+- Em 09/11/2026, Marcos confirmou duas conexões independentes, Geral e Pessoal: qualquer uma pode ser conectada primeiro, sem uma entrada separada no FAROL GE. Conectar/trocar/desconectar uma preserva a outra. Demandas INSTITUCIONAIS usa Geral; Demandas PESSOAIS usa Pessoal. As diferenças em Visão GERAL, Radar e BI SEED ainda serão definidas; preservar seus conteúdos de desenvolvimento e fluxograma, sem inventar regras ou indicadores.
+
+- Cada conexão valida sua própria Conta Google e cria automaticamente sua identidade no Supabase Auth, sem cadastro prévio. Gmail somente consulta; Drive permite consultar/criar/alterar arquivos criados pelo FAROL ou explicitamente autorizados (drive.file), sem acesso irrestrito. Geral exige autorização no Google da própria conta exata configurada em FAROL_GENERAL_EMAIL; não exige login pessoal nem lista de responsáveis pessoais. Implementação e configuração em CONEXOES_GOOGLE.md. Não ampliar o modelo de múltiplas escolas sem alinhamento.
 
 - O quadro de conexões abaixo do breadcrumb deve mostrar a identidade e as permissões realmente verificadas. Nenhum sucesso simulado ou senha solicitada no portal. Backend depende de configuração exclusiva FAROL GE no Google/Vercel/Supabase; credenciais criptografadas no servidor e conexões vinculadas ao usuário autenticado, não a cookies legados sem proprietário.
 

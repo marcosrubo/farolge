@@ -2,22 +2,24 @@
 
 ## Fluxo implementado
 
-1. A pessoa clica em **Entrar com Google** e escolhe qualquer conta Google, pessoal ou institucional.
-2. Na mesma jornada, o Google apresenta as permissões de identificação, consulta ao Gmail e `drive.file` (consultar/criar/alterar arquivos criados pelo FAROL ou explicitamente abertos/autorizados para ele). Não se solicita acesso irrestrito ao Drive nem envio/alteração/exclusão de e-mails.
-3. O callback do FAROL valida a identidade Google. O backend usa o ID token para entrar no Supabase Auth, que cria o registro em `auth.users` automaticamente no primeiro acesso. Não há formulário de cadastro nem senha do FAROL.
-4. A sessão do portal fica em cookie opaco HttpOnly, Secure e SameSite=Lax. Tokens Google e Supabase ficam criptografados no banco, nunca no JavaScript ou localStorage. O servidor confirma a sessão com Supabase Auth antes de expor conexões.
-5. As autorizações pessoais são associadas ao ID do usuário, e não apenas ao navegador. Ao voltar com a mesma conta, o usuário recupera suas conexões. Trocar de conta não transfere autorizações.
-6. O quadro informa o endereço e a situação das permissões de Gmail e Drive. Recusar alguma permissão permite a entrada, mas mantém o serviço correspondente indisponível. O conteúdo dos módulos fica oculto enquanto não houver sessão verificada.
+1. O quadro apresenta duas conexões independentes: **Geral** e **Pessoal**, cada uma com Conectar/Desconectar. Não há uma etapa separada de entrada no FAROL GE. Qualquer uma pode ser conectada primeiro, ou usada sozinha.
+2. Ao conectar uma delas, a pessoa escolhe a conta no Google e concede identificação, consulta ao Gmail e `drive.file` (consultar/criar/alterar arquivos criados pelo FAROL ou explicitamente abertos/autorizados para ele). Não se solicita acesso irrestrito ao Drive nem envio/alteração/exclusão de e-mails.
+3. O callback valida a identidade Google. O backend usa o ID token para autenticar a própria conta no Supabase Auth, que cria o registro em `auth.users` automaticamente no primeiro acesso. Isso ocorre em ambas as conexões; não há formulário de cadastro nem senha do FAROL.
+4. Cada conexão tem sua própria sessão em cookie opaco HttpOnly, Secure e SameSite=Lax. Tokens Google e Supabase ficam criptografados no banco, nunca no JavaScript ou localStorage. O servidor verifica cada sessão separadamente com Supabase Auth antes de expor a conexão correspondente.
+5. Cada autorização pertence ao ID Supabase da própria conta Google e ao tipo Geral/Pessoal. Conectar, revisar, trocar ou desconectar uma delas preserva a outra. A conexão Geral não é vinculada ao usuário da Pessoal e não é recuperada automaticamente só por conectar uma conta Pessoal em outro navegador.
+6. O quadro informa endereço e permissões realmente verificadas de Gmail e Drive por conexão. Recusar uma permissão mantém o serviço correspondente indisponível. O backend distingue `none`, `general`, `personal` e `both`, conforme as conexões verificadas.
 
-A conexão **Geral** continua separada, pois pode ser outra conta. Só responsáveis configurados podem iniciá-la, e a conta Google escolhida deve corresponder exatamente ao endereço geral cadastrado. Essa autorização é vinculada ao responsável; não é compartilhada automaticamente com outros usuários. Continua sendo uma aplicação de uma escola: o modelo para várias escolas e acesso compartilhado aos dados institucionais ainda precisa ser definido.
+A conexão **Geral** exige que a própria conta configurada em `FAROL_GENERAL_EMAIL` seja autorizada no Google. Uma conta diferente é recusada, mesmo com uma Pessoal conectada. Não há exigência de login pessoal de responsável nem uso de `FAROL_GENERAL_ADMIN_EMAILS`. Essa alteração foi confirmada por Marcos em 09/11/2026. Continua sendo uma aplicação de uma escola; não há compartilhamento automático de acesso institucional com contas pessoais nem um modelo aprovado para várias escolas.
+
+Demandas INSTITUCIONAIS depende da Geral; Demandas PESSOAIS depende da Pessoal. Sem nenhuma conexão verificada, o conteúdo dos módulos fica oculto. Os demais conteúdos de desenvolvimento/fluxograma são preservados com qualquer conexão verificada. As diferenças de comportamento em Visão GERAL, Radar e BI SEED ainda serão definidas por Marcos; não foram implementados dados nem regras adicionais nesses módulos.
 
 ## Escopo entregue e limites
 
 - Login aberto no código: não há lista de usuários pessoais nem filtro por `escola.pr.gov.br`.
-- Autenticação continua distinta de autorização, embora ambas ocorram na mesma jornada pessoal.
+- Autenticação continua distinta de autorização, embora ambas ocorram na jornada de cada conexão, sem login separado no portal.
 - Permissão Drive incluída e confirmada pela API `about`. Os módulos ainda não têm navegador/editor de arquivos, Google Picker, criação de documentos ou atualização de planilhas. Essas operações serão conectadas quando as funções de cada módulo forem definidas; esta entrega implementa login e autorizações. Arquivos preexistentes não ficam todos acessíveis só por conceder `drive.file`.
-- Sair encerra a sessão local do portal, preservando autorizações do usuário para futuros acessos. Desconectar remove a autorização armazenada para aquela conta/serviço no FAROL, sem encerrar o login ou revogar a concessão Google inteira (que pode ser usada por outra conexão). Revogação completa pode ser feita pela Conta Google.
-- Sessão do portal limitada a 30 dias; a sessão Supabase é verificada e renovada no servidor. As conexões persistem vinculadas ao usuário até desconexão, revogação ou exclusão do usuário. Definir posteriormente política administrativa de retenção e exclusão de contas; não há conteúdo de mensagens/arquivos armazenado nesta etapa.
+- Desconectar encerra somente a sessão do tipo escolhido e remove sua autorização armazenada no FAROL. A outra conexão é preservada. Não revoga a concessão Google inteira, que pode ser usada pela outra conexão. Revogação completa pode ser feita pela Conta Google. A rota interna de logout encerra as duas sessões do navegador sem apagar as autorizações; não há um botão separado de login/logout no quadro.
+- Cada sessão de conexão é limitada a 30 dias; a sessão Supabase é verificada e renovada no servidor. As conexões persistem vinculadas ao usuário até desconexão, revogação ou exclusão do usuário. Definir posteriormente política administrativa de retenção e exclusão de contas; não há conteúdo de mensagens/arquivos armazenado nesta etapa.
 - Falhas temporárias mostram conexão não verificada. Revogação da concessão Google pede reconexão. O aplicativo não registra exceções que possam conter segredos.
 
 ## Ativação na nuvem — somente recursos do FAROL GE
@@ -43,7 +45,7 @@ A conta pessoal pode ser Gmail ou outro endereço com Conta Google. Gmail API s�
 
 1. No projeto FAROL GE, conferir e executar **todo** o arquivo `database/google-sessions.sql`. Ele pode ser executado novamente e cria:
    - `farol_google_sessions`: estados OAuth temporários e sessões opacas do portal, com payload criptografado e expiração;
-   - `farol_google_connections`: conexões criptografadas, chaveadas por `auth.users.id` e tipo Geral/Pessoal, com remoção em cascata ao excluir o usuário.
+   - `farol_google_connections`: conexões criptografadas, chaveadas pelo `auth.users.id` da própria conta Google e tipo Geral/Pessoal, com remoção em cascata ao excluir o usuário.
 2. As duas tabelas têm RLS e acesso revogado para `anon` e `authenticated`; somente o backend com `service_role` pode acessá-las. Não criar policies públicas para expor tokens.
 3. Em **Authentication → Sign In / Providers → Google**, habilitar o provedor e informar o mesmo Client ID Web e o Client Secret atual do FAROL GE. Manter a verificação de nonce habilitada. Este fluxo usa `signInWithIdToken` no servidor; o callback direto do FAROL permanece sendo usado.
 4. Manter permitida a criação de novos usuários no Supabase Auth. Não há cadastro manual nem necessidade de tabela `profiles` nesta etapa. Caso existam outras opções de login habilitadas, isso não cria botões para elas no FAROL.
@@ -65,10 +67,9 @@ No projeto **farolge**, ambiente **Production**:
 | `FAROL_SUPABASE_URL` | URL do Supabase exclusivo do FAROL GE |
 | `FAROL_SUPABASE_ANON_KEY` | Chave anon/publishable do mesmo projeto |
 | `FAROL_SUPABASE_SERVICE_ROLE_KEY` | Chave legada service_role do mesmo projeto |
-| `FAROL_GENERAL_EMAIL` | Opcional: endereço exato da caixa geral da escola |
-| `FAROL_GENERAL_ADMIN_EMAILS` | Opcional: e-mails dos responsáveis que podem conectar a caixa geral, separados por vírgula |
+| `FAROL_GENERAL_EMAIL` | Endereço exato da caixa geral da escola; necessário somente para habilitar a conexão Geral |
 
-`FAROL_ALLOWED_PERSONAL_EMAILS` não é mais utilizada. Não é necessário preencher as variáveis da caixa Geral para o login pessoal funcionar. Sem responsáveis configurados, a conexão Geral fica indisponível.
+`FAROL_ALLOWED_PERSONAL_EMAILS` e `FAROL_GENERAL_ADMIN_EMAILS` não são mais utilizadas. Sem `FAROL_GENERAL_EMAIL`, Geral fica indisponível, mas Pessoal continua funcionando. Na configuração inicial feita em 09/11/2026, as oito variáveis básicas foram cadastradas por Marcos; ainda é necessário cadastrar `FAROL_GENERAL_EMAIL` para usar Geral. Nenhum valor secreto foi verificado pelo chat.
 
 Não colocar segredos em `config.js` nem versionar arquivos de credenciais. Manter a chave de criptografia em armazenamento seguro: perdê-la/trocá-la exige encerrar sessões e refazer as conexões criptografadas com a chave anterior.
 
@@ -76,15 +77,17 @@ Após salvar variáveis, publicar novamente. Usar Node.js 24.x, Framework Other 
 
 ## Migração da versão anterior
 
-Conexões da versão de navegador não são adotadas automaticamente, pois não tinham proprietário autenticado. Estados OAuth antigos são recusados e os cookies antigos são limpos no próximo login. As pessoas precisam entrar novamente com Google.
+O SQL não muda nesta correção. Se `database/google-sessions.sql` já foi executado integralmente, não é necessário criar novas tabelas ou policies.
 
-Aplicar o SQL adicional antes de habilitar o novo código. A tabela de sessões anterior é preservada; seus registros antigos vencem pelo prazo já gravado, e podem ser expurgados administrativamente depois de conferidos. O código limpa sessões vencidas ao iniciar novos fluxos. Para prazo fixo de expurgo mesmo sem novos acessos, definir rotina de limpeza no projeto FAROL GE.
+A sessão única anterior (`__Host-farol-portal`) e os cookies do protótipo não são adotados pelo novo fluxo. Os estados OAuth anteriores também são recusados; será preciso conectar novamente as contas desejadas. Os cookies antigos são limpos no próximo callback bem-sucedido.
+
+As novas sessões usam cookies e payloads separados por tipo, na mesma tabela de sessões criptografadas. Novas conexões Geral pertencem à identidade da própria conta geral no Supabase, em vez de à conta pessoal de um responsável. Registros anteriores não são transferidos automaticamente, nem dão acesso pelo novo fluxo; permanecem no banco para revisão administrativa. Não foi aplicado expurgo remoto. Os registros temporários de sessões antigas vencem pelo prazo gravado; a limpeza ocorre ao iniciar novos fluxos. Para prazo fixo de expurgo mesmo sem novos acessos, definir rotina de limpeza no projeto FAROL GE.
 
 ## Verificação
 
-`npm test` executa testes sem servidor ou credenciais reais: login sem lista/domínio; registro automático; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; proteção de conexão geral; troca de pessoa; persistência por proprietário; logout/revogação; cookies legados; interface e preservação do Radar.
+`npm test` executa testes sem servidor ou credenciais reais: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; endereço Geral exato; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
 
-Validar na Vercel após configuração: primeiro acesso de duas contas diferentes, retorno da mesma conta em outro navegador, conta geral com responsável permitido e não permitido, recusa de cada escopo, indisponibilidade dos provedores, revogação e expiração, ausência de segredos nos logs. Esses testes locais não equivalem a OAuth real nem a aprovação do Google/SEED.
+Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, troca da Pessoal preservando Geral, desconexão de cada uma, rejeição de conta Geral diferente, recusa de cada escopo, falha/revogação/expiração isoladas e ausência de segredos nos logs. Os testes automatizados não equivalem a OAuth real nem a aprovação do Google/SEED. Não foram executados servidor local nem testes visuais locais.
 
 ## Referências oficiais consultadas
 

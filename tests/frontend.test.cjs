@@ -4,7 +4,7 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 function ui(status={configured:false,connections:{general:null,personal:null}}){
  const nodes=new Map();
- const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;}});
+ const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;}});
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,make());return nodes.get(selector);};
  const connect=['general','personal'].map(type=>Object.assign(get(`[data-connect-email="${type}"]`),{dataset:{connectEmail:type}}));
  const disconnect=['general','personal'].map(type=>Object.assign(get(`[data-disconnect-email="${type}"]`),{dataset:{disconnectEmail:type}}));
@@ -15,36 +15,59 @@ function ui(status={configured:false,connections:{general:null,personal:null}}){
  return {get,connect,disconnect,requests,window,context};
 }
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
-test('sem sessão o conteúdo fica oculto e Entrar com Google abre o fluxo pessoal',async()=>{
- const h=ui({configured:true,user:null,connections:{general:null,personal:null}});await settle();
+test('sem conexão há dois botões independentes e nenhum login separado',async()=>{
+ const h=ui({configured:true,canConnectGeneral:true,connections:{general:null,personal:null}});await settle();
  assert.equal(h.get('#main').hidden,true);
- assert.equal(h.connect[0].disabled,true);
- assert.equal(h.connect[1].hidden,true);
- h.get('#portal-login').listeners.click();
- assert.ok(h.get('#email-connection-description').innerHTML.includes('<strong>Farol GE</strong>'));
- assert.ok(h.get('#email-connection-description').innerHTML.includes('conta Google da pessoa'));
- await h.get('#email-connection-continue').listeners.click();
- assert.equal(JSON.parse(h.requests.at(-1).opts.body).type,'personal');
- assert.ok(h.window.destination.startsWith('https://accounts.google.com/'));
+ for(const button of h.connect){
+  assert.equal(button.disabled,false);assert.equal(button.hidden,false);
+  button.listeners.click();
+  await h.get('#email-connection-continue').listeners.click();
+  assert.equal(JSON.parse(h.requests.at(-1).opts.body).type,button.dataset.connectEmail);
+  assert.ok(h.window.destination.startsWith('https://accounts.google.com/'));
+ }
+ const html=fs.readFileSync('index.html','utf8');
+ assert.ok(!html.includes('portal-login'));assert.ok(!html.includes('Entrar no FAROL GE'));
 });
-test('usuário identificado vê Radar e permissões reais de Gmail e Drive',async()=>{
- const h=ui({configured:true,user:{id:'u1',email:'person@gmail.com'},canConnectGeneral:true,connections:{general:{email:'escola@escola.pr.gov.br',gmail:true,drive:true},personal:{email:'person@gmail.com',gmail:true,drive:false}}});await settle();
+for(const mode of ['general','personal','both'])test('conexões verificadas: '+mode,async()=>{
+ const connections={
+  general:mode!=='personal'?{email:'escola@escola.pr.gov.br',gmail:true,drive:true}:null,
+  personal:mode!=='general'?{email:'person@gmail.com',gmail:true,drive:false}:null
+ };
+ const h=ui({configured:true,canConnectGeneral:true,mode,connections});await settle();
  assert.equal(h.get('#main').hidden,false);
  assert.ok(h.get('#main').innerHTML.includes('ANÁLISES'));
- assert.ok(h.get('#email-personal-status').textContent.includes('person@gmail.com'));
- assert.ok(h.get('#email-personal-status').textContent.includes('Drive: não autorizado'));
- h.connect[0].listeners.click();
- assert.equal(h.get('#email-connection-description').innerHTML,'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.');
- await h.get('#email-connection-continue').listeners.click();
- assert.equal(JSON.parse(h.requests.at(-1).opts.body).type,'general');
+ for(const type of ['general','personal']){
+  assert.equal(h.get('#email-'+type+'-status').textContent.includes('NÃO conectado'),!connections[type]);
+  assert.equal(h.get('[data-disconnect-email="'+type+'"]').hidden,!connections[type]);
+ }
+ if(connections.personal)assert.ok(h.get('#email-personal-status').textContent.includes('Drive: não autorizado'));
+ for(const [route,type] of [['institucionais','general'],['pessoais','personal'],['demandas','personal']]){
+  h.context.location.hash='#'+route;h.window.listeners.hashchange();
+  assert.equal(h.get('#main').hidden,!connections[type]);
+ }
 });
-test('endereço isolado sem identidade de usuário não libera conteúdo nem conexão',async()=>{
- const h=ui({configured:true,user:null,connections:{personal:{email:'someone@gmail.com',gmail:true,drive:true}}});await settle();
- assert.equal(h.get('#main').hidden,true);
- assert.equal(h.get('#email-personal-status').textContent,'NÃO conectado');
+test('não configurar Geral não impede conectar Pessoal',async()=>{
+ const h=ui({configured:true,canConnectGeneral:false,connections:{general:null,personal:null}});await settle();
+ assert.equal(h.connect[0].disabled,true);assert.equal(h.connect[1].disabled,false);
+ assert.ok(h.get('#email-connection-feedback').textContent.includes('endereço da conta geral'));
 });
-test('configuração ausente mantém entrada indisponível sem simular login',async()=>{
+test('configuração ausente mantém ambas indisponíveis sem simular conexão',async()=>{
  const h=ui();await settle();
- assert.equal(h.get('#portal-login').disabled,true);
+ assert.ok(h.connect.every(button=>button.disabled));assert.equal(h.get('#main').hidden,true);
+});
+test('trocar módulo sem conexão não revela conteúdo',async()=>{
+ const h=ui({configured:true,canConnectGeneral:true,connections:{general:null,personal:null}});await settle();
+ h.context.location.hash='#pessoais';h.window.listeners.hashchange();
  assert.equal(h.get('#main').hidden,true);
+});
+test('desconectar Geral preserva o estado Pessoal e atualiza o conteúdo',async()=>{
+ const status={configured:true,canConnectGeneral:true,connections:{general:{email:'school@example.com',gmail:true,drive:true},personal:{email:'person@gmail.com',gmail:true,drive:true}}};
+ const h=ui(status);await settle();
+ h.context.location.hash='#institucionais';h.window.listeners.hashchange();
+ assert.equal(h.get('#main').hidden,false);
+ status.connections.general=null;
+ await h.disconnect[0].listeners.click();
+ assert.equal(h.get('#main').hidden,true);
+ assert.ok(h.get('#email-personal-status').textContent.includes('person@gmail.com'));
+ assert.equal(JSON.parse(h.requests.find(r=>r.url.endsWith('/disconnect')).opts.body).type,'general');
 });
