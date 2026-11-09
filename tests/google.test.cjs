@@ -3,7 +3,8 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
 const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE}=require('../server/google.cjs');
-const env={FAROL_GOOGLE_ENABLED:'true',FAROL_ORIGIN:'https://farol.example',GOOGLE_CLIENT_ID:'test-client',GOOGLE_CLIENT_SECRET:'test-secret',FAROL_TOKEN_KEY:Buffer.alloc(32,7).toString('base64'),FAROL_SUPABASE_URL:'https://test.supabase.co',FAROL_SUPABASE_SERVICE_ROLE_KEY:'test-service',FAROL_SUPABASE_ANON_KEY:'test-anon',FAROL_GENERAL_EMAIL:'escola@escola.pr.gov.br',FAROL_GENERAL_ADMIN_EMAILS:'admin@gmail.com'};
+const env={FAROL_GOOGLE_ENABLED:'true',FAROL_ORIGIN:'https://farol.example',GOOGLE_CLIENT_ID:'test-client',GOOGLE_CLIENT_SECRET:'test-secret',FAROL_TOKEN_KEY:Buffer.alloc(32,7).toString('base64'),FAROL_SUPABASE_URL:'https://test.supabase.co',FAROL_SUPABASE_SERVICE_ROLE_KEY:'test-service',FAROL_SUPABASE_ANON_KEY:'test-anon'};
+const GENERAL_EMAIL='escola@escola.pr.gov.br';
 const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
 const sessionCookie=(response,type='personal')=>(response.headers['set-cookie']||[]).find(c=>c.startsWith('__Host-farol-account-'+type+'=') && !c.includes('Max-Age=0'))?.split(';')[0];
 function harness(overrides={}){
@@ -28,10 +29,10 @@ function harness(overrides={}){
  async function login(value='admin@gmail.com',cookie='',type='personal'){email=value;const flow=await start(type,cookie);const response=await callback(flow,flow.cookie+'; '+cookie);return {response,cookie:sessionCookie(response,type)};}
  return {rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503)=>{failedEmail=value;failedStatus=status;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
 }
-test('login não exige domínio nem lista de pessoas; configuração geral é opcional',()=>{
+test('conexões não exigem domínio nem endereço Geral fixo',()=>{
  assert.ok(configuration(env));
- assert.ok(configuration({...env,FAROL_GENERAL_EMAIL:'',FAROL_GENERAL_ADMIN_EMAILS:''}));
- for(const change of [{FAROL_GOOGLE_ENABLED:'false'},{FAROL_TOKEN_KEY:'invalid'},{FAROL_SUPABASE_ANON_KEY:''},{FAROL_ORIGIN:'http://farol.example'},{FAROL_ORIGIN:'https://farol.example/?x=1'},{FAROL_GENERAL_EMAIL:'invalid'}])assert.equal(configuration({...env,...change}),null);
+ assert.ok(configuration({...env,FAROL_GENERAL_EMAIL:'valor-antigo-ignorado',FAROL_GENERAL_ADMIN_EMAILS:'valor-antigo-ignorado'}));
+ for(const change of [{FAROL_GOOGLE_ENABLED:'false'},{FAROL_TOKEN_KEY:'invalid'},{FAROL_SUPABASE_ANON_KEY:''},{FAROL_ORIGIN:'http://farol.example'},{FAROL_ORIGIN:'https://farol.example/?x=1'}])assert.equal(configuration({...env,...change}),null);
 });
 test('criptografia detecta adulteração e mudança do proprietário da linha',()=>{
  const key=Buffer.alloc(32,1),value=seal({access_token:'private'},key,'user-a.personal');
@@ -40,11 +41,11 @@ test('criptografia detecta adulteração e mudança do proprietário da linha',(
  const bytes=Buffer.from(value,'base64url');bytes[30]^=1;
  assert.throws(()=>unseal(bytes.toString('base64url'),key,'user-a.personal'));
 });
-test('identidade Google aceita qualquer e-mail verificado, mas exige nonce e conta geral exata',()=>{
- const config=configuration(env),identity={email:'person@gmail.com',email_verified:true,nonce:'nonce',sub:'123'};
- assert.equal(validateAccount(identity,{emailAddress:identity.email},'personal',config,'nonce'),identity.email);
- for(const override of [{nonce:'wrong'},{email_verified:false},{email:'different@gmail.com'}])assert.throws(()=>validateAccount({...identity,...override},{emailAddress:identity.email},'personal',config,'nonce'));
- assert.throws(()=>validateAccount(identity,{emailAddress:identity.email},'general',config,'nonce'));
+test('identidade Google exige e-mail verificado, nonce e correspondência com o serviço',()=>{
+ const identity={email:'person@gmail.com',email_verified:true,nonce:'nonce',sub:'123'};
+ assert.equal(validateAccount(identity,{emailAddress:identity.email},'nonce'),identity.email);
+ for(const override of [{nonce:'wrong'},{email_verified:false},{email:'different@gmail.com'}])assert.throws(()=>validateAccount({...identity,...override},{emailAddress:identity.email},'nonce'));
+ assert.throws(()=>validateAccount(identity,{emailAddress:'outra@escola.pr.gov.br'},'nonce'));
 });
 test('CSRF e métodos inválidos são bloqueados; login inclui Gmail readonly e Drive file',async()=>{
  const h=harness();
@@ -78,35 +79,49 @@ test('cancelar autorização não cria usuário nem substitui a sessão atual',a
  assert.match(response.headers.location,/cancelled/);assert.equal(h.users.size,1);
  assert.equal((await h.request('status',{cookie:first.cookie})).json().connections.personal.email,'admin@gmail.com');
 });
-test('Geral conecta primeiro sem conta Pessoal; conta incorreta é recusada',async()=>{
+for(const email of ['escola-a@escola.pr.gov.br','escola-b@escola.pr.gov.br'])test('Geral conecta diretamente com a conta escolhida: '+email,async()=>{
  const h=harness(),flow=await h.start('general');
- assert.equal(flow.options.login_hint,env.FAROL_GENERAL_EMAIL);
- h.setEmail('visitor@gmail.com');
- assert.match((await h.callback(flow)).headers.location,/wrong_account/);
- assert.equal(h.users.size,0);
- const general=await h.login(env.FAROL_GENERAL_EMAIL,'','general');
- assert.ok(general.cookie);
- const data=(await h.request('status',{cookie:general.cookie})).json();
+ assert.equal(flow.options.login_hint,undefined);
+ assert.equal(flow.options.hd,undefined);
+ h.setEmail(email);
+ const response=await h.callback(flow),cookie=sessionCookie(response,'general');
+ assert.ok(cookie);assert.match(response.headers.location,/connected/);
+ const data=(await h.request('status',{cookie})).json();
  assert.equal(data.mode,'general');assert.equal(data.connections.personal,null);
- assert.equal(data.connections.general.email,env.FAROL_GENERAL_EMAIL);
- assert.ok(h.connections.has(h.userFor(env.FAROL_GENERAL_EMAIL).id+'.general'));
+ assert.equal(data.connections.general.email,email);
+ assert.ok(h.connections.has(h.userFor(email).id+'.general'));
 });
-test('sem endereço Geral configurado, Pessoal funciona e Geral não abre OAuth',async()=>{
- const h=harness({FAROL_GENERAL_EMAIL:''});
- assert.equal((await h.request('status')).json().canConnectGeneral,false);
- const response=await h.request('start',{method:'POST',body:{type:'general'}});
- assert.equal(response.status,503);assert.equal(response.json().error,'general_not_configured');
- assert.ok((await h.login('visitor@gmail.com')).cookie);
+test('variável Geral antiga não fixa nem impede a conta escolhida no Google',async()=>{
+ const h=harness({FAROL_GENERAL_EMAIL:'antiga@escola.pr.gov.br'});
+ const account=await h.login('outra@escola.pr.gov.br','','general');
+ assert.equal((await h.request('status',{cookie:account.cookie})).json().connections.general.email,'outra@escola.pr.gov.br');
+});
+test('contas Gerais de escolas diferentes ficam isoladas',async()=>{
+ const h=harness(),first=await h.login('escola-a@escola.pr.gov.br','','general');
+ const second=await h.login('escola-b@escola.pr.gov.br','','general');
+ assert.equal((await h.request('status',{cookie:first.cookie})).json().connections.general.email,'escola-a@escola.pr.gov.br');
+ assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.general.email,'escola-b@escola.pr.gov.br');
+ assert.notEqual(h.userFor('escola-a@escola.pr.gov.br').id,h.userFor('escola-b@escola.pr.gov.br').id);
+ assert.equal((await h.request('status')).json().mode,'none');
+});
+test('trocar Geral preserva Pessoal e não recupera a conta Geral anterior',async()=>{
+ const h=harness(),first=await h.login('escola-a@escola.pr.gov.br','','general');
+ const personal=await h.login('pessoa@gmail.com',first.cookie);
+ const second=await h.login('escola-b@escola.pr.gov.br',first.cookie+'; '+personal.cookie,'general');
+ const data=(await h.request('status',{cookie:second.cookie+'; '+personal.cookie})).json();
+ assert.equal(data.mode,'both');assert.equal(data.connections.general.email,'escola-b@escola.pr.gov.br');
+ assert.equal(data.connections.personal.email,'pessoa@gmail.com');
+ assert.equal((await h.request('status',{cookie:first.cookie})).json().connections.general,null);
 });
 for(const firstType of ['general','personal'])test('conectar em qualquer ordem e desconectar somente '+firstType,async()=>{
  const h=harness(),secondType=firstType==='general'?'personal':'general';
- const emailFor=type=>type==='general'?env.FAROL_GENERAL_EMAIL:'visitor@gmail.com';
+ const emailFor=type=>type==='general'?GENERAL_EMAIL:'visitor@gmail.com';
  const first=await h.login(emailFor(firstType),'',firstType);
  const second=await h.login(emailFor(secondType),first.cookie,secondType);
  assert.ok(!second.response.headers['set-cookie'].some(c=>c.startsWith('__Host-farol-account-'+firstType+'=')));
  const cookie=first.cookie+'; '+second.cookie;
  const status=(await h.request('status',{cookie})).json();
- assert.equal(status.mode,'both');assert.equal(status.connections.general.email,env.FAROL_GENERAL_EMAIL);
+ assert.equal(status.mode,'both');assert.equal(status.connections.general.email,GENERAL_EMAIL);
  assert.equal(status.connections.personal.email,'visitor@gmail.com');
  await h.request('disconnect',{method:'POST',body:{type:firstType},cookie});
  const after=(await h.request('status',{cookie})).json();
@@ -115,37 +130,37 @@ for(const firstType of ['general','personal'])test('conectar em qualquer ordem e
  assert.equal((await h.request('status')).json().mode,'none');
 });
 test('trocar conta Pessoal preserva Geral e não transfere autorizações pessoais',async()=>{
- const h=harness(),general=await h.login(env.FAROL_GENERAL_EMAIL,'','general');
+ const h=harness(),general=await h.login(GENERAL_EMAIL,'','general');
  const first=await h.login('first@gmail.com',general.cookie);
  const second=await h.login('second@gmail.com',general.cookie+'; '+first.cookie);
  const data=(await h.request('status',{cookie:general.cookie+'; '+second.cookie})).json();
  assert.equal(data.mode,'both');assert.equal(data.connections.personal.email,'second@gmail.com');
- assert.equal(data.connections.general.email,env.FAROL_GENERAL_EMAIL);
+ assert.equal(data.connections.general.email,GENERAL_EMAIL);
  assert.equal((await h.request('status',{cookie:first.cookie})).json().connections.personal,null);
  const returning=await h.login('first@gmail.com');
  assert.equal((await h.request('status',{cookie:returning.cookie})).json().connections.personal.email,'first@gmail.com');
  assert.equal((await h.request('status',{cookie:returning.cookie})).json().connections.general,null);
 });
 test('sessão Geral não pode ser usada como sessão Pessoal',async()=>{
- const h=harness(),general=await h.login(env.FAROL_GENERAL_EMAIL,'','general');
+ const h=harness(),general=await h.login(GENERAL_EMAIL,'','general');
  const forged=general.cookie.replace('account-general=','account-personal=');
  assert.equal((await h.request('status',{cookie:forged})).json().mode,'none');
 });
 test('falha temporária ou revogação de Geral preserva Pessoal',async()=>{
- const h=harness(),general=await h.login(env.FAROL_GENERAL_EMAIL,'','general');
+ const h=harness(),general=await h.login(GENERAL_EMAIL,'','general');
  const personal=await h.login('visitor@gmail.com',general.cookie);
  const cookie=general.cookie+'; '+personal.cookie;
- h.failAccount(env.FAROL_GENERAL_EMAIL);
+ h.failAccount(GENERAL_EMAIL);
  const temporary=(await h.request('status',{cookie})).json();
  assert.equal(temporary.errors.general,'unavailable');assert.ok(temporary.connections.personal);
- h.failAccount(env.FAROL_GENERAL_EMAIL,401);
+ h.failAccount(GENERAL_EMAIL,401);
  const revoked=(await h.request('status',{cookie})).json();
  assert.equal(revoked.errors.general,'reconnect');assert.ok(revoked.connections.personal);
  h.failAccount(null);
  assert.equal((await h.request('status',{cookie})).json().connections.general,null);
 });
 test('expiração de uma sessão não encerra a outra',async()=>{
- const h=harness(),general=await h.login(env.FAROL_GENERAL_EMAIL,'','general');
+ const h=harness(),general=await h.login(GENERAL_EMAIL,'','general');
  const personal=await h.login('visitor@gmail.com',general.cookie);
  const id=general.cookie.split('=')[1],key=digest('account.general.'+id);
  h.rows.get(key).expiresAt=Date.now()-1;
@@ -198,18 +213,18 @@ test('Conta Google sem serviço Gmail disponível pode entrar e autorizar Drive'
 test('fluxos OAuth Geral e Pessoal podem ficar pendentes simultaneamente',async()=>{
  const h=harness(),generalFlow=await h.start('general'),personalFlow=await h.start('personal');
  const flows=generalFlow.cookie+'; '+personalFlow.cookie;
- h.setEmail(env.FAROL_GENERAL_EMAIL);
+ h.setEmail(GENERAL_EMAIL);
  const general=await h.callback(generalFlow,flows);
  h.setEmail('visitor@gmail.com');
  const personal=await h.callback(personalFlow,flows+'; '+sessionCookie(general,'general'));
  const data=(await h.request('status',{cookie:sessionCookie(general,'general')+'; '+sessionCookie(personal)})).json();
- assert.equal(data.mode,'both');assert.equal(data.connections.general.email,env.FAROL_GENERAL_EMAIL);
+ assert.equal(data.mode,'both');assert.equal(data.connections.general.email,GENERAL_EMAIL);
  assert.equal(data.connections.personal.email,'visitor@gmail.com');
 });
 test('revogar a sessão Supabase Geral não encerra a Pessoal',async()=>{
- const h=harness(),general=await h.login(env.FAROL_GENERAL_EMAIL,'','general');
+ const h=harness(),general=await h.login(GENERAL_EMAIL,'','general');
  const personal=await h.login('visitor@gmail.com',general.cookie);
- h.revokeAuth(env.FAROL_GENERAL_EMAIL);
+ h.revokeAuth(GENERAL_EMAIL);
  const data=(await h.request('status',{cookie:general.cookie+'; '+personal.cookie})).json();
  assert.equal(data.mode,'personal');assert.equal(data.connections.general,null);
  assert.equal(data.connections.personal.email,'visitor@gmail.com');

@@ -9,7 +9,9 @@
 5. Cada autorização pertence ao ID Supabase da própria conta Google e ao tipo Geral/Pessoal. Conectar, revisar, trocar ou desconectar uma delas preserva a outra. A conexão Geral não é vinculada ao usuário da Pessoal e não é recuperada automaticamente só por conectar uma conta Pessoal em outro navegador.
 6. O quadro informa endereço e permissões realmente verificadas de Gmail e Drive por conexão. Recusar uma permissão mantém o serviço correspondente indisponível. O backend distingue `none`, `general`, `personal` e `both`, conforme as conexões verificadas.
 
-A conexão **Geral** exige que a própria conta configurada em `FAROL_GENERAL_EMAIL` seja autorizada no Google. Uma conta diferente é recusada, mesmo com uma Pessoal conectada. Não há exigência de login pessoal de responsável nem uso de `FAROL_GENERAL_ADMIN_EMAILS`. Essa alteração foi confirmada por Marcos em 09/11/2026. Continua sendo uma aplicação de uma escola; não há compartilhamento automático de acesso institucional com contas pessoais nem um modelo aprovado para várias escolas.
+Em **Geral**, a pessoa escolhe ou informa a conta geral da própria escola na página do Google. Em **Pessoal**, escolhe a própria conta. O endereço usado é obtido da identidade autorizada e validada no servidor, e confirmado nos serviços concedidos. Não há e-mail Geral fixo, filtro de domínio nem login pessoal obrigatório para Geral. `FAROL_GENERAL_EMAIL` e `FAROL_GENERAL_ADMIN_EMAILS` não são utilizadas, mesmo se permanecerem cadastradas na Vercel.
+
+Em 09/11/2026, Marcos esclareceu que a plataforma poderá ser usada por qualquer escola do Paraná. As conexões ficam isoladas por identidade Google/Supabase e tipo. Escolher uma conta como Geral não concede acesso a conexões de outra conta nem comprova vínculo escolar. O cadastro/identificação de escolas, seus vínculos com pessoas e o compartilhamento/isolamento de dados por escola ainda serão definidos. A identidade visual configurada no frontend permanece como está; não é usada para autorizar contas.
 
 Demandas INSTITUCIONAIS depende da Geral; Demandas PESSOAIS depende da Pessoal. Sem nenhuma conexão verificada, o conteúdo dos módulos fica oculto. Os demais conteúdos de desenvolvimento/fluxograma são preservados com qualquer conexão verificada. As diferenças de comportamento em Visão GERAL, Radar e BI SEED ainda serão definidas por Marcos; não foram implementados dados nem regras adicionais nesses módulos.
 
@@ -67,9 +69,8 @@ No projeto **farolge**, ambiente **Production**:
 | `FAROL_SUPABASE_URL` | URL do Supabase exclusivo do FAROL GE |
 | `FAROL_SUPABASE_ANON_KEY` | Chave anon/publishable do mesmo projeto |
 | `FAROL_SUPABASE_SERVICE_ROLE_KEY` | Chave legada service_role do mesmo projeto |
-| `FAROL_GENERAL_EMAIL` | Endereço exato da caixa geral da escola; necessário somente para habilitar a conexão Geral |
 
-`FAROL_ALLOWED_PERSONAL_EMAILS` e `FAROL_GENERAL_ADMIN_EMAILS` não são mais utilizadas. Sem `FAROL_GENERAL_EMAIL`, Geral fica indisponível, mas Pessoal continua funcionando. Na configuração inicial feita em 09/11/2026, as oito variáveis básicas foram cadastradas por Marcos; ainda é necessário cadastrar `FAROL_GENERAL_EMAIL` para usar Geral. Nenhum valor secreto foi verificado pelo chat.
+As oito variáveis acima atendem às duas conexões. `FAROL_ALLOWED_PERSONAL_EMAILS`, `FAROL_GENERAL_EMAIL` e `FAROL_GENERAL_ADMIN_EMAILS` não são mais utilizadas. Não cadastrar um endereço Geral na Vercel: a conta é escolhida na própria conexão Google. Na configuração inicial feita em 09/11/2026, as oito variáveis básicas foram cadastradas por Marcos. Nenhum valor secreto foi verificado pelo chat.
 
 Não colocar segredos em `config.js` nem versionar arquivos de credenciais. Manter a chave de criptografia em armazenamento seguro: perdê-la/trocá-la exige encerrar sessões e refazer as conexões criptografadas com a chave anterior.
 
@@ -81,13 +82,13 @@ O SQL não muda nesta correção. Se `database/google-sessions.sql` já foi exec
 
 A sessão única anterior (`__Host-farol-portal`) e os cookies do protótipo não são adotados pelo novo fluxo. Os estados OAuth anteriores também são recusados; será preciso conectar novamente as contas desejadas. Os cookies antigos são limpos no próximo callback bem-sucedido.
 
-As novas sessões usam cookies e payloads separados por tipo, na mesma tabela de sessões criptografadas. Novas conexões Geral pertencem à identidade da própria conta geral no Supabase, em vez de à conta pessoal de um responsável. Registros anteriores não são transferidos automaticamente, nem dão acesso pelo novo fluxo; permanecem no banco para revisão administrativa. Não foi aplicado expurgo remoto. Os registros temporários de sessões antigas vencem pelo prazo gravado; a limpeza ocorre ao iniciar novos fluxos. Para prazo fixo de expurgo mesmo sem novos acessos, definir rotina de limpeza no projeto FAROL GE.
+As novas sessões usam cookies e payloads separados por tipo, na mesma tabela de sessões criptografadas. Novas conexões Geral pertencem à identidade da própria conta geral escolhida no Google/Supabase, em vez de à conta pessoal de um responsável. O ajuste que remove o endereço Geral fixo mantém essas sessões independentes e não exige novas tabelas. Registros anteriores não são transferidos automaticamente, nem dão acesso pelo novo fluxo; permanecem no banco para revisão administrativa. Não foi aplicado expurgo remoto. Os registros temporários de sessões antigas vencem pelo prazo gravado; a limpeza ocorre ao iniciar novos fluxos. Para prazo fixo de expurgo mesmo sem novos acessos, definir rotina de limpeza no projeto FAROL GE.
 
 ## Verificação
 
-`npm test` executa testes sem servidor ou credenciais reais: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; endereço Geral exato; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
+`npm test` executa testes sem servidor ou credenciais reais: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; escolha de contas Gerais de escolas diferentes, sem endereço fixo; isolamento entre essas contas; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
 
-Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, troca da Pessoal preservando Geral, desconexão de cada uma, rejeição de conta Geral diferente, recusa de cada escopo, falha/revogação/expiração isoladas e ausência de segredos nos logs. Os testes automatizados não equivalem a OAuth real nem a aprovação do Google/SEED. Não foram executados servidor local nem testes visuais locais.
+Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, troca da Pessoal preservando Geral, desconexão de cada uma, seleção de contas Gerais diferentes e isolamento entre elas, recusa de cada escopo, falha/revogação/expiração isoladas e ausência de segredos nos logs. Os testes automatizados não equivalem a OAuth real nem a aprovação do Google/SEED. Não foram executados servidor local nem testes visuais locais.
 
 ## Referências oficiais consultadas
 

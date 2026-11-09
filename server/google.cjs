@@ -28,10 +28,8 @@ function configuration(env) {
   try {
     const origin=new URL(env.FAROL_ORIGIN),storage=new URL(env.FAROL_SUPABASE_URL);
     const key=Buffer.from(env.FAROL_TOKEN_KEY,'base64');
-    const general=emailOf(env.FAROL_GENERAL_EMAIL);
-    const validEmail=value=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
-    if([origin,storage].some(url=>url.protocol!=='https:' || url.pathname!=='/' || url.search || url.hash || url.username || url.password) || key.length!==32 || (general && !validEmail(general)))return null;
-    return {origin:origin.origin,storage:storage.origin,key,clientId:env.GOOGLE_CLIENT_ID,clientSecret:env.GOOGLE_CLIENT_SECRET,serviceKey:env.FAROL_SUPABASE_SERVICE_ROLE_KEY,anonKey:env.FAROL_SUPABASE_ANON_KEY,general};
+    if([origin,storage].some(url=>url.protocol!=='https:' || url.pathname!=='/' || url.search || url.hash || url.username || url.password) || key.length!==32)return null;
+    return {origin:origin.origin,storage:storage.origin,key,clientId:env.GOOGLE_CLIENT_ID,clientSecret:env.GOOGLE_CLIENT_SECRET,serviceKey:env.FAROL_SUPABASE_SERVICE_ROLE_KEY,anonKey:env.FAROL_SUPABASE_ANON_KEY};
   } catch {return null;}
 }
 function seal(data,key,id) {
@@ -93,10 +91,9 @@ function makeAuth(config,fetcher=fetch) {
     logout:token=>call('logout?scope=local',{},token)
   };
 }
-function validateAccount(identity,profile,type,config,nonce) {
+function validateAccount(identity,profile,nonce) {
   const email=emailOf(profile.emailAddress);
   if(!identity || identity.email_verified!==true || identity.nonce!==nonce || !identity.sub || emailOf(identity.email)!==email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))throw new Error('wrong_account');
-  if(type==='general' && (!config.general || email!==config.general))throw new Error('wrong_account');
   return email;
 }
 const credentialsOf=client=>({access_token:client.credentials.access_token,expiry_date:client.credentials.expiry_date,refresh_token:client.credentials.refresh_token});
@@ -108,7 +105,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     if(!['status','start','callback','disconnect','logout'].includes(action))return reply(404,{error:'not_found'});
     const expected=['start','disconnect','logout'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
-    if(!config)return reply(action==='status'?200:503,{configured:false,canConnectGeneral:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
+    if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
     const jar=cookies(req),store=storeFactory(config),auth=authFactory(config);
     const finish=(route,type,result)=>{res.statusCode=303;res.setHeader('Location',`${config.origin}/?connection=${result}&mailbox=${type}#${routeOf(route)}`);res.end();};
@@ -130,7 +127,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           await store.put(key,session,session.expiresAt);
         }
         const user=await auth.user(session.auth.accessToken);
-        if(user.id!==session.user.id || emailOf(user.email)!==session.user.email || (type==='general' && emailOf(user.email)!==config.general))throw new Error('login_required');
+        if(user.id!==session.user.id || emailOf(user.email)!==session.user.email)throw new Error('login_required');
         session.user={id:user.id,email:emailOf(user.email)};
         return {id,key,type,session,user:session.user};
       } catch(error) {
@@ -156,7 +153,6 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     try {
       if(action==='start') {
         const type=body.type;
-        if(type==='general' && !config.general)return reply(503,{error:'general_not_configured'});
         await store.cleanup();
         const state=`${type}.${random()}`,binding=random(),nonce=random();
         const client=clientFactory(config),{codeVerifier,codeChallenge}=await client.generateCodeVerifierAsync();
@@ -164,7 +160,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         await store.put(hash(state),{version:3,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),previous},Date.now()+600000);
         setCookie(res,cookieName('flow',type),binding,600);
         const authUrl=client.generateAuthUrl({scope:SCOPES,access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
-          ...(type==='general'?{login_hint:config.general}:{}),code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
+          code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
         return reply(200,{url:authUrl});
       }
       if(action==='callback') {
@@ -183,7 +179,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const client=clientFactory(config),{tokens}=await client.getToken({code,codeVerifier:flow.codeVerifier});
           if(!tokens.access_token || !tokens.id_token)throw new Error('failed');
           const ticket=await client.verifyIdToken({idToken:tokens.id_token,audience:config.clientId}),identity=ticket.getPayload();
-          const email=validateAccount(identity,{emailAddress:identity?.email},type,config,hash(flow.nonce));
+          const email=validateAccount(identity,{emailAddress:identity?.email},hash(flow.nonce));
           const scopes=String(tokens.scope||'').split(' '),capabilities={gmail:scopes.includes(READ_SCOPE),drive:scopes.includes(DRIVE_SCOPE)};
           client.setCredentials(tokens);
           // Confirm each granted service, without preventing basic login when a permission is declined.
@@ -261,7 +257,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         }
       }
       const mode=connections.general?(connections.personal?'both':'general'):(connections.personal?'personal':'none');
-      return reply(200,{configured:true,canConnectGeneral:Boolean(config.general),mode,connections,errors});
+      return reply(200,{configured:true,mode,connections,errors});
     } catch {
       // Do not log OAuth exceptions; they may contain credentials, codes or tokens.
       if(action==='callback')return finish('inicio','personal','unavailable');

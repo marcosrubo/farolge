@@ -16,7 +16,7 @@ function ui(status={configured:false,connections:{general:null,personal:null}}){
 }
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 test('sem conexão há dois botões independentes e nenhum login separado',async()=>{
- const h=ui({configured:true,canConnectGeneral:true,connections:{general:null,personal:null}});await settle();
+ const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
  assert.equal(h.get('#main').hidden,true);
  for(const button of h.connect){
   assert.equal(button.disabled,false);assert.equal(button.hidden,false);
@@ -33,7 +33,7 @@ for(const mode of ['general','personal','both'])test('conexões verificadas: '+m
   general:mode!=='personal'?{email:'escola@escola.pr.gov.br',gmail:true,drive:true}:null,
   personal:mode!=='general'?{email:'person@gmail.com',gmail:true,drive:false}:null
  };
- const h=ui({configured:true,canConnectGeneral:true,mode,connections});await settle();
+ const h=ui({configured:true,mode,connections});await settle();
  assert.equal(h.get('#main').hidden,false);
  assert.ok(h.get('#main').innerHTML.includes('ANÁLISES'));
  for(const type of ['general','personal']){
@@ -46,22 +46,26 @@ for(const mode of ['general','personal','both'])test('conexões verificadas: '+m
   assert.equal(h.get('#main').hidden,!connections[type]);
  }
 });
-test('não configurar Geral não impede conectar Pessoal',async()=>{
- const h=ui({configured:true,canConnectGeneral:false,connections:{general:null,personal:null}});await settle();
- assert.equal(h.connect[0].disabled,true);assert.equal(h.connect[1].disabled,false);
- assert.ok(h.get('#email-connection-feedback').textContent.includes('endereço da conta geral'));
+test('Geral abre escolha no Google sem endereço pré-configurado',async()=>{
+ const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
+ assert.equal(h.connect[0].disabled,false);assert.equal(h.connect[1].disabled,false);
+ h.connect[0].listeners.click();
+ assert.ok(h.get('#email-connection-description').innerHTML.includes('Escolha no Google a conta geral da sua escola'));
+ await h.get('#email-connection-continue').listeners.click();
+ assert.equal(JSON.parse(h.requests.at(-1).opts.body).type,'general');
+ assert.ok(!h.get('#email-connection-feedback').textContent.includes('configurado'));
 });
 test('configuração ausente mantém ambas indisponíveis sem simular conexão',async()=>{
  const h=ui();await settle();
  assert.ok(h.connect.every(button=>button.disabled));assert.equal(h.get('#main').hidden,true);
 });
 test('trocar módulo sem conexão não revela conteúdo',async()=>{
- const h=ui({configured:true,canConnectGeneral:true,connections:{general:null,personal:null}});await settle();
+ const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
  h.context.location.hash='#pessoais';h.window.listeners.hashchange();
  assert.equal(h.get('#main').hidden,true);
 });
 test('desconectar Geral preserva o estado Pessoal e atualiza o conteúdo',async()=>{
- const status={configured:true,canConnectGeneral:true,connections:{general:{email:'school@example.com',gmail:true,drive:true},personal:{email:'person@gmail.com',gmail:true,drive:true}}};
+ const status={configured:true,connections:{general:{email:'school@example.com',gmail:true,drive:true},personal:{email:'person@gmail.com',gmail:true,drive:true}}};
  const h=ui(status);await settle();
  h.context.location.hash='#institucionais';h.window.listeners.hashchange();
  assert.equal(h.get('#main').hidden,false);

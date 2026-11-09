@@ -106,12 +106,10 @@ const connectionMessages={
   cancelled:'Autorização cancelada. Nenhuma conexão foi substituída.',
   invalid_state:'A solicitação expirou ou não pertence a este navegador. Tente conectar novamente.',
   wrong_account:'Escolha a conta correta para esta conexão.',
-  not_allowed:'Esta pessoa não tem permissão para conectar a conta geral da escola.',
   missing_scope:'É necessário autorizar a consulta ao Gmail para concluir a conexão.',
   failed:'Não foi possível concluir a conexão com o Google. Tente novamente.',
   unavailable:'O serviço de conexão está temporariamente indisponível.',
-  not_configured:'A conexão Google ainda precisa ser configurada para este FAROL GE.',
-  general_not_configured:'O endereço da conta geral da escola ainda precisa ser configurado no FAROL GE.'
+  not_configured:'A conexão Google ainda precisa ser configurada para este FAROL GE.'
 };
 function setupEmailConnections(){
   const dialog=document.querySelector('#email-connection-dialog');
@@ -120,7 +118,6 @@ function setupEmailConnections(){
   const feedback=document.querySelector('#email-connection-feedback');
   let configured=false;
   let selectedType='personal';
-  let canConnectGeneral=false;
   let statusVersion=0;
   const types=['general','personal'];
   async function api(action,body){
@@ -145,7 +142,6 @@ function setupEmailConnections(){
       const result=await api('status');
       if(version!==statusVersion)return;
       configured=result.configured===true;
-      canConnectGeneral=result.canConnectGeneral===true;
       verifiedConnections={general:null,personal:null};
       for(const type of types){
         const connection=result.connections?.[type];
@@ -158,17 +154,14 @@ function setupEmailConnections(){
         const button=document.querySelector('[data-connect-email="'+type+'"]');
         button.textContent=connected?'Revisar autorização':'Conectar';
         button.hidden=false;
-        button.disabled=!configured || (type==='general' && !canConnectGeneral);
-        button.title=type==='general' && !canConnectGeneral?connectionMessages.general_not_configured:'';
+        button.disabled=!configured;
         document.querySelector('[data-disconnect-email="'+type+'"]').hidden=!connected;
       }
       updateWorkspaceAccess();
-      if(configured && !canConnectGeneral && !feedback.textContent)feedback.textContent=connectionMessages.general_not_configured;
       showAvailability();
     } catch {
       if(version!==statusVersion)return;
       configured=false;
-      canConnectGeneral=false;
       verifiedConnections={general:null,personal:null};
       document.querySelector('#main').hidden=true;
       for(const type of types){
@@ -185,10 +178,9 @@ function setupEmailConnections(){
   function openConnection(type){
     selectedType=type;
     const isGeneral=type==='general';
-    if(isGeneral && !canConnectGeneral)return;
     document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar conta geral da escola':'Conectar conta pessoal';
     document.querySelector('#email-connection-description').innerHTML=isGeneral
-      ?'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'
+      ?'Escolha no Google a conta geral da sua escola. Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'
       :'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta Google da pessoa que estiver utilizando a aplicação.';
     showAvailability();
     dialog.showModal();
