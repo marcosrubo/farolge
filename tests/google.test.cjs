@@ -267,6 +267,7 @@ test('Geral não solicita nem consulta/cria labels; Pessoal cria na própria con
  await h.request('status',{cookie:general.cookie});assert.equal(h.labelRequests.length,0);
  const personal=await h.login('person@gmail.com',general.cookie);
  assert.ok(h.labelRequests.every(r=>r.email==='person@gmail.com'));
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['1-ME DEVEM','2-MINHAS','3-DEVO']);
  const data=(await h.request('status',{cookie:general.cookie+'; '+personal.cookie})).json();
  assert.equal(data.mode,'both');assert.equal(data.connections.general.labels,undefined);
  assert.equal(data.connections.personal.labels,'ready');assert.equal(h.labels.has('school@gmail.com'),false);

@@ -6,8 +6,8 @@ window.FAROL_CONFIG = {
   schoolSubtitle: '',
   schoolLogo: 'arte/thiago-terra-identidade-original.png',
   gmailLabels: {
-    incoming: 'FarolGE_MeDevem',
-    personal: 'FarolGE_Minhas',
-    outgoing: 'FarolGE_Devo'
+    incoming: '1-ME DEVEM',
+    personal: '2-MINHAS',
+    outgoing: '3-DEVO'
   }
 };

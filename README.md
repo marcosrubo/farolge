@@ -60,15 +60,15 @@ Na conexão Pessoal, o backend verifica e cria somente os marcadores ausentes en
 
 | Marcador | Destino |
 | --- | --- |
-| `FarolGE_MeDevem` | DEVEM PARA MIM |
-| `FarolGE_Minhas` | MINHAS PRÓPRIAS PENDÊNCIAS |
-| `FarolGE_Devo` | DEVO PARA ALGUÉM |
+| `1-ME DEVEM` | 1-ME DEVEM |
+| `2-MINHAS` | 2-MINHAS |
+| `3-DEVO` | 3-DEVO |
 
 A associação às três colunas ainda será implementada. Tratamento de marcadores simultâneos e de arquivadas aguarda definição. Não são renomeados/excluídos marcadores antigos nem aplicados marcadores a mensagens. A data de um e-mail não deve ser convertida automaticamente em prazo.
 
-A Pessoal solicita adicionalmente `gmail.labels`. Após publicar, contas já conectadas precisam usar **Revisar autorização** e conceder essa permissão. O status mostra se as três labels existem; consultar status não cria marcadores. Falhas mantêm a conta conectada e pedem nova revisão para tentar novamente. A Geral não solicita esse escopo nem consulta/cria essas labels. Desconectar preserva os marcadores no Gmail. A criação real ainda deve ser validada na Vercel. Os nomes usados no servidor são fixos; editar `config.js` não altera as operações do backend.
+A Pessoal solicita adicionalmente `gmail.labels`. Após publicar, contas já conectadas precisam usar **Revisar autorização** e conceder essa permissão. O status mostra se as três labels existem; consultar status não cria marcadores. Falhas mantêm a conta conectada e pedem nova revisão para tentar novamente. A Geral não solicita esse escopo nem consulta/cria essas labels. Desconectar preserva os marcadores no Gmail. Marcos confirmou a criação real na Vercel com os nomes anteriores. A alteração para os nomes numerados ainda deve ser validada após publicação. Os nomes usados no servidor são fixos; editar `config.js` não altera as operações do backend.
 
-A revisão 3 acrescenta a consulta e criação dos três marcadores na conexão Pessoal e sua retenção no Gmail.
+A revisão 3 acrescentou a consulta e criação dos três marcadores na conexão Pessoal e sua retenção no Gmail. A revisão 4 atualiza seus nomes para `1-ME DEVEM`, `2-MINHAS` e `3-DEVO`, nessa ordem de criação. O backend não renomeia nem remove os marcadores anteriores; Marcos informou que os excluirá manualmente no Gmail.
 
 ## Limites e próximos passos
 
