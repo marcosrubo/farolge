@@ -82,6 +82,7 @@ function renderDevelopment(id){
 }
 
 function render(){
+  window.FarolDemands?.unmount();
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const selected=modules.find(item=>item.id===route)||modules[0];
   document.title='FAROL GE · '+selected.label;
@@ -89,7 +90,8 @@ function render(){
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='configuracoes'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&index<5?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
-  main.innerHTML=selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  main.innerHTML=selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem um acompanhamento próprio.</p><div id="demands-board"></div></section>`:selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  if(selected.id==='pessoais')window.FarolDemands?.mount(document.querySelector('#demands-board'));
 }
 const connectionMessages={
   connected:'Conexão e permissões confirmadas pelo Google.',
@@ -134,6 +136,7 @@ function setupEmailConnections(){
       const result=await api('status');
       if(version!==statusVersion)return;
       configured=result.configured===true;
+      window.FarolDemands?.connectionChanged(configured?result.connections?.personal||null:null);
       for(const type of types){
         const connection=result.connections?.[type];
         const email=connection?.email;
@@ -155,6 +158,7 @@ function setupEmailConnections(){
     } catch {
       if(version!==statusVersion)return;
       configured=false;
+      window.FarolDemands?.connectionChanged(null);
       for(const type of types){
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent='Conexão não verificada';
@@ -197,6 +201,7 @@ function setupEmailConnections(){
       button.disabled=true;
       try {
         ++statusVersion;
+        if(button.dataset.disconnectEmail==='personal')window.FarolDemands?.connectionChanged(null);
         await api('disconnect',{type:button.dataset.disconnectEmail});
         feedback.textContent='Autorização removida do FAROL GE para esta conta. A outra conexão foi preservada.';
         await refresh();

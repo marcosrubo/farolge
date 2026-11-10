@@ -13,7 +13,7 @@ Em **Geral**, a pessoa escolhe ou informa a conta geral da própria escola na p�
 
 Em 09/11/2026, Marcos esclareceu que a plataforma poderá ser usada por qualquer escola do Paraná. As conexões ficam isoladas por identidade Google/Supabase e tipo. Escolher uma conta como Geral não concede acesso a conexões de outra conta nem comprova vínculo escolar. O cadastro/identificação de escolas, seus vínculos com pessoas e o compartilhamento/isolamento de dados por escola ainda serão definidos. A identidade visual configurada no frontend permanece como está; não é usada para autorizar contas.
 
-As futuras operações de Demandas INSTITUCIONAIS dependem da Geral; as de Demandas PESSOAIS dependem da Pessoal. Conforme pedido de Marcos em 10/11/2026, as explicações estáticas de todos os módulos e o fluxograma do Radar permanecem visíveis mesmo sem conexão ou se a consulta de status falhar. Isso não concede autorização para dados ou operações das contas. As diferenças de comportamento em Visão GERAL, Radar e BI SEED ainda serão definidas por Marcos; não foram implementados dados nem regras adicionais nesses módulos.
+As futuras operações de Demandas INSTITUCIONAIS dependem da Geral; o quadro de Demandas PESSOAIS usa a Pessoal. Conforme pedido de Marcos em 10/11/2026, as explicações estáticas de todos os módulos e o fluxograma do Radar permanecem visíveis mesmo sem conexão ou se a consulta de status falhar. Isso não concede autorização para dados ou operações das contas. As diferenças de comportamento em Visão GERAL, Radar e BI SEED ainda serão definidas por Marcos; não foram implementados dados nem regras adicionais nesses módulos.
 
 ## Escopo entregue e limites
 
@@ -47,9 +47,9 @@ No projeto exclusivo **FarolGE**:
 
    Marcos confirmou a propriedade do prefixo `https://www.farolge.com.br/` no Search Console e salvou o nome **FAROL GE — Farol da Gestão Escolar** no Branding. A revisão 2 da política mantém esse nome e explicita as categorias de dados, suas finalidades, armazenamento, fornecedores, retenção e exclusão. O painel pediu aguardar 24 horas após verificar a propriedade antes de nova avaliação. A revisão não garante aprovação: se persistir o apontamento genérico de conteúdo insuficiente, conferir a versão realmente publicada e solicitar revisão manual com referência às seções da política, sem alegar aprovação ou funcionalidades inexistentes.
 
-   Antes de solicitar verificação de acesso a dados para distribuição ampla, revisar a necessidade dos escopos contra as funções efetivamente implementadas. A política Google não permite solicitar permissões apenas para recursos futuros. O código atual ainda solicita `gmail.readonly` e `drive.file`, enquanto os módulos só apresentam explicações e a integração verifica a conta e suas autorizações; a entrega de texto não altera esse fluxo nem demonstra operações de mensagens/arquivos.
+   Antes de solicitar verificação de acesso a dados para distribuição ampla, revisar a necessidade dos escopos contra as funções efetivamente implementadas. A política Google não permite solicitar permissões apenas para recursos futuros. O código atual ainda solicita `gmail.readonly` e `drive.file`, enquanto Demandas PESSOAIS consulta conversas por marcadores e a integração Drive ainda verifica somente a conta e suas autorizações. A leitura de mensagens já está implementada em Pessoal; operações de arquivos no Drive permanecem futuras.
 
-A conta pessoal pode ser Gmail ou outro endereço com Conta Google. Gmail API só funcionará se essa conta tiver o serviço Gmail disponível e autorizado. O código solicita leitura da caixa inteira; a seleção das demandas por marcadores será implementada nos módulos.
+A conta pessoal pode ser Gmail ou outro endereço com Conta Google. Gmail API só funcionará se essa conta tiver o serviço Gmail disponível e autorizado. O código solicita leitura da caixa inteira; Demandas PESSOAIS seleciona as conversas pelos três marcadores, sem envio ou alteração de mensagens.
 
 ### 2. Supabase exclusivo do FAROL GE
 
@@ -104,7 +104,7 @@ Para ativar: adicionar `https://www.googleapis.com/auth/gmail.labels` no Data Ac
 
 Pedidos de privacidade/exclusão chegam ao contato público da política. O atendimento é administrativo: confirmar a titularidade sem solicitar senhas ou tokens; localizar a identidade correta no Supabase Auth exclusivo do FAROL; atender o pedido e, quando couber exclusão integral, excluir esse usuário. A chave estrangeira remove suas conexões em cascata; as sessões restantes deixam de autorizar ao falhar a verificação da identidade e os registros temporários expiram conforme o prazo gravado. Não prometer exclusão imediata de backups ou registros dos fornecedores sem confirmar suas condições. Desconectar uma conta, isoladamente, não apaga o cadastro Auth. Nenhuma exclusão remota foi executada nesta entrega.
 
-`npm test` executa 45 testes sem servidor ou credenciais reais, incluindo criação das labels ausentes, reconexão sem duplicatas, conflitos concorrentes, recusa/falha de permissão, status sem escrita e preservação da Geral. Também cobre: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; escolha de contas Gerais de escolas diferentes, sem endereço fixo; isolamento entre essas contas; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
+`npm test` executa testes sem servidor ou credenciais reais, incluindo criação das labels ausentes, reconexão sem duplicatas, conflitos concorrentes, recusa/falha de permissão, status sem escrita e preservação da Geral. Também cobre: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; escolha de contas Gerais de escolas diferentes, sem endereço fixo; isolamento entre essas contas; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
 
 Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, troca da Pessoal preservando Geral, desconexão de cada uma, seleção de contas Gerais diferentes e isolamento entre elas, recusa de cada escopo, falha/revogação/expiração isoladas e ausência de segredos nos logs. Os testes automatizados não equivalem a OAuth real nem a aprovação do Google/SEED. Não foram executados servidor local nem testes visuais locais.
 
@@ -119,3 +119,14 @@ Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, t
 
 - [Gmail: listar marcadores](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels/list)
 - [Gmail: criar marcador](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels/create)
+
+## Quadro e acompanhamento Pessoal
+
+Executar `database/personal-demands.sql` no Supabase exclusivo FAROL GE antes de usar prazos. As ações `/api/google/board` e `/api/google/thread` são GET; `/api/google/demand` é POST com Origin/X-Farol-Request. Todas exigem sessão Pessoal verificada, Gmail autorizado e confirmação da conta esperada. Os IDs e o proprietário nunca são aceitos como autorização por si só. O backend confere os marcadores da conversa e deriva o proprietário da sessão, sem herdar Geral. Erros de migração, autorização, indisponibilidade e conflito não simulam listas ou salvamentos bem-sucedidos.
+
+A tabela é acessível somente pelo backend/service_role, com dados de acompanhamento criptografados e atualização condicional pela versão. Um acompanhamento por proprietário/threadId, referenciando a mensagem de origem, preserva o prazo quando chegam respostas. Responsável é texto, sem atribuir acesso a outra conta. Não há correlação entre cópias da mesma mensagem em caixas diferentes, envio ou avisos de prazo. Retenção, histórico e exclusão constam da revisão 5 da política. Os escopos existentes bastam para esta entrega.
+
+Verificar na nuvem o roteiro de `README.md` → Demandas PESSOAIS e prazos. As novas verificações automatizadas cobrem autorização por sessão Pessoal, proprietário/conta, CSRF, SQL ausente, criptografia, gravação condicional, calendário de Brasília, histórico, múltiplos marcadores, paginação, respostas, conclusão manual e segurança do texto. Não houve teste visual local.
+
+- [Gmail: listar conversas](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/list)
+- [Gmail: obter conversa](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/get)

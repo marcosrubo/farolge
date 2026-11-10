@@ -1,5 +1,6 @@
 'use strict';
 const crypto = require('node:crypto');
+const {handleDemands}=require('./demands.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const LABEL_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
@@ -52,7 +53,10 @@ function makeStore(config,fetcher=fetch) {
       method,headers:{apikey:config.serviceKey,Authorization:`Bearer ${config.serviceKey}`,'Content-Type':'application/json',Prefer:prefer||'return=minimal'},
       body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)
     });
-    if(!response.ok)throw new Error('storage_unavailable');
+    if(!response.ok){
+      let code;try {code=(await response.json()).code;}catch{}
+      throw new Error(table==='farol_personal_demands' && ['42P01','PGRST205'].includes(code)?'setup_required':'storage_unavailable');
+    }
     return response.status===204 || !prefer?.includes('representation')?null:response.json();
   }
   const sessions=(...args)=>call('farol_google_sessions',...args);
@@ -71,6 +75,18 @@ function makeStore(config,fetcher=fetch) {
     },
     async putConnection(owner,type,value) {
       await call('farol_google_connections','POST','on_conflict=owner_id,type',{owner_id:owner,type,payload:seal(value,config.key,connectionId(owner,type)),updated_at:new Date().toISOString()},'resolution=merge-duplicates,return=minimal');
+    },
+    async getDemands(owner,ids) {
+      if(!ids.length)return [];
+      const rows=await call('farol_personal_demands','GET',`owner_id=eq.${encodeURIComponent(owner)}&thread_id=in.(${ids.map(encodeURIComponent).join(',')})&select=id,thread_id,version,payload`,null,'return=representation');
+      return rows.map(row=>({id:row.id,threadId:row.thread_id,version:row.version,...unseal(row.payload,config.key,`demand.${owner}.personal.${row.thread_id}`)}));
+    },
+    async saveDemand(owner,id,value,version) {
+      const payload=seal(value,config.key,`demand.${owner}.personal.${id}`);
+      const rows=version===0
+        ?await call('farol_personal_demands','POST','on_conflict=owner_id,thread_id',{owner_id:owner,thread_id:id,version:1,payload},'resolution=ignore-duplicates,return=representation')
+        :await call('farol_personal_demands','PATCH',`owner_id=eq.${encodeURIComponent(owner)}&thread_id=eq.${encodeURIComponent(id)}&version=eq.${version}`,{version:version+1,payload,updated_at:new Date().toISOString()},'return=representation');
+      return rows[0]?{...value,id:rows[0].id,threadId:id,version:rows[0].version}:null;
     },
     async removeConnection(owner,type) {await call('farol_google_connections','DELETE',query(owner,type));}
   };
@@ -133,8 +149,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout'].includes(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout'].includes(action)?'POST':'GET';
+    if(!['status','start','callback','disconnect','logout','board','thread','demand'].includes(action))return reply(404,{error:'not_found'});
+    const expected=['start','disconnect','logout','demand'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
@@ -144,6 +160,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     if(expected==='POST') {
       if(!String(req.headers['content-type']||'').startsWith('application/json'))return reply(415,{error:'invalid_body'});
       try {body=typeof req.body==='string'?JSON.parse(req.body):req.body||{};}catch{return reply(400,{error:'invalid_body'});}
+      if(!body || typeof body!=='object' || Array.isArray(body))return reply(400,{error:'invalid_body'});
       if(action!=='logout' && !TYPES.includes(body.type))return reply(400,{error:'invalid_type'});
     }
     async function account(type) {
@@ -182,6 +199,28 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
+      if(['board','thread','demand'].includes(action)) {
+        try {
+          const current=await account('personal');
+          if(!current)return reply(401,{error:'login_required'});
+          const connection=await store.getConnection(current.user.id,'personal');
+          if(!connection || connection.email!==current.user.email || !connection.capabilities.gmail)return reply(403,{error:'missing_scope'});
+          const client=clientFactory(config);client.setCredentials(connection.credentials);
+          const result=await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email});
+          // Credential caching must not turn an already committed demand into a false failure.
+          // The stored refresh token remains available for the next request.
+          try {await store.putConnection(current.user.id,'personal',{...connection,credentials:credentialsOf(client)});}catch{}
+          return reply(200,result);
+        } catch(error) {
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider'];
+          if(known.includes(error.message))return reply(error.status,{error:error.message});
+          if(error.message==='setup_required')return reply(503,{error:'setup_required'});
+          if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
+          if(error.response?.status===403)return reply(403,{error:'missing_scope'});
+          if(error.response?.status===404)return reply(404,{error:'not_found'});
+          return reply(503,{error:'unavailable'});
+        }
+      }
       if(action==='start') {
         const type=body.type;
         await store.cleanup();

@@ -299,3 +299,34 @@ test('identidade inválida nunca cria labels e desconectar não apaga marcadores
  assert.equal(h.labels.get('admin@gmail.com').size,3);
  assert.ok(h.labelRequests.every(r=>['GET','POST'].includes(r.method)));
 });
+
+test('endpoints de demandas exigem sessão Pessoal e protegem escrita com CSRF',async()=>{
+ const h=harness();
+ for(const action of ['board','thread'])assert.equal((await h.request(action,{query:'?mailbox=admin@gmail.com&column=0&id=thread1'})).status,401);
+ const general=await h.login('school@gmail.com','','general');
+ assert.equal((await h.request('board',{cookie:general.cookie,query:'?mailbox=school@gmail.com&column=0'})).status,401);
+ assert.equal((await h.request('demand',{method:'POST',body:{type:'personal'},origin:'https://evil.invalid'})).status,403);
+ assert.equal((await h.request('demand')).status,405);
+ assert.equal((await h.request('demand',{method:'POST',body:'null'})).status,400);
+ const personal=await h.login();
+ assert.equal((await h.request('board',{cookie:personal.cookie,query:'?mailbox=another@gmail.com&column=0'})).status,409);
+});
+test('armazenamento de demandas cifra dados, filtra proprietário e usa versão atômica',async()=>{
+ const requests=[];let row;
+ const config=configuration(env),store=makeStore(config,async(url,options)=>{
+  requests.push({url,options});
+  if(options.method==='POST'){row={...JSON.parse(options.body),id:'task-id'};return {ok:true,status:200,json:async()=>[row]};}
+  if(options.method==='GET')return {ok:true,status:200,json:async()=>[row]};
+  return {ok:true,status:200,json:async()=>[]};
+ });
+ const owner='owner-a',value={dueDate:'2026-11-20',responsible:'private-person',completed:false,history:[]};
+ assert.equal((await store.saveDemand(owner,'thread1',value,0)).version,1);
+ assert.ok(!JSON.stringify(row).includes('private-person'));
+ assert.equal((await store.getDemands(owner,['thread1']))[0].responsible,'private-person');
+ assert.ok(requests[1].url.includes('owner_id=eq.owner-a'));
+ assert.equal(await store.saveDemand(owner,'thread1',value,1),null);
+ assert.ok(requests[2].url.includes('version=eq.1'));assert.equal(requests[2].options.method,'PATCH');
+ await assert.rejects(store.getDemands('other-owner',['thread1']));
+ const missing=makeStore(config,async()=>({ok:false,status:404,json:async()=>({code:'PGRST205'})}));
+ await assert.rejects(missing.getDemands(owner,['thread1']),{message:'setup_required'});
+});
