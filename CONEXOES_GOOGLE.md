@@ -13,7 +13,7 @@ Em **Geral**, a pessoa escolhe ou informa a conta geral da própria escola na p�
 
 Em 09/11/2026, Marcos esclareceu que a plataforma poderá ser usada por qualquer escola do Paraná. As conexões ficam isoladas por identidade Google/Supabase e tipo. Escolher uma conta como Geral não concede acesso a conexões de outra conta nem comprova vínculo escolar. O cadastro/identificação de escolas, seus vínculos com pessoas e o compartilhamento/isolamento de dados por escola ainda serão definidos. A identidade visual configurada no frontend permanece como está; não é usada para autorizar contas.
 
-Demandas INSTITUCIONAIS depende da Geral; Demandas PESSOAIS depende da Pessoal. Sem nenhuma conexão verificada, o conteúdo dos módulos fica oculto. Os demais conteúdos de desenvolvimento/fluxograma são preservados com qualquer conexão verificada. As diferenças de comportamento em Visão GERAL, Radar e BI SEED ainda serão definidas por Marcos; não foram implementados dados nem regras adicionais nesses módulos.
+As futuras operações de Demandas INSTITUCIONAIS dependem da Geral; as de Demandas PESSOAIS dependem da Pessoal. Conforme pedido de Marcos em 10/11/2026, as explicações estáticas de todos os módulos e o fluxograma do Radar permanecem visíveis mesmo sem conexão ou se a consulta de status falhar. Isso não concede autorização para dados ou operações das contas. As diferenças de comportamento em Visão GERAL, Radar e BI SEED ainda serão definidas por Marcos; não foram implementados dados nem regras adicionais nesses módulos.
 
 ## Escopo entregue e limites
 

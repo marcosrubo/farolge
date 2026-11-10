@@ -17,7 +17,7 @@ function ui(status={configured:false,connections:{general:null,personal:null}}){
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 test('sem conexão há dois botões independentes e nenhum login separado',async()=>{
  const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
- assert.equal(h.get('#main').hidden,true);
+ assert.equal(h.get('#main').hidden,false);
  for(const button of h.connect){
   assert.equal(button.disabled,false);assert.equal(button.hidden,false);
   button.listeners.click();
@@ -43,7 +43,7 @@ for(const mode of ['general','personal','both'])test('conexões verificadas: '+m
  if(connections.personal)assert.ok(h.get('#email-personal-status').textContent.includes('Drive: não autorizado'));
  for(const [route,type] of [['institucionais','general'],['pessoais','personal'],['demandas','personal']]){
   h.context.location.hash='#'+route;h.window.listeners.hashchange();
-  assert.equal(h.get('#main').hidden,!connections[type]);
+  assert.equal(h.get('#main').hidden,false);
  }
 });
 test('Geral abre escolha no Google sem endereço pré-configurado',async()=>{
@@ -57,21 +57,27 @@ test('Geral abre escolha no Google sem endereço pré-configurado',async()=>{
 });
 test('configuração ausente mantém ambas indisponíveis sem simular conexão',async()=>{
  const h=ui();await settle();
- assert.ok(h.connect.every(button=>button.disabled));assert.equal(h.get('#main').hidden,true);
+ assert.ok(h.connect.every(button=>button.disabled));assert.equal(h.get('#main').hidden,false);
 });
-test('trocar módulo sem conexão não revela conteúdo',async()=>{
+test('explicações e Radar ficam disponíveis em todos os módulos sem conexão',async()=>{
  const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
- h.context.location.hash='#pessoais';h.window.listeners.hashchange();
- assert.equal(h.get('#main').hidden,true);
+ for(const route of ['inicio','radar','institucionais','pessoais','bi-seed','configuracoes']){
+  h.context.location.hash='#'+route;h.window.listeners.hashchange();
+  assert.equal(h.get('#main').hidden,false);
+  assert.ok(h.get('#main').innerHTML.includes(route==='radar'?'ANÁLISES':'em Desenvolvimento'));
+ }
+ assert.ok(!fs.readFileSync('index.html','utf8').includes('<main hidden'));
+ assert.equal(h.get('#email-general-status').textContent,'NÃO conectado');
+ assert.equal(h.get('#email-personal-status').textContent,'NÃO conectado');
 });
-test('desconectar Geral preserva o estado Pessoal e atualiza o conteúdo',async()=>{
+test('desconectar Geral preserva Pessoal e a explicação do módulo',async()=>{
  const status={configured:true,connections:{general:{email:'school@example.com',gmail:true,drive:true},personal:{email:'person@gmail.com',gmail:true,drive:true}}};
  const h=ui(status);await settle();
  h.context.location.hash='#institucionais';h.window.listeners.hashchange();
  assert.equal(h.get('#main').hidden,false);
  status.connections.general=null;
  await h.disconnect[0].listeners.click();
- assert.equal(h.get('#main').hidden,true);
+ assert.equal(h.get('#main').hidden,false);
  assert.ok(h.get('#email-personal-status').textContent.includes('person@gmail.com'));
  assert.equal(JSON.parse(h.requests.find(r=>r.url.endsWith('/disconnect')).opts.body).type,'general');
 });

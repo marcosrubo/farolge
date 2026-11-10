@@ -81,13 +81,6 @@ function renderDevelopment(id){
   </section>`;
 }
 
-let verifiedConnections={general:null,personal:null};
-function updateWorkspaceAccess(){
-  const route=location.hash.slice(1);
-  const required=route==='institucionais'?'general':['pessoais','demandas'].includes(route)?'personal':null;
-  // Só há conteúdo demonstrativo. As regras específicas dos demais módulos aguardam definição.
-  document.querySelector('#main').hidden=required?!verifiedConnections[required]:!Object.values(verifiedConnections).some(Boolean);
-}
 function render(){
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const selected=modules.find(item=>item.id===route)||modules[0];
@@ -97,7 +90,6 @@ function render(){
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
   main.innerHTML=selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
-  updateWorkspaceAccess();
 }
 const connectionMessages={
   connected:'Conexão e permissões confirmadas pelo Google.',
@@ -142,12 +134,10 @@ function setupEmailConnections(){
       const result=await api('status');
       if(version!==statusVersion)return;
       configured=result.configured===true;
-      verifiedConnections={general:null,personal:null};
       for(const type of types){
         const connection=result.connections?.[type];
         const email=connection?.email;
         const connected=Boolean(configured && typeof email==='string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email));
-        if(connected)verifiedConnections[type]=connection;
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
         status.classList.toggle('is-connected',connected);
@@ -157,13 +147,10 @@ function setupEmailConnections(){
         button.disabled=!configured;
         document.querySelector('[data-disconnect-email="'+type+'"]').hidden=!connected;
       }
-      updateWorkspaceAccess();
       showAvailability();
     } catch {
       if(version!==statusVersion)return;
       configured=false;
-      verifiedConnections={general:null,personal:null};
-      document.querySelector('#main').hidden=true;
       for(const type of types){
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent='Conexão não verificada';
@@ -206,8 +193,6 @@ function setupEmailConnections(){
       try {
         ++statusVersion;
         await api('disconnect',{type:button.dataset.disconnectEmail});
-        verifiedConnections[button.dataset.disconnectEmail]=null;
-        updateWorkspaceAccess();
         feedback.textContent='Autorização removida do FAROL GE para esta conta. A outra conexão foi preservada.';
         await refresh();
       } catch {feedback.textContent=connectionMessages.unavailable;}
