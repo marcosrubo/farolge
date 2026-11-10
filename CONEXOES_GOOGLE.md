@@ -45,6 +45,10 @@ No projeto exclusivo **FarolGE**:
 
 6. Em **Branding**, cadastrar a página inicial `https://www.farolge.com.br/` e, após publicar os arquivos desta entrega, a política pública `https://www.farolge.com.br/privacidade.html`. O responsável e contato confirmados por Marcos são **Marcos Rubo** e **marcos.rubo@escola.pr.gov.br**. Verificar a propriedade do domínio e os demais requisitos indicados no painel. A página descreve a versão atual e não dispensa a análise de escopos, funcionalidades efetivamente implementadas nem a verificação aplicável do Google.
 
+   Marcos confirmou a propriedade do prefixo `https://www.farolge.com.br/` no Search Console e salvou o nome **FAROL GE — Farol da Gestão Escolar** no Branding. A revisão 2 da política mantém esse nome e explicita as categorias de dados, suas finalidades, armazenamento, fornecedores, retenção e exclusão. O painel pediu aguardar 24 horas após verificar a propriedade antes de nova avaliação. A revisão não garante aprovação: se persistir o apontamento genérico de conteúdo insuficiente, conferir a versão realmente publicada e solicitar revisão manual com referência às seções da política, sem alegar aprovação ou funcionalidades inexistentes.
+
+   Antes de solicitar verificação de acesso a dados para distribuição ampla, revisar a necessidade dos escopos contra as funções efetivamente implementadas. A política Google não permite solicitar permissões apenas para recursos futuros. O código atual ainda solicita `gmail.readonly` e `drive.file`, enquanto os módulos só apresentam explicações e a integração verifica a conta e suas autorizações; a entrega de texto não altera esse fluxo nem demonstra operações de mensagens/arquivos.
+
 A conta pessoal pode ser Gmail ou outro endereço com Conta Google. Gmail API só funcionará se essa conta tiver o serviço Gmail disponível e autorizado. O código solicita leitura da caixa inteira; a seleção das demandas por marcadores será implementada nos módulos.
 
 ### 2. Supabase exclusivo do FAROL GE

@@ -17,6 +17,7 @@ main{max-width:1008px;margin:0 auto;padding:44px 24px 64px}
 article{background:#fff;border:1px solid #e4e9e1;border-radius:14px;padding:44px 52px}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:1.7px;color:#62785d;margin:0 0 12px}
 h1{font-size:clamp(28px,4.5vw,40px);line-height:1.2;letter-spacing:-1px;margin:0 0 16px;color:#1d5142}
+.application-name{font-size:18px;font-weight:600;color:#1d5142;margin:0 0 12px}
 .updated{font-size:13px;color:#68766d;margin:0 0 28px}
 .intro{font-size:18px;line-height:1.8;margin-bottom:36px}
 section{border-top:1px solid #e4e9e1;padding-top:26px;margin-top:28px;scroll-margin-top:24px}
@@ -25,6 +26,14 @@ p{margin:0 0 16px}
 ul,ol{padding-left:24px;margin:12px 0 20px}
 li{padding-left:3px;margin-bottom:14px}
 code{font-size:.92em;overflow-wrap:anywhere}
+.data-table-scroll{overflow-x:auto;border:1px solid #e4e9e1;border-radius:9px;margin:20px 0}
+.data-table-scroll:focus-visible{outline:3px solid #b18b32;outline-offset:3px}
+table{border-collapse:collapse;width:100%;min-width:650px;text-align:left;font-size:14px;line-height:1.65}
+caption{text-align:left;padding:16px;font-weight:600;background:#f5f7f3;color:#1d5142}
+th,td{padding:16px;vertical-align:top;border-top:1px solid #e4e9e1;overflow-wrap:anywhere}
+thead th{background:#eef3e8;color:#1d5142;font-weight:650}
+tbody th{width:31%;font-weight:500}
+td{width:34.5%}
 .contact{margin:32px 0 0;padding:20px;background:#eef3e8;border-radius:9px;font-size:14px}
 @media(max-width:600px){.page-header{padding:18px 20px;gap:16px;flex-wrap:wrap}main{padding:24px 16px 40px}article{padding:26px 22px}.intro{font-size:17px}h2{font-size:20px}}
-@media print{body{background:#fff}.page-header,.skip-link{display:none}main{padding:0;max-width:none}article{border:0;padding:0}.contact{background:none;border-top:1px solid #ccc}h2{break-after:avoid}}
+@media print{body{background:#fff}.page-header,.skip-link{display:none}main{padding:0;max-width:none}article{border:0;padding:0}.contact{background:none;border-top:1px solid #ccc}h2{break-after:avoid}.data-table-scroll{overflow:visible}table{min-width:0;font-size:11px}th,td{padding:8px}}
