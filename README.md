@@ -9,10 +9,10 @@ Protótipo para apresentar a proposta da plataforma à equipe da escola. Fronten
 - As opções mostram “Meu espaço / nome da opção”. Radar também apresenta o fluxo solicitado: RCO, SINAN, SERP, ATAS, Busca ATIVA e Alunos convergem para ANÁLISES, com saídas DOSSIÊ individual e Relação diária de FALTAS.
 - Visão GERAL, Demandas INSTITUCIONAIS, Demandas PESSOAIS, BI SEED e Configurações exibem “em Desenvolvimento” e os textos definidos por Marcos em 06/11/2026. A Visão GERAL lista os quatro grupos de indicadores previstos. BI SEED apresenta o texto sobre os indicadores/resumos previstos para uma visão simplificada da situação da escola.
 - O menu destaca a opção ativa e o título da aba acompanha a seleção.
-- Abaixo do breadcrumb, o quadro apresenta duas conexões independentes, Geral e Pessoal, cada uma com Conectar/Desconectar. Não há etapa separada de entrada no FAROL GE: qualquer conexão pode ser feita primeiro. Cada conta é validada no Google e no Supabase Auth na mesma jornada de autorização de Gmail somente leitura e Drive com escopo drive.file. As permissões concedidas são indicadas separadamente. Em Geral, a pessoa escolhe/informa no Google a conta geral da sua escola; em Pessoal, escolhe a própria conta. Ambas aceitam uma Conta Google autorizada e verificada, sem endereço Geral fixo na Vercel. Configuração em [CONEXOES_GOOGLE.md](CONEXOES_GOOGLE.md).
+- Abaixo do breadcrumb, o quadro apresenta duas conexões independentes, Geral e Pessoal, cada uma com Conectar/Desconectar. Não há etapa separada de entrada no FAROL GE: qualquer conexão pode ser feita primeiro. Cada conta é validada no Google e no Supabase Auth na mesma jornada de autorização de consulta ao Gmail e Drive com escopo drive.file. A conexão Pessoal também solicita gerenciamento de marcadores para preparar as três labels do FAROL. As permissões concedidas são indicadas separadamente. Em Geral, a pessoa escolhe/informa no Google a conta geral da sua escola; em Pessoal, escolhe a própria conta. Ambas aceitam uma Conta Google autorizada e verificada, sem endereço Geral fixo na Vercel. Configuração em [CONEXOES_GOOGLE.md](CONEXOES_GOOGLE.md).
 - Foram retirados cartões, tabelas, exemplos, gráficos, filtros, datas, avisos, ajuda, roteiro de apresentação, formulários, rodapé e textos inferiores da barra lateral.
 
-A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conteúdo em conjunto com a equipe. Posteriormente, Marcos solicitou o fluxograma de Radar e os textos de desenvolvimento nas demais telas descritas acima. Os quadros são uma estrutura visual, sem abertura de registros ou análises implementadas e sem integração aos sistemas citados. Em telas estreitas, o fluxo pode ser percorrido horizontalmente. Os endereços de e-mail nos textos são ilustrativos. Não preencher novamente as telas com exemplos ou sugestões de funcionalidades sem pedido. Não há dados de estudantes ou mensagens. O backend OAuth foi implementado, mas depende de configuração externa e não foi validado com contas reais. Cada conexão tem sessão própria verificada e autorização vinculada ao ID Supabase da própria conta Google. A conta Pessoal não herda a conexão Geral em outro navegador. Em 10/11/2026, Marcos pediu que as explicações de todos os módulos e o fluxograma do Radar sejam visíveis mesmo sem conexão, inclusive em caso de falha na verificação das contas. Esses conteúdos são estáticos e explicativos. As operações reais futuras de Demandas INSTITUCIONAIS dependerão da Geral e as de Demandas PESSOAIS dependerão da Pessoal. As diferenças operacionais entre somente Geral, somente Pessoal e ambas nos demais módulos aguardam definição de Marcos.
+A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conteúdo em conjunto com a equipe. Posteriormente, Marcos solicitou o fluxograma de Radar e os textos de desenvolvimento nas demais telas descritas acima. Os quadros são uma estrutura visual, sem abertura de registros ou análises implementadas e sem integração aos sistemas citados. Em telas estreitas, o fluxo pode ser percorrido horizontalmente. Os endereços de e-mail nos textos são ilustrativos. Não preencher novamente as telas com exemplos ou sugestões de funcionalidades sem pedido. Não há dados de estudantes ou mensagens. O backend OAuth foi implementado, mas depende de configuração externa e Marcos confirmou a conexão com duas contas Google reais. Cada conexão tem sessão própria verificada e autorização vinculada ao ID Supabase da própria conta Google. A conta Pessoal não herda a conexão Geral em outro navegador. Em 10/11/2026, Marcos pediu que as explicações de todos os módulos e o fluxograma do Radar sejam visíveis mesmo sem conexão, inclusive em caso de falha na verificação das contas. Esses conteúdos são estáticos e explicativos. As operações reais futuras de Demandas INSTITUCIONAIS dependerão da Geral e as de Demandas PESSOAIS dependerão da Pessoal. As diferenças operacionais entre somente Geral, somente Pessoal e ambas nos demais módulos aguardam definição de Marcos.
 
 ## Publicação na nuvem
 
@@ -56,16 +56,19 @@ Editar `config.js` para definir o nome público, as iniciais, a descrição e o 
 
 A identificação do colégio usa o emblema à esquerda e apenas “COLÉGIO ESTADUAL CÍVICO MILITAR THIAGO TERRA” ao lado. O arquivo `arte/thiago-terra-identidade-original.png` preserva o cabeçalho original enviado por Marcos; o CSS mostra somente o emblema da faixa esquerda, sem redesenhar a arte. O símbolo do farol continua sendo a marca da plataforma. As artes originais foram preservadas. A fonte DM Sans é carregada do Google Fonts; há alternativa com fontes do sistema.
 
-Os marcadores do Gmail definidos para a implementação futura são:
+Na conexão Pessoal, o backend verifica e cria somente os marcadores ausentes entre estes três:
 
 | Marcador | Destino |
 | --- | --- |
-| `Demandas_que_me_devem` | DEVEM PARA MIM |
-| `Demandas_minhas` | MINHAS PRÓPRIAS PENDÊNCIAS |
-| `Demandas_que_eu_devo` | DEVO PARA ALGUÉM |
-| `Demandas_arquivadas` | Fora das três colunas, como interpretação inicial a validar |
+| `FarolGE_MeDevem` | DEVEM PARA MIM |
+| `FarolGE_Minhas` | MINHAS PRÓPRIAS PENDÊNCIAS |
+| `FarolGE_Devo` | DEVO PARA ALGUÉM |
 
-Os marcadores acima permanecem como referência para a implementação futura. A data de um e-mail não deve ser convertida automaticamente em prazo.
+A associação às três colunas ainda será implementada. Tratamento de marcadores simultâneos e de arquivadas aguarda definição. Não são renomeados/excluídos marcadores antigos nem aplicados marcadores a mensagens. A data de um e-mail não deve ser convertida automaticamente em prazo.
+
+A Pessoal solicita adicionalmente `gmail.labels`. Após publicar, contas já conectadas precisam usar **Revisar autorização** e conceder essa permissão. O status mostra se as três labels existem; consultar status não cria marcadores. Falhas mantêm a conta conectada e pedem nova revisão para tentar novamente. A Geral não solicita esse escopo nem consulta/cria essas labels. Desconectar preserva os marcadores no Gmail. A criação real ainda deve ser validada na Vercel. Os nomes usados no servidor são fixos; editar `config.js` não altera as operações do backend.
+
+A revisão 3 acrescenta a consulta e criação dos três marcadores na conexão Pessoal e sua retenção no Gmail.
 
 ## Limites e próximos passos
 

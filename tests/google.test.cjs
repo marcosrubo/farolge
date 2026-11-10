@@ -2,18 +2,36 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE}=require('../server/google.cjs');
+const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,PERSONAL_LABELS}=require('../server/google.cjs');
 const env={FAROL_GOOGLE_ENABLED:'true',FAROL_ORIGIN:'https://farol.example',GOOGLE_CLIENT_ID:'test-client',GOOGLE_CLIENT_SECRET:'test-secret',FAROL_TOKEN_KEY:Buffer.alloc(32,7).toString('base64'),FAROL_SUPABASE_URL:'https://test.supabase.co',FAROL_SUPABASE_SERVICE_ROLE_KEY:'test-service',FAROL_SUPABASE_ANON_KEY:'test-anon'};
 const GENERAL_EMAIL='escola@escola.pr.gov.br';
 const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
 const sessionCookie=(response,type='personal')=>(response.headers['set-cookie']||[]).find(c=>c.startsWith('__Host-farol-account-'+type+'=') && !c.includes('Max-Age=0'))?.split(';')[0];
 function harness(overrides={}){
- const rows=new Map(),connections=new Map(),users=new Map();
+ const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[];
+ let labelFailure=null,labelRace=false;
+ const labelError=status=>Object.assign(new Error('label_error'),{response:{status}});
  const store={async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async removeConnection(id,type){connections.delete(id+'.'+type);}};
- let email='admin@gmail.com',identityOverride={},scopes=SCOPES.join(' '),options,issuedOptions,flowOptions=new Map(),calls=0,authUnavailable=false,nowLogout=[],gmailDenied=false,failedEmail=null,failedStatus=503,revokedAuthEmail=null;
+ let email='admin@gmail.com',identityOverride={},scopes=null,options,issuedOptions,flowOptions=new Map(),calls=0,authUnavailable=false,nowLogout=[],gmailDenied=false,failedEmail=null,failedStatus=503,revokedAuthEmail=null;
  const userFor=value=>{if(!users.has(value))users.set(value,{id:'user-'+digest(value).slice(0,16),email:value,identities:[{provider:'google',identity_data:{sub:'sub-'+value}}]});return users.get(value);};
  const auth={async signIn(token,access,nonce){assert.equal(digest(nonce),issuedOptions.nonce);assert.equal(token,'id:'+email);const user=userFor(email);return {user,access_token:'auth:'+email,refresh_token:'refresh:'+email,expires_in:3600};},async user(token){if(authUnavailable || token.slice(5)===revokedAuthEmail)throw new Error('login_required');return userFor(token.slice(5));},async refresh(token){const value=token.slice(8);return {access_token:'auth:'+value,refresh_token:token,expires_in:3600};},async logout(token){nowLogout.push(token);}};
- const clientFactory=()=>({credentials:{},async generateCodeVerifierAsync(){return {codeVerifier:'verifier',codeChallenge:'challenge'};},generateAuthUrl(opts){options=opts;flowOptions.set(opts.state,opts);return 'https://accounts.google.com/o/oauth2/v2/auth?state='+opts.state;},async getToken(opts){assert.equal(opts.codeVerifier,'verifier');issuedOptions=flowOptions.get(opts.code);calls++;return {tokens:{access_token:'google:'+email,refresh_token:'grefresh:'+email,id_token:'id:'+email,scope:scopes,expiry_date:Date.now()+3600000}};},async verifyIdToken(opts){assert.equal(opts.audience,'test-client');return {getPayload:()=>({email_verified:true,email,sub:'sub-'+email,nonce:issuedOptions.nonce,...identityOverride})};},setCredentials(value){this.credentials=value;},async request({url}){if(this.credentials.access_token.slice(7)===failedEmail)throw Object.assign(new Error('provider_error'),{response:{status:failedStatus}});if(gmailDenied && url.includes('/gmail/'))throw Object.assign(new Error('service_unavailable'),{response:{status:403}});const value=this.credentials.access_token.slice(7);return {data:url.includes('drive/v3')?{user:{emailAddress:value}}:{emailAddress:value}};}});
+ const clientFactory=()=>({credentials:{},async generateCodeVerifierAsync(){return {codeVerifier:'verifier',codeChallenge:'challenge'};},generateAuthUrl(opts){options=opts;flowOptions.set(opts.state,opts);return 'https://accounts.google.com/o/oauth2/v2/auth?state='+opts.state;},async getToken(opts){assert.equal(opts.codeVerifier,'verifier');issuedOptions=flowOptions.get(opts.code);calls++;return {tokens:{access_token:'google:'+email,refresh_token:'grefresh:'+email,id_token:'id:'+email,scope:scopes??issuedOptions.scope.join(' '),expiry_date:Date.now()+3600000}};},async verifyIdToken(opts){assert.equal(opts.audience,'test-client');return {getPayload:()=>({email_verified:true,email,sub:'sub-'+email,nonce:issuedOptions.nonce,...identityOverride})};},setCredentials(value){this.credentials=value;},async request({url,method='GET',data}){if(this.credentials.access_token.slice(7)===failedEmail)throw Object.assign(new Error('provider_error'),{response:{status:failedStatus}});if(gmailDenied && url.includes('/gmail/'))throw Object.assign(new Error('service_unavailable'),{response:{status:403}});const value=this.credentials.access_token.slice(7);
+ if(url.endsWith('/labels')) {
+   labelRequests.push({email:value,method,data});
+   if(labelFailure && (labelFailure.method===method || !labelFailure.method))throw labelError(labelFailure.status);
+   if(!labels.has(value))labels.set(value,new Set());
+   const names=labels.get(value);
+   if(method==='POST') {
+     assert.ok(users.has(value),'identity must be verified before creating labels');
+     assert.deepEqual(Object.keys(data).sort(),['labelListVisibility','messageListVisibility','name']);
+     assert.ok(PERSONAL_LABELS.includes(data.name));
+     if(labelRace){names.add(data.name);labelRace=false;throw labelError(409);}
+     if(names.has(data.name))throw labelError(409);
+     names.add(data.name);return {data:{id:'label-'+names.size,name:data.name}};
+   }
+   return {data:{labels:[...names].map(name=>({id:'id-'+name,name}))}};
+ }
+ return {data:url.includes('drive/v3')?{user:{emailAddress:value}}:{emailAddress:value}};}});
  const handler=makeHandler({env:{...env,...overrides},storeFactory:()=>store,authFactory:()=>auth,clientFactory});
  async function request(action,{method='GET',body,cookie='',origin=env.FAROL_ORIGIN,query=''}={}){
   const headers={},res={statusCode:200,setHeader(k,v){headers[k.toLowerCase()]=v;},getHeader(k){return headers[k.toLowerCase()];},end(body=''){this.body=body;}};
@@ -27,7 +45,7 @@ function harness(overrides={}){
  }
  async function callback(flow,cookie=flow.cookie){return request('callback',{cookie,query:'?state='+flow.state+'&code='+encodeURIComponent(flow.state)});}
  async function login(value='admin@gmail.com',cookie='',type='personal'){email=value;const flow=await start(type,cookie);const response=await callback(flow,flow.cookie+'; '+cookie);return {response,cookie:sessionCookie(response,type)};}
- return {rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503)=>{failedEmail=value;failedStatus=status;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
+ return {labels,labelRequests,failLabels:(status,method)=>labelFailure=status?{status,method}:null,raceLabels:()=>labelRace=true,rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503)=>{failedEmail=value;failedStatus=status;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
 }
 test('conexões não exigem domínio nem endereço Geral fixo',()=>{
  assert.ok(configuration(env));
@@ -52,7 +70,8 @@ test('CSRF e métodos inválidos são bloqueados; login inclui Gmail readonly e 
  assert.equal((await h.request('start',{method:'POST',origin:'https://evil.example',body:{type:'personal'}})).status,403);
  assert.equal((await h.request('start')).status,405);
  const flow=await h.start();
- assert.deepEqual(flow.options.scope,SCOPES);
+ assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE]);
+ assert.deepEqual((await h.start('general')).options.scope,SCOPES);
  assert.ok(flow.options.scope.includes(READ_SCOPE));assert.ok(flow.options.scope.includes(DRIVE_SCOPE));
  assert.ok(!flow.options.scope.includes('https://www.googleapis.com/auth/drive'));
  assert.equal(flow.options.hd,undefined);assert.equal(flow.options.code_challenge_method,'S256');
@@ -228,4 +247,54 @@ test('revogar a sessão Supabase Geral não encerra a Pessoal',async()=>{
  const data=(await h.request('status',{cookie:general.cookie+'; '+personal.cookie})).json();
  assert.equal(data.mode,'personal');assert.equal(data.connections.general,null);
  assert.equal(data.connections.personal.email,'visitor@gmail.com');
+});
+
+test('Pessoal cria somente as três labels ausentes e reconectar não duplica',async()=>{
+ const h=harness();h.labels.set('person@gmail.com',new Set(['Outra',PERSONAL_LABELS[0]]));
+ const first=await h.login('person@gmail.com');
+ assert.match(first.response.headers.location,/connected/);
+ assert.deepEqual([...h.labels.get('person@gmail.com')].sort(),['Outra',...PERSONAL_LABELS].sort());
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),PERSONAL_LABELS.slice(1));
+ const second=await h.login('person@gmail.com',first.cookie);
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,2);
+ assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.personal.labels,'ready');
+ h.labels.get('person@gmail.com').delete(PERSONAL_LABELS[0]);
+ assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.personal.labels,'missing');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,2,'status must never create');
+});
+test('Geral não solicita nem consulta/cria labels; Pessoal cria na própria conta',async()=>{
+ const h=harness(),general=await h.login('school@gmail.com','','general');
+ await h.request('status',{cookie:general.cookie});assert.equal(h.labelRequests.length,0);
+ const personal=await h.login('person@gmail.com',general.cookie);
+ assert.ok(h.labelRequests.every(r=>r.email==='person@gmail.com'));
+ const data=(await h.request('status',{cookie:general.cookie+'; '+personal.cookie})).json();
+ assert.equal(data.mode,'both');assert.equal(data.connections.general.labels,undefined);
+ assert.equal(data.connections.personal.labels,'ready');assert.equal(h.labels.has('school@gmail.com'),false);
+});
+test('recusar labels preserva conexão e não faz chamadas de gerenciamento',async()=>{
+ const h=harness();h.setScopes(SCOPES.join(' '));const account=await h.login();
+ assert.match(account.response.headers.location,/partial/);
+ assert.equal((await h.request('status',{cookie:account.cookie})).json().connections.personal.labels,'permission_required');
+ assert.equal(h.labelRequests.length,0);
+});
+test('falha nas labels não perde conexão e nova autorização completa o preparo',async()=>{
+ const h=harness();h.failLabels(503,'POST');const first=await h.login();
+ assert.match(first.response.headers.location,/partial/);assert.ok(first.cookie);
+ h.failLabels(403);assert.equal((await h.request('status',{cookie:first.cookie})).json().connections.personal.labels,'unavailable');
+ h.failLabels(null);const next=await h.login('admin@gmail.com',first.cookie);
+ assert.match(next.response.headers.location,/connected/);
+ assert.equal(h.labels.get('admin@gmail.com').size,3);
+});
+test('criação concorrente aceita conflito apenas após confirmar o nome existente',async()=>{
+ const h=harness();h.raceLabels();const account=await h.login();
+ assert.match(account.response.headers.location,/connected/);assert.equal(h.labels.get('admin@gmail.com').size,3);
+ const bad=harness();bad.failLabels(400,'POST');const failed=await bad.login();
+ assert.match(failed.response.headers.location,/partial/);assert.equal(bad.labels.get('admin@gmail.com').size,0);
+});
+test('identidade inválida nunca cria labels e desconectar não apaga marcadores',async()=>{
+ const bad=harness();bad.setIdentity({email_verified:false});await bad.login();assert.equal(bad.labelRequests.length,0);
+ const h=harness(),account=await h.login();
+ await h.request('disconnect',{method:'POST',body:{type:'personal'},cookie:account.cookie});
+ assert.equal(h.labels.get('admin@gmail.com').size,3);
+ assert.ok(h.labelRequests.every(r=>['GET','POST'].includes(r.method)));
 });

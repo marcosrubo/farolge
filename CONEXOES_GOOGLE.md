@@ -39,7 +39,7 @@ No projeto exclusivo **FarolGE**:
 
    A origem de produção é `https://www.farolge.com.br` e deve coincidir com `FAROL_ORIGIN` na Vercel. Endereços anteriores podem permanecer cadastrados no Google, mas o teste deve começar pela mesma origem configurada na aplicação.
 
-3. Em **Data Access**, cadastrar os escopos `openid`, `email`, `profile`, `https://www.googleapis.com/auth/gmail.readonly` e `https://www.googleapis.com/auth/drive.file`.
+3. Em **Data Access**, cadastrar os escopos `openid`, `email`, `profile`, `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/drive.file` e `https://www.googleapis.com/auth/gmail.labels`. O último é solicitado somente na conexão Pessoal, para listar e criar os três marcadores autorizados por Marcos; não adicionar `gmail.modify` ou acesso total ao Gmail.
 4. No modo **Testing**, adicionar as contas que testarão o acesso. Aceitar qualquer conta no código não remove as restrições do Google. Para liberar o uso amplo, configurar Production e cumprir as exigências de verificação/exceções aplicáveis. `gmail.readonly` é um escopo restrito; verificar exigências antes da distribuição ampla.
 5. A administração Workspace da SEED pode exigir liberação do aplicativo. O código não contorna bloqueios administrativos.
 
@@ -92,11 +92,19 @@ A sessão única anterior (`__Host-farol-portal`) e os cookies do protótipo nã
 
 As novas sessões usam cookies e payloads separados por tipo, na mesma tabela de sessões criptografadas. Novas conexões Geral pertencem à identidade da própria conta geral escolhida no Google/Supabase, em vez de à conta pessoal de um responsável. O ajuste que remove o endereço Geral fixo mantém essas sessões independentes e não exige novas tabelas. Registros anteriores não são transferidos automaticamente, nem dão acesso pelo novo fluxo; permanecem no banco para revisão administrativa. Não foi aplicado expurgo remoto. Os registros temporários de sessões antigas vencem pelo prazo gravado; a limpeza ocorre ao iniciar novos fluxos. Para prazo fixo de expurgo mesmo sem novos acessos, definir rotina de limpeza no projeto FAROL GE.
 
+## Marcadores da conexão Pessoal
+
+Após validar a identidade no Google e Supabase, o callback Pessoal lista os marcadores em `users/me/labels` e cria somente os nomes ausentes: `FarolGE_Devo`, `FarolGE_MeDevem` e `FarolGE_Minhas`. A permissão adicional `gmail.labels` é específica para gerenciar marcadores; não permite alterar mensagens. O código não renomeia/exclui marcadores, não aplica labels às mensagens e não chama essas operações na Geral. Uma segunda conexão reaproveita os marcadores existentes. Em conflito concorrente, confirma novamente a existência antes de aceitar o resultado.
+
+A listagem de nomes/IDs só é processada em memória. O payload criptografado guarda a indicação de permissão. O endpoint de status verifica a existência atual e informa `ready`, `missing`, `permission_required` ou `unavailable`, sem criar labels. Falha na preparação não apaga a conexão; usar **Revisar autorização** para tentar novamente. Recusar a permissão mantém os demais serviços concedidos. Desconectar não remove os marcadores do Gmail.
+
+Para ativar: adicionar `https://www.googleapis.com/auth/gmail.labels` no Data Access do projeto FAROL GE, publicar código/política na Vercel e, na conexão **Pessoal**, clicar **Revisar autorização** e conceder o gerenciamento de marcadores. Não é necessário alterar variáveis Vercel nem executar SQL. A política (revisão 3) e o diálogo apresentam essa operação antes do consentimento. Validar na nuvem a criação, reconexão sem duplicatas, preservação das demais labels e da Geral. A verificação de acesso Google/SEED segue independente.
+
 ## Verificação
 
 Pedidos de privacidade/exclusão chegam ao contato público da política. O atendimento é administrativo: confirmar a titularidade sem solicitar senhas ou tokens; localizar a identidade correta no Supabase Auth exclusivo do FAROL; atender o pedido e, quando couber exclusão integral, excluir esse usuário. A chave estrangeira remove suas conexões em cascata; as sessões restantes deixam de autorizar ao falhar a verificação da identidade e os registros temporários expiram conforme o prazo gravado. Não prometer exclusão imediata de backups ou registros dos fornecedores sem confirmar suas condições. Desconectar uma conta, isoladamente, não apaga o cadastro Auth. Nenhuma exclusão remota foi executada nesta entrega.
 
-`npm test` executa testes sem servidor ou credenciais reais: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; escolha de contas Gerais de escolas diferentes, sem endereço fixo; isolamento entre essas contas; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
+`npm test` executa 45 testes sem servidor ou credenciais reais, incluindo criação das labels ausentes, reconexão sem duplicatas, conflitos concorrentes, recusa/falha de permissão, status sem escrita e preservação da Geral. Também cobre: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; escolha de contas Gerais de escolas diferentes, sem endereço fixo; isolamento entre essas contas; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
 
 Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, troca da Pessoal preservando Geral, desconexão de cada uma, seleção de contas Gerais diferentes e isolamento entre elas, recusa de cada escopo, falha/revogação/expiração isoladas e ausência de segredos nos logs. Os testes automatizados não equivalem a OAuth real nem a aprovação do Google/SEED. Não foram executados servidor local nem testes visuais locais.
 
@@ -108,3 +116,6 @@ Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, t
 - [Escopos Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
 - [Escopos Gmail](https://developers.google.com/workspace/gmail/api/auth/scopes)
 - [Regras de verificação Google](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification)
+
+- [Gmail: listar marcadores](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels/list)
+- [Gmail: criar marcador](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels/create)

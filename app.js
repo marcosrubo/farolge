@@ -93,7 +93,7 @@ function render(){
 }
 const connectionMessages={
   connected:'Conexão e permissões confirmadas pelo Google.',
-  partial:'Conta conectada. Algumas permissões não foram autorizadas; os recursos correspondentes ficam indisponíveis.',
+  partial:'Conta conectada. Algumas permissões ou a preparação das labels precisam de atenção. Confira a situação da conexão e revise a autorização para tentar novamente.',
   login_required:'Conecte novamente esta conta Google para continuar.',
   cancelled:'Autorização cancelada. Nenhuma conexão foi substituída.',
   invalid_state:'A solicitação expirou ou não pertence a este navegador. Tente conectar novamente.',
@@ -140,6 +140,10 @@ function setupEmailConnections(){
         const connected=Boolean(configured && typeof email==='string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email));
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
+        if(connected && type==='personal') {
+          const labelMessages={ready:'labels prontas (3/3)',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
+          status.textContent+=' · '+(labelMessages[connection.labels]||labelMessages.permission_required);
+        }
         status.classList.toggle('is-connected',connected);
         const button=document.querySelector('[data-connect-email="'+type+'"]');
         button.textContent=connected?'Revisar autorização':'Conectar';
@@ -165,6 +169,7 @@ function setupEmailConnections(){
   function openConnection(type){
     selectedType=type;
     const isGeneral=type==='general';
+    document.querySelector('#email-connection-labels').hidden=isGeneral;
     document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar conta geral da escola':'Conectar conta pessoal';
     document.querySelector('#email-connection-description').innerHTML=isGeneral
       ?'Escolha no Google a conta geral da sua escola. Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'

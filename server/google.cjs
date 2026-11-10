@@ -2,6 +2,9 @@
 const crypto = require('node:crypto');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+const LABEL_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
+const PERSONAL_LABELS = ['FarolGE_Devo','FarolGE_MeDevem','FarolGE_Minhas'];
+const LABEL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/labels';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
 const ROUTES = new Set(['inicio','radar','institucionais','pessoais','bi-seed','configuracoes']);
@@ -97,6 +100,34 @@ function validateAccount(identity,profile,nonce) {
   return email;
 }
 const credentialsOf=client=>({access_token:client.credentials.access_token,expiry_date:client.credentials.expiry_date,refresh_token:client.credentials.refresh_token});
+// GET status only checks labels. Only the personal OAuth callback may create them.
+async function personalLabels(client,allowed,create=false) {
+  if(!allowed)return 'permission_required';
+  const list=async()=>{
+    const {data}=await client.request({url:LABEL_URL,timeout:10000});
+    if(data.labels!==undefined && !Array.isArray(data.labels))throw new Error('invalid_labels');
+    return new Set((data.labels||[]).map(label=>label.name));
+  };
+  try {
+    let names=await list();
+    for(const name of PERSONAL_LABELS) {
+      if(names.has(name))continue;
+      if(!create)return 'missing';
+      try {
+        await client.request({url:LABEL_URL,method:'POST',data:{name,labelListVisibility:'labelShow',messageListVisibility:'show'},timeout:10000});
+        names.add(name);
+      } catch(error) {
+        // Another callback can create the same name while this one is running.
+        if(![400,409].includes(error.response?.status))throw error;
+        names=await list();
+        if(!names.has(name))throw error;
+      }
+    }
+    // Confirm the result instead of inferring success from POST responses.
+    names=await list();
+    return PERSONAL_LABELS.every(name=>names.has(name))?'ready':'missing';
+  } catch {return 'unavailable';}
+}
 function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAuth,clientFactory=c=>new OAuth2Client(c.clientId,c.clientSecret,`${c.origin}/api/google/callback`)}={}) {
   return async function handler(req,res) {
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
@@ -159,7 +190,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
         await store.put(hash(state),{version:3,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),previous},Date.now()+600000);
         setCookie(res,cookieName('flow',type),binding,600);
-        const authUrl=client.generateAuthUrl({scope:SCOPES,access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
+        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE]:SCOPES,access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
           code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
         return reply(200,{url:authUrl});
       }
@@ -205,14 +236,16 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const google=user?.identities?.find(item=>item.provider==='google' && String(item.identity_data?.sub)===String(identity.sub));
           if(!session.access_token || !session.refresh_token || !user?.id || emailOf(user.email)!==email || !google)throw new Error('failed');
           const owner=user.id;
-          await saveConnection(owner,type,{email,capabilities,credentials:credentialsOf(client)});
+          const labelsAllowed=type==='personal' && capabilities.gmail && scopes.includes(LABEL_SCOPE);
+          const labels=type==='personal'?await personalLabels(client,labelsAllowed,true):undefined;
+          await saveConnection(owner,type,{email,capabilities,labelsAllowed,credentials:credentialsOf(client)});
           const id=random(),expiresAt=Date.now()+TTL*1000;
           await store.put(accountKey(type,id),{version:3,type,user:{id:owner,email},auth:{accessToken:session.access_token,refreshToken:session.refresh_token,expiresAt:Date.now()+session.expires_in*1000},expiresAt},expiresAt);
           await discardAccount(type,current);setCookie(res,accountCookie(type),id,TTL);
           // Invalidate browser-only cookies from the prototype; never adopt unowned legacy connections.
           for(const oldType of TYPES)setCookie(res,cookieName('session',oldType),'',0);
           setCookie(res,'__Host-farol-portal','',0);
-          return finish(flow.route,type,capabilities.gmail && capabilities.drive?'connected':'partial');
+          return finish(flow.route,type,capabilities.gmail && capabilities.drive && (type!=='personal' || labels==='ready')?'connected':'partial');
         } catch(error) {
           return finish(flow.route,type,['wrong_account','login_required','invalid_state'].includes(error.message)?error.message:'failed');
         }
@@ -245,9 +278,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             const {data}=await client.request({url:'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',timeout:10000});
             if(emailOf(data.user?.emailAddress)!==connection.email)throw new Error('wrong_account');
           }
+          const labels=type==='personal'?await personalLabels(client,connection.labelsAllowed===true):undefined;
           connection.credentials=credentialsOf(client);
           await store.putConnection(current.user.id,type,connection);
-          connections[type]={email:connection.email,...connection.capabilities};
+          connections[type]={email:connection.email,...connection.capabilities,...(type==='personal'?{labels}:{})};
         } catch(error) {
           const googleError=error.response?.data?.error;
           if(error.response?.status===401 || googleError==='invalid_grant' || error.message==='wrong_account') {
@@ -265,4 +299,4 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     }
   };
 }
-module.exports={makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE};
+module.exports={makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,PERSONAL_LABELS};

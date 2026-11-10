@@ -13,6 +13,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Marcos autorizou verificar e criar, ao conectar/reautorizar Pessoal, somente os marcadores Gmail ausentes `FarolGE_Devo`, `FarolGE_MeDevem` e `FarolGE_Minhas`. Usar `gmail.labels` exclusivamente na Pessoal; preservar a Geral e todos os marcadores existentes. Não aplicar marcadores às mensagens, enviar, alterar ou excluir e-mails. Mostrar situação real; falhas ou recusa não devem simular sucesso. Consultar status não cria marcadores. Contas antigas precisam revisar a autorização. Política de Privacidade atualizada para essa operação.
+
 - Em 10/11/2026, Marcos autorizou criar a Política de Privacidade pública em `https://www.farolge.com.br/privacidade.html`, com responsável **Marcos Rubo** e contato público **marcos.rubo@escola.pr.gov.br**. Manter o texto coerente com os dados, fornecedores, retenção e operações realmente implementados. Atualizar a política antes de novas finalidades. A página tem links na barra superior e no diálogo de conexão; preservar esses acessos, sem restaurar rodapé ou conteúdos de exemplo.
 
 - Em 10/11/2026, Marcos pediu que as explicações de todos os módulos e o fluxograma do Radar apareçam mesmo sem conexão, inclusive durante falhas de status. Não esconder esses conteúdos estáticos com base na autenticação. Dados e operações reais continuam sujeitos às autorizações de cada conexão.
