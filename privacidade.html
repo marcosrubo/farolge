@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153e35">
+  <meta name="description" content="Conheça como o FAROL GE utiliza e protege os dados das conexões Google, Gmail e Drive e como solicitar a exclusão de dados.">
+  <meta name="referrer" content="no-referrer">
+  <title>Política de Privacidade · FAROL GE</title>
+  <link rel="icon" href="arte/farol-ge-simbolo-quadrado.png">
+  <link rel="stylesheet" href="privacidade.css">
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Ir para a política</a>
+  <header class="page-header">
+    <a class="brand" href="/" aria-label="FAROL GE — voltar à aplicação">
+      <img src="arte/farol-ge-simbolo-quadrado.png" width="44" height="44" alt="">
+      <span>FAROL <b>GE</b><small>GESTÃO ESCOLAR</small></span>
+    </a>
+    <a class="back-link" href="/">Voltar ao FAROL GE</a>
+  </header>
+  <main id="conteudo">
+    <article aria-labelledby="titulo">
+      <p class="eyebrow">TRANSPARÊNCIA E DADOS PESSOAIS</p>
+      <h1 id="titulo">Política de Privacidade</h1>
+      <p class="updated">Última atualização: <time datetime="2026-11-10">10 de novembro de 2026</time>.</p>
+      <p class="intro">Esta política explica como o FAROL GE — Farol da Gestão Escolar trata dados ao visitar a plataforma e conectar contas Google. Aplica-se ao site <a href="https://www.farolge.com.br/">www.farolge.com.br</a> e às conexões Geral e Pessoal.</p>
+
+      <section aria-labelledby="responsavel">
+        <h2 id="responsavel">1. Responsável e contato</h2>
+        <p>O responsável pelo FAROL GE e pelo tratamento descrito nesta política é <strong>Marcos Rubo</strong>. Para dúvidas, solicitações sobre seus dados ou exclusão de conta, escreva para <a href="mailto:marcos.rubo@escola.pr.gov.br">marcos.rubo@escola.pr.gov.br</a>.</p>
+        <p>A indicação de uma escola na interface ou o uso de um endereço institucional não representam, por si só, aprovação do aplicativo pela escola, pela SEED/NRE ou pelo Google. A autorização de uso de uma conta institucional também depende das regras da organização que a administra.</p>
+      </section>
+
+      <section aria-labelledby="funcionamento">
+        <h2 id="funcionamento">2. O que a plataforma faz nesta versão</h2>
+        <p>O FAROL GE está em desenvolvimento para apoiar a gestão escolar. As conexões Geral e Pessoal são independentes: você escolhe e autoriza cada conta na página do Google. As explicações dos módulos e o fluxograma do Radar podem ser consultados sem conectar uma conta.</p>
+        <p>Nesta versão, a integração identifica a conta conectada e verifica as permissões concedidas para Gmail e Drive. Os módulos ainda não leem nem organizam mensagens, não apresentam um navegador de arquivos, não criam documentos ou planilhas e não realizam análises de estudantes. Não há importação de dados de estudantes ou integração com os sistemas ilustrados no Radar.</p>
+      </section>
+
+      <section aria-labelledby="dados">
+        <h2 id="dados">3. Dados acessados e finalidades</h2>
+        <ul>
+          <li><strong>Identificação Google:</strong> endereço de e-mail, identificador da conta e confirmação de e-mail verificado. Nome e foto de perfil, quando fornecidos pelo Google, podem integrar os dados de identidade mantidos pelo serviço de autenticação. São usados para autenticar a conta e associar a conexão ao seu proprietário. O quadro de conexões mostra o e-mail verificado.</li>
+          <li><strong>Autorizações e sessões:</strong> tipo da conexão (Geral ou Pessoal), permissões concedidas, tokens de acesso e renovação, identificadores de sessão e datas de atualização ou expiração. Servem para manter e verificar a conexão autorizada.</li>
+          <li><strong>Dados técnicos:</strong> a infraestrutura de hospedagem, autenticação e banco de dados pode processar endereço IP, informações de navegador, horários, requisições e registros de segurança para entregar o site, prevenir abuso e diagnosticar falhas.</li>
+        </ul>
+        <p>A conexão é opcional. A autorização ocorre no Google e pode ser recusada ou revogada. O FAROL GE não solicita nem recebe a senha da sua Conta Google. Recusar uma permissão mantém o recurso correspondente indisponível.</p>
+      </section>
+
+      <section aria-labelledby="permissoes">
+        <h2 id="permissoes">4. Permissões de Gmail e Drive</h2>
+        <p><strong>Gmail — somente leitura (<code>gmail.readonly</code>):</strong> essa permissão permite consultar mensagens e configurações da caixa autorizada. Seu alcance inclui a caixa de e-mail, e não somente mensagens com determinados marcadores. Nesta versão, o FAROL consulta o perfil da caixa para confirmar o endereço e a disponibilidade do serviço; a resposta pode incluir contagens técnicas, que não são usadas como indicadores nem armazenadas nas tabelas de conexões. O conteúdo das mensagens e anexos não é lido ou copiado pelos módulos atuais. Não é solicitado envio, alteração ou exclusão de e-mails.</p>
+        <p><strong>Drive — arquivos autorizados (<code>drive.file</code>):</strong> essa permissão permite consultar, criar e alterar arquivos criados pelo aplicativo ou explicitamente autorizados para ele. Não concede acesso irrestrito ao Drive. Nesta versão, o FAROL consulta a identificação da conta no Drive para verificar a autorização; a interface para selecionar, criar ou editar arquivos ainda não está implementada.</p>
+        <p>As mensagens e os arquivos permanecem nos serviços Google. Esta versão não mantém cópias de seu conteúdo no banco do FAROL. Novas operações e finalidades deverão ser informadas antes de sua ativação e, quando necessário, dependerão de nova autorização.</p>
+      </section>
+
+      <section aria-labelledby="armazenamento">
+        <h2 id="armazenamento">5. Armazenamento e proteção</h2>
+        <p>O site e seu backend são hospedados na Vercel. O Supabase fornece autenticação e banco de dados. O Google fornece a identificação e os serviços Gmail e Drive autorizados por você.</p>
+        <p>As credenciais das conexões e das sessões do FAROL são criptografadas no backend antes de serem gravadas nas tabelas da aplicação. Essas tabelas não têm acesso público pelo navegador. Os registros de identidade e autenticação são gerenciados pelo Supabase Auth.</p>
+        <p>O navegador recebe cookies de sessão com identificadores opacos, protegidos com atributos HttpOnly, Secure e SameSite. Tokens Google e Supabase não são enviados ao JavaScript da interface nem armazenados em seu localStorage. A comunicação utiliza HTTPS. As rotinas da aplicação não registram conteúdo de mensagens ou arquivos em logs.</p>
+        <p>Essas medidas reduzem riscos, mas nenhum sistema oferece garantia absoluta contra incidentes. Em caso de suspeita de uso indevido, desconecte a conta e entre em contato com o responsável.</p>
+      </section>
+
+      <section aria-labelledby="compartilhamento">
+        <h2 id="compartilhamento">6. Compartilhamento e uso limitado</h2>
+        <p>Os dados necessários ao funcionamento da plataforma são processados pelo Google, pela Vercel e pelo Supabase, de acordo com seus papéis na conexão, hospedagem e autenticação. Esses fornecedores podem utilizar infraestrutura fora do Brasil. As regiões e condições de seus serviços devem ser consideradas na avaliação de uso institucional.</p>
+        <p>O FAROL GE não vende dados de usuários, não utiliza dados Google para publicidade, avaliação de crédito ou treinamento de modelos de inteligência artificial e não compartilha automaticamente uma conexão com outras contas ou escolas.</p>
+        <p>O uso e a transferência de informações recebidas das APIs Google seguem a <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de <strong>Uso Limitado (Limited Use)</strong>. Os dados são usados para as funções autorizadas e apresentadas na plataforma. Eventual acesso humano fica limitado à autorização específica do usuário ou às exceções de segurança e obrigação legal previstas nessa política.</p>
+        <p>Outros compartilhamentos somente poderão ocorrer quando necessários ao atendimento de obrigação legal ou à proteção da segurança, respeitadas as restrições aplicáveis aos dados Google. A existência desta página não representa certificação ou aprovação do aplicativo pelo Google.</p>
+      </section>
+
+      <section aria-labelledby="cookies">
+        <h2 id="cookies">7. Cookies e recursos externos</h2>
+        <p>O FAROL utiliza cookies necessários para vincular o pedido de autorização ao navegador e manter cada conexão. Os cookies do fluxo de autorização duram até 10 minutos; as sessões de conexão duram até 30 dias e podem terminar antes por desconexão, revogação ou expiração. Bloquear esses cookies pode impedir as conexões.</p>
+        <p>A aplicação não inclui ferramentas de anúncios ou de análise de audiência. A interface principal carrega a fonte DM Sans pelo Google Fonts; essa requisição pode transmitir dados técnicos, como IP e informações do navegador, ao Google. A presente página de privacidade utiliza fontes do próprio dispositivo.</p>
+      </section>
+
+      <section aria-labelledby="retencao">
+        <h2 id="retencao">8. Retenção, desconexão e exclusão</h2>
+        <p>Os estados de autorização expiram em até 10 minutos e as sessões do FAROL em até 30 dias. O prazo limita seu uso, mas não significa exclusão imediata do banco: a limpeza automática dos registros temporários vencidos ocorre quando novos fluxos de conexão são iniciados.</p>
+        <p>As autorizações de conexão são mantidas até a desconexão, a identificação de revogação ou a exclusão do usuário. Não há, nesta versão, exclusão automática dos cadastros de autenticação por inatividade. Desconectar não apaga o cadastro no Supabase Auth nem equivale a um pedido de eliminação de todos os dados.</p>
+        <ol>
+          <li><strong>Desconectar uma conta:</strong> use o botão Desconectar ao lado de Geral ou Pessoal. A aplicação encerra a sessão desse tipo e remove sua autorização armazenada, preservando a outra conexão. A remoção da autorização é vinculada à conta e ao tipo, podendo afetar o uso dessa mesma conexão em outros navegadores.</li>
+          <li><strong>Revogar no Google:</strong> consulte as <a href="https://myaccount.google.com/connections">conexões de terceiros da sua Conta Google</a> e remova o acesso do FAROL GE. Se a mesma Conta Google for usada nas duas conexões, essa revogação pode afetar ambas. O FAROL identifica a revogação nas verificações seguintes.</li>
+          <li><strong>Solicitar exclusão dos dados no FAROL:</strong> escreva para <a href="mailto:marcos.rubo@escola.pr.gov.br?subject=Privacidade%20FAROL%20GE">marcos.rubo@escola.pr.gov.br</a>, indicando a conta e o pedido. A exclusão é atendida administrativamente, após confirmação de titularidade. Nunca envie senhas ou tokens.</li>
+        </ol>
+        <p>Dados que precisem ser preservados por obrigação legal ou para o exercício regular de direitos serão limitados ao necessário. Cópias de segurança e registros técnicos dos fornecedores podem seguir ciclos próprios de retenção; eventuais limitações de exclusão serão informadas no atendimento. Excluir dados do FAROL não exclui sua Conta Google, mensagens ou arquivos no Gmail e no Drive.</p>
+      </section>
+
+      <section aria-labelledby="direitos">
+        <h2 id="direitos">9. Seus direitos e solicitações</h2>
+        <p>Você pode solicitar confirmação do tratamento, acesso e correção de seus dados, informações sobre compartilhamento, revogação de consentimento e exclusão quando aplicável. Também pode solicitar anonimização ou bloqueio de dados desnecessários, excessivos ou tratados em desconformidade, além dos demais direitos previstos na legislação. Os pedidos são gratuitos, observadas as condições legais e a confirmação de identidade.</p>
+        <p>Envie sua solicitação ao contato da seção 1. Para mais informações sobre direitos e encaminhamento de reclamações, consulte a <a href="https://www.gov.br/anpd/pt-br/assuntos/titular-de-dados/direito-dos-titulares">orientação da Autoridade Nacional de Proteção de Dados (ANPD)</a>.</p>
+      </section>
+
+      <section aria-labelledby="atualizacoes">
+        <h2 id="atualizacoes">10. Público e atualizações</h2>
+        <p>A plataforma é destinada a profissionais da gestão escolar. Nesta fase, não oferece cadastro de estudantes nem coleta dados deles nos módulos demonstrativos. A implementação de recursos com dados de estudantes, vínculos entre pessoas e escolas ou novas formas de compartilhamento dependerá de definição específica e atualização desta política.</p>
+        <p>Alterações serão publicadas nesta página com a data de atualização. Mudanças relevantes nas finalidades ou permissões serão informadas na aplicação e, quando necessário, dependerão de nova autorização antes do uso dos dados.</p>
+      </section>
+      <p class="contact"><strong>Fale com o responsável:</strong> Marcos Rubo · <a href="mailto:marcos.rubo@escola.pr.gov.br">marcos.rubo@escola.pr.gov.br</a></p>
+    </article>
+  </main>
+</body>
+</html>

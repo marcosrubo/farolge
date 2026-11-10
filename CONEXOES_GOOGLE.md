@@ -35,11 +35,15 @@ No projeto exclusivo **FarolGE**:
 1. Habilitar Gmail API e Google Drive API (Marcos já informou essa etapa concluída).
 2. Manter o cliente Web **Farol GE Web**, com origem de produção e callback:
 
-   `https://farolge.vercel.app/api/google/callback`
+   `https://www.farolge.com.br/api/google/callback`
+
+   A origem de produção é `https://www.farolge.com.br` e deve coincidir com `FAROL_ORIGIN` na Vercel. Endereços anteriores podem permanecer cadastrados no Google, mas o teste deve começar pela mesma origem configurada na aplicação.
 
 3. Em **Data Access**, cadastrar os escopos `openid`, `email`, `profile`, `https://www.googleapis.com/auth/gmail.readonly` e `https://www.googleapis.com/auth/drive.file`.
 4. No modo **Testing**, adicionar as contas que testarão o acesso. Aceitar qualquer conta no código não remove as restrições do Google. Para liberar o uso amplo, configurar Production e cumprir as exigências de verificação/exceções aplicáveis. `gmail.readonly` é um escopo restrito; verificar exigências antes da distribuição ampla.
 5. A administração Workspace da SEED pode exigir liberação do aplicativo. O código não contorna bloqueios administrativos.
+
+6. Em **Branding**, cadastrar a página inicial `https://www.farolge.com.br/` e, após publicar os arquivos desta entrega, a política pública `https://www.farolge.com.br/privacidade.html`. O responsável e contato confirmados por Marcos são **Marcos Rubo** e **marcos.rubo@escola.pr.gov.br**. Verificar a propriedade do domínio e os demais requisitos indicados no painel. A página descreve a versão atual e não dispensa a análise de escopos, funcionalidades efetivamente implementadas nem a verificação aplicável do Google.
 
 A conta pessoal pode ser Gmail ou outro endereço com Conta Google. Gmail API só funcionará se essa conta tiver o serviço Gmail disponível e autorizado. O código solicita leitura da caixa inteira; a seleção das demandas por marcadores será implementada nos módulos.
 
@@ -62,7 +66,7 @@ No projeto **farolge**, ambiente **Production**:
 | Variável | Conteúdo |
 | --- | --- |
 | `FAROL_GOOGLE_ENABLED` | `true` após concluir a configuração |
-| `FAROL_ORIGIN` | `https://farolge.vercel.app` (ou o domínio definitivo, com callback correspondente) |
+| `FAROL_ORIGIN` | `https://www.farolge.com.br` (mesma origem usada no acesso e no callback Google) |
 | `GOOGLE_CLIENT_ID` | Client ID Web do FAROL GE |
 | `GOOGLE_CLIENT_SECRET` | Segredo atual do FAROL GE |
 | `FAROL_TOKEN_KEY` | Chave aleatória de 32 bytes codificada em base64 |
@@ -85,6 +89,8 @@ A sessão única anterior (`__Host-farol-portal`) e os cookies do protótipo nã
 As novas sessões usam cookies e payloads separados por tipo, na mesma tabela de sessões criptografadas. Novas conexões Geral pertencem à identidade da própria conta geral escolhida no Google/Supabase, em vez de à conta pessoal de um responsável. O ajuste que remove o endereço Geral fixo mantém essas sessões independentes e não exige novas tabelas. Registros anteriores não são transferidos automaticamente, nem dão acesso pelo novo fluxo; permanecem no banco para revisão administrativa. Não foi aplicado expurgo remoto. Os registros temporários de sessões antigas vencem pelo prazo gravado; a limpeza ocorre ao iniciar novos fluxos. Para prazo fixo de expurgo mesmo sem novos acessos, definir rotina de limpeza no projeto FAROL GE.
 
 ## Verificação
+
+Pedidos de privacidade/exclusão chegam ao contato público da política. O atendimento é administrativo: confirmar a titularidade sem solicitar senhas ou tokens; localizar a identidade correta no Supabase Auth exclusivo do FAROL; atender o pedido e, quando couber exclusão integral, excluir esse usuário. A chave estrangeira remove suas conexões em cascata; as sessões restantes deixam de autorizar ao falhar a verificação da identidade e os registros temporários expiram conforme o prazo gravado. Não prometer exclusão imediata de backups ou registros dos fornecedores sem confirmar suas condições. Desconectar uma conta, isoladamente, não apaga o cadastro Auth. Nenhuma exclusão remota foi executada nesta entrega.
 
 `npm test` executa testes sem servidor ou credenciais reais: entrada direta por Geral ou Pessoal; conexão em qualquer ordem; os quatro estados de conexão; troca/desconexão/expiração/revogação isoladas; escolha de contas Gerais de escolas diferentes, sem endereço fixo; isolamento entre essas contas; isolamento por conta/tipo; registro automático no Supabase; nonce/PKCE/estado de uso único; criptografia; consentimento parcial; cookies antigos; interface sem login separado; vínculo das Demandas à conexão correspondente e preservação do Radar.
 

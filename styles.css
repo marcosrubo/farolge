@@ -58,3 +58,5 @@ main.radar-workspace{padding:38px}
 @media(max-width:600px){.email-disconnect-button{grid-column:2;justify-self:start}}
 
 .email-connect-button:disabled{cursor:not-allowed;opacity:.55}
+.privacy-link{font-size:11px;color:#52664f;text-underline-offset:3px;margin-left:16px;flex-shrink:0}
+@media(max-width:600px){.privacy-link{font-size:10px;max-width:100px;flex-shrink:1;text-align:right}}
