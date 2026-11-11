@@ -3,7 +3,7 @@
 ## Fluxo implementado
 
 1. O quadro apresenta duas conexões independentes: **Geral** e **Pessoal**, cada uma com Conectar/Desconectar. Não há uma etapa separada de entrada no FAROL GE. Qualquer uma pode ser conectada primeiro, ou usada sozinha.
-2. Ao conectar uma delas, a pessoa escolhe a conta no Google e concede identificação, consulta ao Gmail e `drive.file` (consultar/criar/alterar arquivos criados pelo FAROL ou explicitamente abertos/autorizados para ele). Não se solicita acesso irrestrito ao Drive nem envio/alteração/exclusão de e-mails.
+2. Ao conectar uma delas, a pessoa escolhe a conta no Google e concede identificação, consulta ao Gmail e `drive.file` (consultar/criar/alterar arquivos criados pelo FAROL ou explicitamente abertos/autorizados para ele). Não se solicita acesso irrestrito ao Drive. A Geral solicita consulta ao Gmail; a Pessoal solicita também gmail.modify para aplicar etiquetas conforme a ação do usuário. O escopo é amplo, mas não há envio, exclusão ou edição do conteúdo de e-mails no aplicativo.
 3. O callback valida a identidade Google. O backend usa o ID token para autenticar a própria conta no Supabase Auth, que cria o registro em `auth.users` automaticamente no primeiro acesso. Isso ocorre em ambas as conexões; não há formulário de cadastro nem senha do FAROL.
 4. Cada conexão tem sua própria sessão em cookie opaco HttpOnly, Secure e SameSite=Lax. Tokens Google e Supabase ficam criptografados no banco, nunca no JavaScript ou localStorage. O servidor verifica cada sessão separadamente com Supabase Auth antes de expor a conexão correspondente.
 5. Cada autorização pertence ao ID Supabase da própria conta Google e ao tipo Geral/Pessoal. Conectar, revisar, trocar ou desconectar uma delas preserva a outra. A conexão Geral não é vinculada ao usuário da Pessoal e não é recuperada automaticamente só por conectar uma conta Pessoal em outro navegador.
@@ -39,7 +39,7 @@ No projeto exclusivo **FarolGE**:
 
    A origem de produção é `https://www.farolge.com.br` e deve coincidir com `FAROL_ORIGIN` na Vercel. Endereços anteriores podem permanecer cadastrados no Google, mas o teste deve começar pela mesma origem configurada na aplicação.
 
-3. Em **Data Access**, cadastrar os escopos `openid`, `email`, `profile`, `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/drive.file` e `https://www.googleapis.com/auth/gmail.labels`. O último é solicitado somente na conexão Pessoal, para listar e criar os três marcadores autorizados por Marcos; não adicionar `gmail.modify` ou acesso total ao Gmail.
+3. Em **Data Access**, cadastrar os escopos `openid`, `email`, `profile`, `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/drive.file` e `https://www.googleapis.com/auth/gmail.labels`. O último é solicitado somente na conexão Pessoal, para listar e criar os três marcadores autorizados por Marcos; adicionar também `https://www.googleapis.com/auth/gmail.modify` para a classificação de mensagens, solicitada somente na Pessoal. Não adicionar `https://mail.google.com/`.
 4. No modo **Testing**, adicionar as contas que testarão o acesso. Aceitar qualquer conta no código não remove as restrições do Google. Para liberar o uso amplo, configurar Production e cumprir as exigências de verificação/exceções aplicáveis. `gmail.readonly` é um escopo restrito; verificar exigências antes da distribuição ampla.
 5. A administração Workspace da SEED pode exigir liberação do aplicativo. O código não contorna bloqueios administrativos.
 
@@ -49,7 +49,7 @@ No projeto exclusivo **FarolGE**:
 
    Antes de solicitar verificação de acesso a dados para distribuição ampla, revisar a necessidade dos escopos contra as funções efetivamente implementadas. A política Google não permite solicitar permissões apenas para recursos futuros. O código atual ainda solicita `gmail.readonly` e `drive.file`, enquanto Demandas PESSOAIS consulta conversas por marcadores e a integração Drive ainda verifica somente a conta e suas autorizações. A leitura de mensagens já está implementada em Pessoal; operações de arquivos no Drive permanecem futuras.
 
-A conta pessoal pode ser Gmail ou outro endereço com Conta Google. Gmail API só funcionará se essa conta tiver o serviço Gmail disponível e autorizado. O código solicita leitura da caixa inteira; Demandas PESSOAIS seleciona as conversas pelos três marcadores, sem envio ou alteração de mensagens.
+A conta pessoal pode ser Gmail ou outro endereço com Conta Google. Gmail API só funcionará se essa conta tiver o serviço Gmail disponível e autorizado. O código solicita leitura da caixa inteira; Demandas PESSOAIS seleciona as conversas pelos três marcadores e permite classificar mensagens da Caixa de entrada adicionando etiquetas, sem envio ou edição do conteúdo.
 
 ### 2. Supabase exclusivo do FAROL GE
 
@@ -94,7 +94,7 @@ As novas sessões usam cookies e payloads separados por tipo, na mesma tabela de
 
 ## Marcadores da conexão Pessoal
 
-Após validar a identidade no Google e Supabase, o callback Pessoal lista os marcadores em `users/me/labels` e cria somente os nomes ausentes: `1-ME DEVEM`, `2-MINHAS` e `3-DEVO`. A criação segue essa ordem. O backend não renomeia nem exclui os marcadores anteriores; Marcos informou que fará a exclusão manual no Gmail. A permissão adicional `gmail.labels` é específica para gerenciar marcadores; não permite alterar mensagens. O código não renomeia/exclui marcadores, não aplica labels às mensagens e não chama essas operações na Geral. Uma segunda conexão reaproveita os marcadores existentes. Em conflito concorrente, confirma novamente a existência antes de aceitar o resultado.
+Após validar a identidade no Google e Supabase, o callback Pessoal lista os marcadores em `users/me/labels` e cria somente os nomes ausentes: `1-ME DEVEM`, `2-MINHAS` e `3-DEVO`. A criação segue essa ordem. O backend não renomeia nem exclui os marcadores anteriores; Marcos informou que fará a exclusão manual no Gmail. A permissão adicional `gmail.labels` é específica para gerenciar marcadores; não permite alterar mensagens. O código não renomeia/exclui marcadores e não chama essas operações na Geral. Aplicar etiquetas a mensagens é uma operação separada, autorizada depois por Marcos, descrita abaixo. Uma segunda conexão reaproveita os marcadores existentes. Em conflito concorrente, confirma novamente a existência antes de aceitar o resultado.
 
 A listagem de nomes/IDs só é processada em memória. O payload criptografado guarda a indicação de permissão. O endpoint de status verifica a existência atual e informa `ready`, `missing`, `permission_required` ou `unavailable`, sem criar labels. Falha na preparação não apaga a conexão; usar **Revisar autorização** para tentar novamente. Recusar a permissão mantém os demais serviços concedidos. Desconectar não remove os marcadores do Gmail.
 
@@ -124,9 +124,18 @@ Validar na Vercel após publicação: Geral primeiro, Pessoal primeiro, ambas, t
 
 Executar `database/personal-demands.sql` no Supabase exclusivo FAROL GE antes de usar prazos. As ações `/api/google/board` e `/api/google/thread` são GET; `/api/google/demand` é POST com Origin/X-Farol-Request. Todas exigem sessão Pessoal verificada, Gmail autorizado e confirmação da conta esperada. Os IDs e o proprietário nunca são aceitos como autorização por si só. O backend confere os marcadores da conversa e deriva o proprietário da sessão, sem herdar Geral. Erros de migração, autorização, indisponibilidade e conflito não simulam listas ou salvamentos bem-sucedidos.
 
-A tabela é acessível somente pelo backend/service_role, com dados de acompanhamento criptografados e atualização condicional pela versão. Um acompanhamento por proprietário/threadId, referenciando a mensagem de origem, preserva o prazo quando chegam respostas. Responsável é texto, sem atribuir acesso a outra conta. Não há correlação entre cópias da mesma mensagem em caixas diferentes, envio ou avisos de prazo. Retenção, histórico e exclusão constam da revisão 5 da política. Os escopos existentes bastam para esta entrega.
+A tabela é acessível somente pelo backend/service_role, com dados de acompanhamento criptografados e atualização condicional pela versão. Um acompanhamento por proprietário/threadId, referenciando a mensagem de origem, preserva o prazo quando chegam respostas. Responsável é texto, sem atribuir acesso a outra conta. Não há correlação entre cópias da mesma mensagem em caixas diferentes, envio ou avisos de prazo. Retenção, histórico e exclusão constam da revisão 5 da política. A leitura e os prazos usam as permissões anteriores; a classificação da Caixa de entrada precisa de gmail.modify, conforme a seção abaixo.
 
 Verificar na nuvem o roteiro de `README.md` → Demandas PESSOAIS e prazos. As novas verificações automatizadas cobrem autorização por sessão Pessoal, proprietário/conta, CSRF, SQL ausente, criptografia, gravação condicional, calendário de Brasília, histórico, múltiplos marcadores, paginação, respostas, conclusão manual e segurança do texto. Não houve teste visual local.
 
 - [Gmail: listar conversas](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/list)
 - [Gmail: obter conversa](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/get)
+
+## Classificação da Caixa de entrada
+
+Marcos autorizou aplicar uma etiqueta por mensagem na Pessoal, preservando INBOX/UNREAD e todas as demais etiquetas. Adicionar `https://www.googleapis.com/auth/gmail.modify` no Data Access do Google exclusivo FAROL GE. Publicar e revisar a autorização Pessoal. Não há nova tabela ou variável. A Geral mantém sua solicitação anterior. A recusa de modify preserva a leitura quando autorizada; a interface apresenta a necessidade de reautorizar. A revisão 6 da política e o diálogo explicam que o alcance Google é amplo, mas a aplicação utiliza apenas adição dessas etiquetas, sem envio, edição de conteúdo, exclusão ou arquivamento.
+
+`GET /api/google/inbox` pagina messages.list com labelIds=INBOX e lê somente metadados das mensagens. Não depende da tabela de prazos. `POST /api/google/classify` valida CSRF, sessão Pessoal, conta esperada, permissão concedida, ID da mensagem, índice da categoria, nomes fixos dos marcadores e presença atual de INBOX. Chama messages.modify somente com addLabelIds para um único marcador. A resposta confirma o estado efetivo; se houver alteração concorrente externa de INBOX, não ressuscita a mensagem. A interface atualiza a linha e busca um resumo da conversa para inseri-la nas colunas, preservando acompanhamento e histórico. Nenhum conteúdo novo é persistido no banco.
+
+- [Gmail: listar mensagens](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/list)
+- [Gmail: adicionar etiquetas à mensagem](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/modify)

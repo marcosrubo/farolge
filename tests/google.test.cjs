@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,PERSONAL_LABELS}=require('../server/google.cjs');
+const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS}=require('../server/google.cjs');
 const env={FAROL_GOOGLE_ENABLED:'true',FAROL_ORIGIN:'https://farol.example',GOOGLE_CLIENT_ID:'test-client',GOOGLE_CLIENT_SECRET:'test-secret',FAROL_TOKEN_KEY:Buffer.alloc(32,7).toString('base64'),FAROL_SUPABASE_URL:'https://test.supabase.co',FAROL_SUPABASE_SERVICE_ROLE_KEY:'test-service',FAROL_SUPABASE_ANON_KEY:'test-anon'};
 const GENERAL_EMAIL='escola@escola.pr.gov.br';
 const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -70,7 +70,7 @@ test('CSRF e métodos inválidos são bloqueados; login inclui Gmail readonly e 
  assert.equal((await h.request('start',{method:'POST',origin:'https://evil.example',body:{type:'personal'}})).status,403);
  assert.equal((await h.request('start')).status,405);
  const flow=await h.start();
- assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE]);
+ assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]);
  assert.deepEqual((await h.start('general')).options.scope,SCOPES);
  assert.ok(flow.options.scope.includes(READ_SCOPE));assert.ok(flow.options.scope.includes(DRIVE_SCOPE));
  assert.ok(!flow.options.scope.includes('https://www.googleapis.com/auth/drive'));
@@ -302,11 +302,13 @@ test('identidade inválida nunca cria labels e desconectar não apaga marcadores
 
 test('endpoints de demandas exigem sessão Pessoal e protegem escrita com CSRF',async()=>{
  const h=harness();
- for(const action of ['board','thread'])assert.equal((await h.request(action,{query:'?mailbox=admin@gmail.com&column=0&id=thread1'})).status,401);
+ for(const action of ['board','thread','inbox'])assert.equal((await h.request(action,{query:'?mailbox=admin@gmail.com&column=0&id=thread1'})).status,401);
  const general=await h.login('school@gmail.com','','general');
  assert.equal((await h.request('board',{cookie:general.cookie,query:'?mailbox=school@gmail.com&column=0'})).status,401);
  assert.equal((await h.request('demand',{method:'POST',body:{type:'personal'},origin:'https://evil.invalid'})).status,403);
  assert.equal((await h.request('demand')).status,405);
+ assert.equal((await h.request('classify',{method:'POST',body:{type:'personal'},origin:'https://evil.invalid'})).status,403);
+ assert.equal((await h.request('classify')).status,405);
  assert.equal((await h.request('demand',{method:'POST',body:'null'})).status,400);
  const personal=await h.login();
  assert.equal((await h.request('board',{cookie:personal.cookie,query:'?mailbox=another@gmail.com&column=0'})).status,409);
@@ -329,4 +331,18 @@ test('armazenamento de demandas cifra dados, filtra proprietário e usa versão 
  await assert.rejects(store.getDemands('other-owner',['thread1']));
  const missing=makeStore(config,async()=>({ok:false,status:404,json:async()=>({code:'PGRST205'})}));
  await assert.rejects(missing.getDemands(owner,['thread1']),{message:'setup_required'});
+});
+
+test('permissão de classificação é exclusiva da Pessoal e recusa preserva consulta',async()=>{
+ const h=harness();
+ const general=await h.login('school@gmail.com','','general');
+ assert.equal((await h.request('status',{cookie:general.cookie})).json().connections.general.classify,undefined);
+ h.setScopes([...SCOPES,LABEL_SCOPE].join(' '));const personal=await h.login();
+ const status=(await h.request('status',{cookie:personal.cookie})).json();
+ assert.equal(status.connections.personal.gmail,true);assert.equal(status.connections.personal.classify,false);
+ assert.match(personal.response.headers.location,/partial/);
+ h.setScopes(['openid','email','profile',MODIFY_SCOPE,LABEL_SCOPE,DRIVE_SCOPE].join(' '));
+ const modified=await h.login('admin@gmail.com',personal.cookie);
+ const granted=(await h.request('status',{cookie:modified.cookie})).json();
+ assert.equal(granted.connections.personal.gmail,true);assert.equal(granted.connections.personal.classify,true);
 });

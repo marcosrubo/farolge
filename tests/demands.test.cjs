@@ -6,28 +6,44 @@ const vm=require('node:vm');
 const {handleDemands,validDate,plainText}=require('../server/demands.cjs');
 const LABELS=['1-ME DEVEM','2-MINHAS','3-DEVO'];
 function harness(){
- const rows=new Map(),threads=new Map(),calls=[];
+ const rows=new Map(),threads=new Map(),messages=new Map(),calls=[];
  const email='person@gmail.com',owner='owner-a';
- const message=(id,labels=['L0'])=>({id,internalDate:'1794300000000',labelIds:labels,snippet:'Trecho <script>não executar</script>',payload:{mimeType:'multipart/alternative',headers:[{name:'Subject',value:'Trabalho <img onerror=alert(1)>'},{name:'From',value:'Pessoa <pessoa@example.com>'},{name:'To',value:email}],parts:[{mimeType:'text/html',body:{data:Buffer.from('<img src="https://tracking.invalid">').toString('base64url')}},{mimeType:'text/plain',body:{data:Buffer.from('Texto da mensagem').toString('base64url')}}]}});
+ const message=(id,labels=['L0'])=>({id,threadId:'thread1',internalDate:'1794300000000',labelIds:labels,snippet:'Trecho <script>não executar</script>',payload:{mimeType:'multipart/alternative',headers:[{name:'Subject',value:'Trabalho <img onerror=alert(1)>'},{name:'From',value:'Pessoa <pessoa@example.com>'},{name:'To',value:email}],parts:[{mimeType:'text/html',body:{data:Buffer.from('<img src="https://tracking.invalid">').toString('base64url')}},{mimeType:'text/plain',body:{data:Buffer.from('Texto da mensagem').toString('base64url')}}]}});
  threads.set('thread1',{id:'thread1',messages:[message('message1',['L0','L1','UNREAD'])]});
  threads.set('other',{id:'other',messages:[message('message2',['OTHER'])]});
+ messages.set('message1',threads.get('thread1').messages[0]);
+ messages.get('message1').labelIds.push('INBOX','CUSTOM');
+ messages.set('inbox2',{...message('inbox2',['INBOX','UNREAD']),threadId:'thread2'});
+ threads.set('thread2',{id:'thread2',messages:[messages.get('inbox2')]});
  let conflict=false,providerFailure=null;
  const store={
   async getDemands(user,ids){return ids.map(id=>rows.get(user+'.'+id)).filter(Boolean).map(r=>structuredClone(r));},
   async saveDemand(user,id,value,version){if(conflict || (rows.get(user+'.'+id)?.version||0)!==version)return null;const row={...structuredClone(value),id:'demand1',threadId:id,version:version+1};rows.set(user+'.'+id,row);return row;}
  };
- const client={async request({url,method='GET'}){
-  calls.push({url,method});if(providerFailure)throw Object.assign(new Error('provider'),{response:{status:providerFailure}});
+ const client={async request({url,method='GET',data}){
+  calls.push({url,method,data});if(providerFailure)throw Object.assign(new Error('provider'),{response:{status:providerFailure}});
   const parsed=new URL(url),path=parsed.pathname.split('/').at(-1);
+  if(path==='messages')return {data:{messages:[...messages.values()].filter(m=>m.labelIds.includes('INBOX')).map(m=>({id:m.id,threadId:m.threadId})),nextPageToken:parsed.searchParams.has('pageToken')?undefined:'inbox-next'}};
+  if(parsed.pathname.includes('/messages/')){
+    const id=path==='modify'?parsed.pathname.split('/').at(-2):path;
+    const message=messages.get(id);if(!message)throw Object.assign(new Error('missing'),{response:{status:404}});
+    if(path==='modify'){
+      assert.equal(method,'POST');assert.deepEqual(Object.keys(data),['addLabelIds']);
+      if(this.beforeModify)this.beforeModify(message);
+      message.labelIds=[...new Set([...message.labelIds,...data.addLabelIds])];
+      return {data:{id:message.id,threadId:message.threadId,labelIds:message.labelIds}};
+    }
+    return {data:structuredClone(message)};
+  }
   if(path==='labels')return {data:{labels:LABELS.map((name,index)=>({name,id:'L'+index}))}};
   if(path==='threads')return {data:{threads:parsed.searchParams.get('labelIds')==='L2'?[]:[{id:'thread1'}],nextPageToken:parsed.searchParams.has('pageToken')?undefined:'next'}};
   return {data:structuredClone(threads.get(path))};
  }};
- async function run(action,{query={},body,who=owner,mailbox=email}={}){
-  return handleDemands({action,url:new URL('https://farol.invalid/?'+new URLSearchParams({mailbox,...query})),body,client,store,owner:who,email:mailbox});
+ async function run(action,{query={},body,who=owner,mailbox=email,canClassify=true}={}){
+  return handleDemands({action,url:new URL('https://farol.invalid/?'+new URLSearchParams({mailbox,...query})),body,client,store,owner:who,email:mailbox,canClassify});
  }
  const body=(change={})=>({type:'personal',mailbox:email,threadId:'thread1',version:0,dueDate:'2026-11-20',completed:false,responsible:'Pessoa',...change});
- return {run,body,rows,threads,calls,owner,email,message,store,client,conflict:()=>conflict=true,fail:status=>providerFailure=status};
+ return {run,body,rows,threads,messages,calls,owner,email,message,store,client,conflict:()=>conflict=true,fail:status=>providerFailure=status};
 }
 test('datas aceitam calendário válido e remoção do prazo; rejeitam datas inválidas',()=>{
  for(const date of [null,'2026-11-20','2028-02-29'])assert.equal(validDate(date),true);
@@ -106,7 +122,12 @@ function interactive(fetcher){
   set innerHTML(value){this._html=value;this.nodes.clear();}
   get innerHTML(){return this._html;}
   querySelector(selector){if(!this.nodes.has(selector))this.nodes.set(selector,new Node());return this.nodes.get(selector);}
-  querySelectorAll(){return [];}
+  querySelectorAll(selector){
+   if(selector!=='[data-classify]')return [];
+   const html=this.querySelector('#inbox-list').innerHTML;
+   this.classifyButtons=[...html.matchAll(/<button[^>]*data-classify="([0-2])" data-message="([\w-]+)"([^>]*)>/g)].map(match=>{const button=new Node();button.dataset={classify:match[1],message:match[2]};button.disabled=match[3].includes('disabled');return button;});
+   return this.classifyButtons;
+  }
   addEventListener(type,fn){this.listeners[type]=fn;}
   setAttribute(){}focus(){}showModal(){this.open=true;}close(){this.open=false;}
  }
@@ -119,7 +140,7 @@ test('quadro carrega três colunas e apaga dados imediatamente quando a conta mu
  const requests=[];
  const h=interactive(async(url)=>{requests.push(url);return {ok:true,json:async()=>({mailbox:'person@gmail.com',items:[],nextPage:null})};});
  h.api.connectionChanged({email:'person@gmail.com',gmail:true});h.api.mount(h.root);await settle();
- assert.equal(requests.length,3);assert.ok(h.root.querySelector('#demand-columns').innerHTML.includes('1-ME DEVEM'));
+ assert.equal(requests.length,4);assert.ok(h.root.querySelector('#demand-columns').innerHTML.includes('1-ME DEVEM'));
  h.api.connectionChanged(null);
  assert.ok(h.root.querySelector('#demand-notice').textContent.includes('Conecte a conta Pessoal'));
  assert.ok(!h.root.querySelector('#demand-columns').innerHTML.includes('person@gmail.com'));
@@ -135,4 +156,76 @@ test('resposta antiga do quadro não aparece depois de trocar a conta',async()=>
  assert.ok(!h.root.querySelector('#demand-columns').innerHTML.includes('SEGREDO'));
  assert.ok(h.root.querySelector('#demand-notice').textContent.includes('Conecte'));
  h.api.unmount();
+});
+
+test('Caixa de entrada lista mensagens individuais inclusive já classificadas sem depender do banco',async()=>{
+ const h=harness(),result=await h.run('inbox',{query:{page:'page1'}});
+ assert.equal(result.items.length,2);assert.equal(result.canClassify,true);
+ assert.equal(result.items[0].id,'message1');assert.deepEqual(result.items[0].labels,['1-ME DEVEM','2-MINHAS']);
+ const call=new URL(h.calls.find(c=>new URL(c.url).pathname.endsWith('/messages')).url);
+ assert.equal(call.searchParams.get('labelIds'),'INBOX');assert.equal(call.searchParams.get('pageToken'),'page1');
+ assert.equal(call.searchParams.get('maxResults'),'20');assert.equal(h.rows.size,0);assert.ok(h.calls.every(c=>c.method==='GET'));
+});
+test('classifica só a mensagem escolhida preservando INBOX, UNREAD e outras etiquetas',async()=>{
+ const h=harness(),body={type:'personal',mailbox:h.email,messageId:'inbox2',column:2};
+ const result=await h.run('classify',{body});
+ assert.deepEqual(h.calls.find(c=>c.method==='POST').data,{addLabelIds:['L2']});
+ assert.equal(result.inInbox,true);assert.equal(result.item.unread,true);assert.ok(result.item.subject.includes('Trabalho'));
+ assert.deepEqual(h.messages.get('inbox2').labelIds,['INBOX','UNREAD','L2']);
+ assert.ok(!h.messages.get('message1').labelIds.includes('L2'));
+ const board=await h.run('thread',{query:{id:'thread2'}});assert.deepEqual(board.thread.labels,['3-DEVO']);
+ await h.run('classify',{body});assert.equal(h.calls.filter(c=>c.method==='POST').length,1,'repetir etiqueta é idempotente');
+ await h.run('classify',{body:{...body,column:0}});
+ assert.deepEqual(h.messages.get('inbox2').labelIds,['INBOX','UNREAD','L2','L0']);
+ assert.ok(h.calls.filter(c=>c.method==='POST').every(c=>c.url.endsWith('/messages/inbox2/modify')));
+});
+test('classificação rejeita falta de permissão, conta diferente e mensagens fora de INBOX',async()=>{
+ const h=harness(),body={type:'personal',mailbox:h.email,messageId:'inbox2',column:0};
+ await assert.rejects(h.run('classify',{body,canClassify:false}),{message:'classify_scope'});
+ await assert.rejects(h.run('classify',{body:{...body,mailbox:'someone@gmail.com'}}),{message:'account_changed'});
+ for(const change of [{column:3},{column:'0'},{messageId:'../other'},{removeLabelIds:['INBOX']},{type:'general'}])await assert.rejects(h.run('classify',{body:{...body,...change}}),{message:'invalid_classification'});
+ h.messages.get('inbox2').labelIds=['UNREAD'];await assert.rejects(h.run('classify',{body}),{message:'not_inbox'});
+ assert.equal(h.calls.filter(c=>c.method==='POST').length,0);
+});
+
+test('classificação não recoloca na entrada uma mensagem arquivada em outra operação',async()=>{
+ const h=harness();h.client.beforeModify=message=>message.labelIds=message.labelIds.filter(id=>id!=='INBOX');
+ const result=await h.run('classify',{body:{type:'personal',mailbox:h.email,messageId:'inbox2',column:0}});
+ assert.equal(result.inInbox,false);assert.ok(result.item.labels.includes('1-ME DEVEM'));
+ assert.deepEqual(h.calls.find(c=>c.method==='POST').data,{addLabelIds:['L0']});
+});
+test('interface confirma etiqueta mantendo a linha e insere a conversa nas colunas',async()=>{
+ const h=harness(),posted=[];
+ const ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1);
+  const body=options.body?JSON.parse(options.body):undefined;if(body)posted.push(body);
+  try {const result=await h.run(action,{body,query:Object.fromEntries(parsed.searchParams)});return {ok:true,json:async()=>result};}
+  catch(error){return {ok:false,json:async()=>({error:error.message})};}
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ const button=ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='2');
+ assert.equal(button.disabled,false);await button.listeners.click();
+ assert.equal(posted.length,1);assert.equal(posted[0].messageId,'inbox2');
+ assert.ok(ui.root.querySelector('#inbox-feedback').textContent.includes('permanece na Caixa de entrada'));
+ assert.ok(ui.root.querySelector('#inbox-list').innerHTML.includes('data-message="inbox2"'));
+ assert.ok(ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='2').disabled);
+ assert.ok(ui.root.querySelector('#demand-columns').innerHTML.includes('data-thread="thread2"'));
+ const summaries=h.calls.filter(call=>call.url.includes('/threads/thread2'));
+ assert.ok(summaries.every(call=>new URL(call.url).searchParams.get('format')==='metadata'));
+ ui.api.unmount();
+});
+
+test('falha de classificação não anuncia sucesso nem altera a linha na interface',async()=>{
+ const h=harness();
+ const ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1);
+  if(action==='classify')return {ok:false,json:async()=>({error:'classify_scope'})};
+  const result=await h.run(action,{query:Object.fromEntries(parsed.searchParams)});return {ok:true,json:async()=>result};
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ await ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='2').listeners.click();
+ assert.ok(ui.root.querySelector('#inbox-feedback').textContent.includes('Revisar autorização'));
+ assert.ok(!ui.root.querySelector('#inbox-feedback').textContent.includes('aplicada'));
+ assert.ok(!h.messages.get('inbox2').labelIds.includes('L2'));
+ assert.ok(ui.root.classifyButtons.every(b=>b.disabled));ui.api.unmount();
 });

@@ -146,6 +146,7 @@ function setupEmailConnections(){
         if(connected && type==='personal') {
           const labelMessages={ready:'labels prontas (3/3)',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
           status.textContent+=' · '+(labelMessages[connection.labels]||labelMessages.permission_required);
+          status.textContent+=' · Classificação: '+(connection.classify?'autorizada':'revisar autorização');
         }
         status.classList.toggle('is-connected',connected);
         const button=document.querySelector('[data-connect-email="'+type+'"]');

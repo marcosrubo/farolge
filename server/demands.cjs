@@ -29,15 +29,50 @@ function summary(thread,labelIds){
 function publicDemand(row){
   return row?{id:row.id,version:row.version,dueDate:row.dueDate,completed:row.completed,responsible:row.responsible,sourceMessageId:row.sourceMessageId,history:row.history}:null;
 }
-async function handleDemands({action,url,body,client,store,owner,email}){
+async function handleDemands({action,url,body,client,store,owner,email,canClassify=false}){
   const request=async(path)=>{const {data}=await client.request({url:BASE+path,timeout:10000});return data;};
-  const expected=action==='demand'?body.mailbox:url.searchParams.get('mailbox');
+  const expected=['demand','classify'].includes(action)?body.mailbox:url.searchParams.get('mailbox');
   if(expected!==email)fail('account_changed',409);
   if(action==='demand'){
     if(Object.keys(body).some(key=>!['type','mailbox','threadId','version','dueDate','completed','responsible'].includes(key)) || body.type!=='personal' || !validId(body.threadId) || !Number.isSafeInteger(body.version) || body.version<0 || !validDate(body.dueDate) || typeof body.completed!=='boolean' || typeof body.responsible!=='string' || body.responsible.length>200)fail('invalid_demand',400);
   }
+  if(action==='classify') {
+    if(Object.keys(body).some(key=>!['type','mailbox','messageId','column'].includes(key)) || body.type!=='personal' || !validId(body.messageId) || !Number.isInteger(body.column) || body.column<0 || body.column>2)fail('invalid_classification',400);
+    if(!canClassify)fail('classify_scope',403);
+  }
   const {labels=[]}=await request('/labels');
   const ids=LABELS.map(name=>labels.find(label=>label.name===name)?.id||null);
+  const inboxMessage=message=>{
+    if(!validId(message.id)||!validId(message.threadId))fail('invalid_provider',502);
+    const h=headers(message),labelIds=message.labelIds||[];
+    return {id:message.id,threadId:message.threadId,subject:clean(h.subject||'(Sem assunto)'),from:clean(h.from),to:clean(h.to),snippet:clean(message.snippet),date:Number(message.internalDate)||0,unread:labelIds.includes('UNREAD'),labels:LABELS.filter((_,i)=>labelIds.includes(ids[i]))};
+  };
+  const inInbox=message=>(message.labelIds||[]).includes('INBOX') && !(message.labelIds||[]).some(id=>['TRASH','SPAM','DRAFT'].includes(id));
+  if(action==='inbox') {
+    const page=url.searchParams.get('page')||'';if(page.length>2048)fail('invalid_page',400);
+    const params=new URLSearchParams({labelIds:'INBOX',maxResults:'20',includeSpamTrash:'false'});if(page)params.set('pageToken',page);
+    const listed=await request('/messages?'+params);
+    const items=(await limitedMap(listed.messages||[],async item=>{
+      if(!validId(item.id))fail('invalid_provider',502);
+      try {
+        const message=await request('/messages/'+item.id+'?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To');
+        return inInbox(message)?inboxMessage(message):null;
+      } catch(error){if(error.response?.status===404)return null;throw error;}
+    })).filter(Boolean);
+    return {mailbox:email,items,nextPage:listed.nextPageToken||null,canClassify,missingLabels:ids.some(id=>!id)};
+  }
+  if(action==='classify') {
+    const label=ids[body.column];if(!label)fail('labels_missing',409);
+    const message=await request('/messages/'+body.messageId+'?format=metadata');
+    if(!inInbox(message))fail('not_inbox',409);
+    let result=message;
+    if(!(message.labelIds||[]).includes(label)) {
+      const response=await client.request({url:BASE+'/messages/'+body.messageId+'/modify',method:'POST',data:{addLabelIds:[label]},timeout:10000});
+      result=response.data;
+    }
+    if(result?.id!==body.messageId || !(result.labelIds||[]).includes(label))fail('classification_unconfirmed',502);
+    return {mailbox:email,item:inboxMessage({...message,...result,threadId:message.threadId,payload:message.payload,snippet:message.snippet,internalDate:message.internalDate}),inInbox:inInbox(result)};
+  }
   if(action==='board'){
     const column=Number(url.searchParams.get('column'));
     if(!/^[0-2]$/.test(url.searchParams.get('column')||''))fail('invalid_column',400);
@@ -59,9 +94,11 @@ async function handleDemands({action,url,body,client,store,owner,email}){
   }
   const id=action==='demand'?body.threadId:url.searchParams.get('id');
   if(!validId(id))fail('invalid_thread',400);
-  const thread=await request('/threads/'+id+'?format='+(action==='thread'?'full':'metadata'));
+  const summaryOnly=url.searchParams.get('summary')==='1';
+  const thread=await request('/threads/'+id+'?format='+(action==='thread'&&!summaryOnly?'full':'metadata'));
   const card=summary(thread,ids);if(!card)fail('not_found',404);
   const previous=(await store.getDemands(owner,[id]))[0]||null;
+  if(action==='thread'&&summaryOnly)return {mailbox:email,thread:{...card,demand:publicDemand(previous)}};
   if(action==='thread')return {mailbox:email,thread:{...card,demand:publicDemand(previous),messages:thread.messages.map(message=>{
     const h=headers(message),text=plainText(message.payload);
     return {id:message.id,from:clean(h.from),to:clean(h.to),date:Number(message.internalDate)||0,text:text||clean(message.snippet),previewOnly:!text};

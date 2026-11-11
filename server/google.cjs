@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const {handleDemands}=require('./demands.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+const MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 const LABEL_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
 const PERSONAL_LABELS = ['1-ME DEVEM','2-MINHAS','3-DEVO'];
 const LABEL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/labels';
@@ -149,8 +150,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout','board','thread','demand'].includes(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand'].includes(action)?'POST':'GET';
+    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classify'].includes(action))return reply(404,{error:'not_found'});
+    const expected=['start','disconnect','logout','demand','classify'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
@@ -199,24 +200,24 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
-      if(['board','thread','demand'].includes(action)) {
+      if(['board','thread','demand','inbox','classify'].includes(action)) {
         try {
           const current=await account('personal');
           if(!current)return reply(401,{error:'login_required'});
           const connection=await store.getConnection(current.user.id,'personal');
           if(!connection || connection.email!==current.user.email || !connection.capabilities.gmail)return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
-          const result=await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email});
+          const result=await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
           // Credential caching must not turn an already committed demand into a false failure.
           // The stored refresh token remains available for the next request.
           try {await store.putConnection(current.user.id,'personal',{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed'];
           if(known.includes(error.message))return reply(error.status,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
-          if(error.response?.status===403)return reply(403,{error:'missing_scope'});
+          if(error.response?.status===403)return reply(403,{error:action==='classify'?'classify_scope':'missing_scope'});
           if(error.response?.status===404)return reply(404,{error:'not_found'});
           return reply(503,{error:'unavailable'});
         }
@@ -229,7 +230,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
         await store.put(hash(state),{version:3,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),previous},Date.now()+600000);
         setCookie(res,cookieName('flow',type),binding,600);
-        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE]:SCOPES,access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
+        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]:SCOPES,access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
           code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
         return reply(200,{url:authUrl});
       }
@@ -250,7 +251,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           if(!tokens.access_token || !tokens.id_token)throw new Error('failed');
           const ticket=await client.verifyIdToken({idToken:tokens.id_token,audience:config.clientId}),identity=ticket.getPayload();
           const email=validateAccount(identity,{emailAddress:identity?.email},hash(flow.nonce));
-          const scopes=String(tokens.scope||'').split(' '),capabilities={gmail:scopes.includes(READ_SCOPE),drive:scopes.includes(DRIVE_SCOPE)};
+          const scopes=String(tokens.scope||'').split(' '),capabilities={gmail:scopes.includes(READ_SCOPE)||scopes.includes(MODIFY_SCOPE),drive:scopes.includes(DRIVE_SCOPE),...(type==='personal'?{classify:scopes.includes(MODIFY_SCOPE)}:{})};
           client.setCredentials(tokens);
           // Confirm each granted service, without preventing basic login when a permission is declined.
           if(capabilities.gmail) {
@@ -275,7 +276,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const google=user?.identities?.find(item=>item.provider==='google' && String(item.identity_data?.sub)===String(identity.sub));
           if(!session.access_token || !session.refresh_token || !user?.id || emailOf(user.email)!==email || !google)throw new Error('failed');
           const owner=user.id;
-          const labelsAllowed=type==='personal' && capabilities.gmail && scopes.includes(LABEL_SCOPE);
+          const labelsAllowed=type==='personal' && capabilities.gmail && (scopes.includes(LABEL_SCOPE)||scopes.includes(MODIFY_SCOPE));
           const labels=type==='personal'?await personalLabels(client,labelsAllowed,true):undefined;
           await saveConnection(owner,type,{email,capabilities,labelsAllowed,credentials:credentialsOf(client)});
           const id=random(),expiresAt=Date.now()+TTL*1000;
@@ -284,7 +285,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           // Invalidate browser-only cookies from the prototype; never adopt unowned legacy connections.
           for(const oldType of TYPES)setCookie(res,cookieName('session',oldType),'',0);
           setCookie(res,'__Host-farol-portal','',0);
-          return finish(flow.route,type,capabilities.gmail && capabilities.drive && (type!=='personal' || labels==='ready')?'connected':'partial');
+          return finish(flow.route,type,capabilities.gmail && capabilities.drive && (type!=='personal' || (labels==='ready' && capabilities.classify))?'connected':'partial');
         } catch(error) {
           return finish(flow.route,type,['wrong_account','login_required','invalid_state'].includes(error.message)?error.message:'failed');
         }
@@ -338,4 +339,4 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     }
   };
 }
-module.exports={makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,PERSONAL_LABELS};
+module.exports={makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS};
