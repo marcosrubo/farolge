@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const {handleDemands,validDate,plainText}=require('../server/demands.cjs');
-const LABELS=['1-ME DEVEM','2-MINHAS','3-DEVO'];
+const LABELS=['1-ME DEVEM','2-MINHAS','3-DEVO','9-Classificado'];
 function harness(){
  const rows=new Map(),threads=new Map(),messages=new Map(),calls=[];
  const email='person@gmail.com',owner='owner-a';
@@ -28,9 +28,9 @@ function harness(){
     const id=path==='modify'?parsed.pathname.split('/').at(-2):path;
     const message=messages.get(id);if(!message)throw Object.assign(new Error('missing'),{response:{status:404}});
     if(path==='modify'){
-      assert.equal(method,'POST');assert.deepEqual(Object.keys(data),['addLabelIds']);
+      assert.equal(method,'POST');assert.deepEqual(Object.keys(data),['addLabelIds','removeLabelIds']);
       if(this.beforeModify)this.beforeModify(message);
-      message.labelIds=[...new Set([...message.labelIds,...data.addLabelIds])];
+      message.labelIds=[...new Set([...message.labelIds,...data.addLabelIds])].filter(id=>!data.removeLabelIds.includes(id));
       return {data:{id:message.id,threadId:message.threadId,labelIds:message.labelIds}};
     }
     return {data:structuredClone(message)};
@@ -42,7 +42,7 @@ function harness(){
  async function run(action,{query={},body,who=owner,mailbox=email,canClassify=true}={}){
   return handleDemands({action,url:new URL('https://farol.invalid/?'+new URLSearchParams({mailbox,...query})),body,client,store,owner:who,email:mailbox,canClassify});
  }
- const body=(change={})=>({type:'personal',mailbox:email,threadId:'thread1',version:0,dueDate:'2026-11-20',completed:false,responsible:'Pessoa',...change});
+ const body=(change={})=>({type:'personal',mailbox:email,threadId:'thread1',column:0,version:0,dueDate:'2026-11-20',completed:false,responsible:'Pessoa',...change});
  return {run,body,rows,threads,messages,calls,owner,email,message,store,client,conflict:()=>conflict=true,fail:status=>providerFailure=status};
 }
 test('datas aceitam calendário válido e remoção do prazo; rejeitam datas inválidas',()=>{
@@ -119,10 +119,16 @@ test('conteúdo de e-mail é escapado e filtros não marcam mensagens como lidas
 function interactive(fetcher){
  class Node {
   constructor(){this.nodes=new Map();this.listeners={};this.dataset={};this.value='';this.checked=false;this.open=false;this.textContent='';this.disabled=false;this._html='';}
-  set innerHTML(value){this._html=value;this.nodes.clear();}
+  set innerHTML(value){this._html=value;this.nodes.clear();this.detailButtons=null;}
   get innerHTML(){return this._html;}
   querySelector(selector){if(!this.nodes.has(selector))this.nodes.set(selector,new Node());return this.nodes.get(selector);}
   querySelectorAll(selector){
+   if(selector==='[data-thread]'){
+    this.threadButtons=[...this.querySelector('#demand-columns').innerHTML.matchAll(/<button[^>]*data-thread="([\w-]+)" data-column="([0-2])"/g)].map(match=>{const b=new Node();b.dataset={thread:match[1],column:match[2]};return b;});return this.threadButtons;
+   }
+   if(selector==='[data-detail-classify]'){
+    if(!this.detailButtons)this.detailButtons=[...this.innerHTML.matchAll(/<button[^>]*data-detail-classify="([0-2])" data-message="([\w-]+)"([^>]*)>/g)].map(match=>{const b=new Node();b.dataset={detailClassify:match[1],message:match[2]};b.disabled=match[3].includes('disabled');return b;});return this.detailButtons;
+   }
    if(selector!=='[data-classify]')return [];
    const html=this.querySelector('#inbox-list').innerHTML;
    this.classifyButtons=[...html.matchAll(/<button[^>]*data-classify="([0-2])" data-message="([\w-]+)"([^>]*)>/g)].map(match=>{const button=new Node();button.dataset={classify:match[1],message:match[2]};button.disabled=match[3].includes('disabled');return button;});
@@ -166,17 +172,17 @@ test('Caixa de entrada lista mensagens individuais inclusive já classificadas s
  assert.equal(call.searchParams.get('labelIds'),'INBOX');assert.equal(call.searchParams.get('pageToken'),'page1');
  assert.equal(call.searchParams.get('maxResults'),'20');assert.equal(h.rows.size,0);assert.ok(h.calls.every(c=>c.method==='GET'));
 });
-test('classifica só a mensagem escolhida preservando INBOX, UNREAD e outras etiquetas',async()=>{
+test('classifica só a mensagem escolhida movendo para 9-Classificado e preservando UNREAD e outras etiquetas',async()=>{
  const h=harness(),body={type:'personal',mailbox:h.email,messageId:'inbox2',column:2};
  const result=await h.run('classify',{body});
- assert.deepEqual(h.calls.find(c=>c.method==='POST').data,{addLabelIds:['L2']});
- assert.equal(result.inInbox,true);assert.equal(result.item.unread,true);assert.ok(result.item.subject.includes('Trabalho'));
- assert.deepEqual(h.messages.get('inbox2').labelIds,['INBOX','UNREAD','L2']);
+ assert.deepEqual(h.calls.find(c=>c.method==='POST').data,{addLabelIds:['L2','L3'],removeLabelIds:['INBOX']});
+ assert.equal(result.inInbox,false);assert.equal(result.item.unread,true);assert.ok(result.item.subject.includes('Trabalho'));
+ assert.deepEqual(h.messages.get('inbox2').labelIds,['UNREAD','L2','L3']);
  assert.ok(!h.messages.get('message1').labelIds.includes('L2'));
  const board=await h.run('thread',{query:{id:'thread2'}});assert.deepEqual(board.thread.labels,['3-DEVO']);
  await h.run('classify',{body});assert.equal(h.calls.filter(c=>c.method==='POST').length,1,'repetir etiqueta é idempotente');
  await h.run('classify',{body:{...body,column:0}});
- assert.deepEqual(h.messages.get('inbox2').labelIds,['INBOX','UNREAD','L2','L0']);
+ assert.deepEqual(h.messages.get('inbox2').labelIds,['UNREAD','L2','L3','L0']);
  assert.ok(h.calls.filter(c=>c.method==='POST').every(c=>c.url.endsWith('/messages/inbox2/modify')));
 });
 test('classificação rejeita falta de permissão, conta diferente e mensagens fora de INBOX',async()=>{
@@ -192,9 +198,9 @@ test('classificação não recoloca na entrada uma mensagem arquivada em outra o
  const h=harness();h.client.beforeModify=message=>message.labelIds=message.labelIds.filter(id=>id!=='INBOX');
  const result=await h.run('classify',{body:{type:'personal',mailbox:h.email,messageId:'inbox2',column:0}});
  assert.equal(result.inInbox,false);assert.ok(result.item.labels.includes('1-ME DEVEM'));
- assert.deepEqual(h.calls.find(c=>c.method==='POST').data,{addLabelIds:['L0']});
+ assert.deepEqual(h.calls.find(c=>c.method==='POST').data,{addLabelIds:['L0','L3'],removeLabelIds:['INBOX']});
 });
-test('interface confirma etiqueta mantendo a linha e insere a conversa nas colunas',async()=>{
+test('interface confirma etiqueta removendo a linha e insere a conversa nas colunas',async()=>{
  const h=harness(),posted=[];
  const ui=interactive(async(url,options={})=>{
   const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1);
@@ -206,9 +212,9 @@ test('interface confirma etiqueta mantendo a linha e insere a conversa nas colun
  const button=ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='2');
  assert.equal(button.disabled,false);await button.listeners.click();
  assert.equal(posted.length,1);assert.equal(posted[0].messageId,'inbox2');
- assert.ok(ui.root.querySelector('#inbox-feedback').textContent.includes('permanece na Caixa de entrada'));
- assert.ok(ui.root.querySelector('#inbox-list').innerHTML.includes('data-message="inbox2"'));
- assert.ok(ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='2').disabled);
+ assert.ok(ui.root.querySelector('#inbox-feedback').textContent.includes('movida para 9-Classificado'));
+ assert.ok(!ui.root.querySelector('#inbox-list').innerHTML.includes('data-message="inbox2"'));
+ assert.ok(!ui.root.classifyButtons.some(b=>b.dataset.message==='inbox2'));
  assert.ok(ui.root.querySelector('#demand-columns').innerHTML.includes('data-thread="thread2"'));
  const summaries=h.calls.filter(call=>call.url.includes('/threads/thread2'));
  assert.ok(summaries.every(call=>new URL(call.url).searchParams.get('format')==='metadata'));
@@ -228,4 +234,78 @@ test('falha de classificação não anuncia sucesso nem altera a linha na interf
  assert.ok(!ui.root.querySelector('#inbox-feedback').textContent.includes('aplicada'));
  assert.ok(!h.messages.get('inbox2').labelIds.includes('L2'));
  assert.ok(ui.root.classifyButtons.every(b=>b.disabled));ui.api.unmount();
+});
+
+
+test('responsáveis são independentes por categoria e MINHAS força a identidade Pessoal',async()=>{
+ const h=harness();h.threads.get('thread1').messages[0].labelIds.push('L2');
+ await h.run('demand',{body:h.body({responsible:'Ana'})});
+ await h.run('demand',{body:h.body({version:1,column:2,responsible:'Bruno'})});
+ const saved=await h.run('demand',{body:h.body({version:2,column:1,responsible:'Não deve aceitar'})});
+ assert.deepEqual(saved.demand.responsibles,{'0':'Ana','1':h.email,'2':'Bruno'});
+ assert.equal(saved.demand.history[1].column,2);
+ assert.equal(saved.demand.version,2);
+ const unchanged=await h.run('demand',{body:h.body({version:2,column:1,responsible:'Outro'})});
+ assert.equal(unchanged.demand.version,2);
+ await assert.rejects(h.run('demand',{body:h.body({version:3,column:3})}),{message:'invalid_demand'});
+});
+test('registro anterior mantém prazo, conclusão, histórico e responsável inicial',async()=>{
+ const h=harness();h.rows.set(h.owner+'.thread1',{id:'old',threadId:'thread1',version:4,dueDate:'2026-11-25',completed:true,responsible:'Legado',sourceMessageId:'message1',history:[]});
+ const result=await h.run('demand',{body:h.body({version:4,column:0,dueDate:'2026-11-25',completed:true,responsible:'Novo'})});
+ assert.equal(result.demand.responsible,'Legado');assert.equal(result.demand.responsibles[0],'Novo');
+ assert.equal(result.demand.dueDate,'2026-11-25');assert.equal(result.demand.completed,true);
+ assert.equal(result.demand.history[0].before.responsible,'Legado');
+});
+test('não salva responsável em categoria que não pertence à conversa',async()=>{
+ const h=harness();await assert.rejects(h.run('demand',{body:h.body({column:2})}),{message:'not_found'});
+ assert.equal(h.rows.size,0);
+});
+test('classificar categoria já aplicada ainda completa a movimentação e preserva etiquetas',async()=>{
+ const h=harness();await h.run('classify',{body:{type:'personal',mailbox:h.email,messageId:'message1',column:0}});
+ const labels=h.messages.get('message1').labelIds;
+ assert.ok(labels.includes('L0')&&labels.includes('L1')&&labels.includes('L3')&&labels.includes('CUSTOM')&&labels.includes('UNREAD'));
+ assert.ok(!labels.includes('INBOX'));
+});
+
+test('MINHAS salva a identidade verificada mesmo que o cliente informe outro responsável',async()=>{
+ const h=harness();const saved=await h.run('demand',{body:h.body({column:1,responsible:'Outro'})});
+ assert.equal(saved.demand.responsibles[1],h.email);
+ assert.equal(saved.demand.history[0].column,1);assert.equal(saved.demand.history[0].after.responsible,h.email);
+});
+
+test('interface abre a categoria correta, salva responsável independente e mostra MINHAS automaticamente',async()=>{
+ const h=harness();h.threads.get('thread1').messages[0].labelIds.push('L2');
+ await h.run('demand',{body:h.body({responsible:'Ana'})});
+ await h.run('demand',{body:h.body({version:1,column:2,responsible:'Bruno'})});
+ const posted=[],ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1),body=options.body?JSON.parse(options.body):undefined;
+  if(body)posted.push(body);
+  const result=await h.run(action,{body,query:Object.fromEntries(parsed.searchParams)});return {ok:true,json:async()=>result};
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ assert.ok(ui.root.querySelector('#demand-columns').innerHTML.includes('Responsável: '+h.email));
+ await ui.root.threadButtons.find(b=>b.dataset.column==='1').listeners.click();
+ let content=ui.document.querySelector('#demand-detail');
+ assert.match(content.innerHTML,/id="demand-responsible"[^>]*readonly[^>]*value="person@gmail.com"/);
+ await ui.root.threadButtons.find(b=>b.dataset.column==='0').listeners.click();
+ assert.match(content.innerHTML,/id="demand-responsible"[^>]*value="Ana"/);
+ content.querySelector('#demand-responsible').value='Carla';content.querySelector('#demand-date').value='2026-11-20';
+ await content.querySelector('#demand-form').listeners.submit({preventDefault(){}});
+ assert.equal(posted[0].column,0);assert.equal(h.rows.get(h.owner+'.thread1').responsibles[2],'Bruno');
+ ui.api.unmount();
+});
+test('adicionar categoria pela conversa preserva campos ainda não salvos e move só a mensagem',async()=>{
+ const h=harness(),ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1),body=options.body?JSON.parse(options.body):undefined;
+  const result=await h.run(action,{body,query:Object.fromEntries(parsed.searchParams)});return {ok:true,json:async()=>result};
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ await ui.root.threadButtons.find(b=>b.dataset.column==='0').listeners.click();
+ const content=ui.document.querySelector('#demand-detail');content.querySelector('#demand-responsible').value='Ainda editando';
+ await content.detailButtons.find(b=>b.dataset.detailClassify==='2').listeners.click();
+ assert.equal(content.querySelector('#demand-responsible').value,'Ainda editando');
+ assert.ok(h.messages.get('message1').labelIds.includes('L2'));assert.ok(h.messages.get('message1').labelIds.includes('L3'));
+ assert.ok(!h.messages.get('message1').labelIds.includes('INBOX'));
+ assert.ok(content.querySelector('#demand-save-status').textContent.includes('9-Classificado'));
+ ui.api.unmount();
 });

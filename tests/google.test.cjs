@@ -249,25 +249,25 @@ test('revogar a sessão Supabase Geral não encerra a Pessoal',async()=>{
  assert.equal(data.connections.personal.email,'visitor@gmail.com');
 });
 
-test('Pessoal cria somente as três labels ausentes e reconectar não duplica',async()=>{
+test('Pessoal cria somente as quatro labels ausentes e reconectar não duplica',async()=>{
  const h=harness();h.labels.set('person@gmail.com',new Set(['Outra',PERSONAL_LABELS[0]]));
  const first=await h.login('person@gmail.com');
  assert.match(first.response.headers.location,/connected/);
  assert.deepEqual([...h.labels.get('person@gmail.com')].sort(),['Outra',...PERSONAL_LABELS].sort());
  assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),PERSONAL_LABELS.slice(1));
  const second=await h.login('person@gmail.com',first.cookie);
- assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,2);
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,3);
  assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.personal.labels,'ready');
  h.labels.get('person@gmail.com').delete(PERSONAL_LABELS[0]);
  assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.personal.labels,'missing');
- assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,2,'status must never create');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,3,'status must never create');
 });
 test('Geral não solicita nem consulta/cria labels; Pessoal cria na própria conta',async()=>{
  const h=harness(),general=await h.login('school@gmail.com','','general');
  await h.request('status',{cookie:general.cookie});assert.equal(h.labelRequests.length,0);
  const personal=await h.login('person@gmail.com',general.cookie);
  assert.ok(h.labelRequests.every(r=>r.email==='person@gmail.com'));
- assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['1-ME DEVEM','2-MINHAS','3-DEVO']);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['1-ME DEVEM','2-MINHAS','3-DEVO','9-Classificado']);
  const data=(await h.request('status',{cookie:general.cookie+'; '+personal.cookie})).json();
  assert.equal(data.mode,'both');assert.equal(data.connections.general.labels,undefined);
  assert.equal(data.connections.personal.labels,'ready');assert.equal(h.labels.has('school@gmail.com'),false);
@@ -284,11 +284,11 @@ test('falha nas labels não perde conexão e nova autorização completa o prepa
  h.failLabels(403);assert.equal((await h.request('status',{cookie:first.cookie})).json().connections.personal.labels,'unavailable');
  h.failLabels(null);const next=await h.login('admin@gmail.com',first.cookie);
  assert.match(next.response.headers.location,/connected/);
- assert.equal(h.labels.get('admin@gmail.com').size,3);
+ assert.equal(h.labels.get('admin@gmail.com').size,4);
 });
 test('criação concorrente aceita conflito apenas após confirmar o nome existente',async()=>{
  const h=harness();h.raceLabels();const account=await h.login();
- assert.match(account.response.headers.location,/connected/);assert.equal(h.labels.get('admin@gmail.com').size,3);
+ assert.match(account.response.headers.location,/connected/);assert.equal(h.labels.get('admin@gmail.com').size,4);
  const bad=harness();bad.failLabels(400,'POST');const failed=await bad.login();
  assert.match(failed.response.headers.location,/partial/);assert.equal(bad.labels.get('admin@gmail.com').size,0);
 });
@@ -296,7 +296,7 @@ test('identidade inválida nunca cria labels e desconectar não apaga marcadores
  const bad=harness();bad.setIdentity({email_verified:false});await bad.login();assert.equal(bad.labelRequests.length,0);
  const h=harness(),account=await h.login();
  await h.request('disconnect',{method:'POST',body:{type:'personal'},cookie:account.cookie});
- assert.equal(h.labels.get('admin@gmail.com').size,3);
+ assert.equal(h.labels.get('admin@gmail.com').size,4);
  assert.ok(h.labelRequests.every(r=>['GET','POST'].includes(r.method)));
 });
 

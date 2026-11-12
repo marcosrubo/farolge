@@ -1,5 +1,6 @@
 'use strict';
 const LABELS=['1-ME DEVEM','2-MINHAS','3-DEVO'];
+const CLASSIFIED='9-Classificado';
 const BASE='https://gmail.googleapis.com/gmail/v1/users/me';
 const validId=value=>typeof value==='string' && /^[\w-]{1,128}$/.test(value);
 const fail=(code,status)=>{throw Object.assign(new Error(code),{status});};
@@ -27,14 +28,14 @@ function summary(thread,labelIds){
   return {id:thread.id,sourceMessageId:first.id,subject:clean(head.subject||headers(first).subject||'(Sem assunto)'),from:clean(head.from),to:clean(head.to),snippet:clean(last.snippet||thread.snippet),date:Number(last.internalDate)||0,unread:messages.some(m=>(m.labelIds||[]).includes('UNREAD')),messageCount:messages.length,labels:LABELS.filter((_,i)=>relevant.some(m=>(m.labelIds||[]).includes(labelIds[i])))};
 }
 function publicDemand(row){
-  return row?{id:row.id,version:row.version,dueDate:row.dueDate,completed:row.completed,responsible:row.responsible,sourceMessageId:row.sourceMessageId,history:row.history}:null;
+  return row?{id:row.id,version:row.version,dueDate:row.dueDate,completed:row.completed,responsible:row.responsible,responsibles:row.responsibles,sourceMessageId:row.sourceMessageId,history:row.history}:null;
 }
 async function handleDemands({action,url,body,client,store,owner,email,canClassify=false}){
   const request=async(path)=>{const {data}=await client.request({url:BASE+path,timeout:10000});return data;};
   const expected=['demand','classify'].includes(action)?body.mailbox:url.searchParams.get('mailbox');
   if(expected!==email)fail('account_changed',409);
   if(action==='demand'){
-    if(Object.keys(body).some(key=>!['type','mailbox','threadId','version','dueDate','completed','responsible'].includes(key)) || body.type!=='personal' || !validId(body.threadId) || !Number.isSafeInteger(body.version) || body.version<0 || !validDate(body.dueDate) || typeof body.completed!=='boolean' || typeof body.responsible!=='string' || body.responsible.length>200)fail('invalid_demand',400);
+    if(Object.keys(body).some(key=>!['type','mailbox','threadId','version','dueDate','completed','responsible','column'].includes(key)) || body.type!=='personal' || !Number.isInteger(body.column) || body.column<0 || body.column>2 || !validId(body.threadId) || !Number.isSafeInteger(body.version) || body.version<0 || !validDate(body.dueDate) || typeof body.completed!=='boolean' || typeof body.responsible!=='string' || body.responsible.length>200)fail('invalid_demand',400);
   }
   if(action==='classify') {
     if(Object.keys(body).some(key=>!['type','mailbox','messageId','column'].includes(key)) || body.type!=='personal' || !validId(body.messageId) || !Number.isInteger(body.column) || body.column<0 || body.column>2)fail('invalid_classification',400);
@@ -42,6 +43,7 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
   }
   const {labels=[]}=await request('/labels');
   const ids=LABELS.map(name=>labels.find(label=>label.name===name)?.id||null);
+  const classifiedId=labels.find(label=>label.name===CLASSIFIED)?.id;
   const inboxMessage=message=>{
     if(!validId(message.id)||!validId(message.threadId))fail('invalid_provider',502);
     const h=headers(message),labelIds=message.labelIds||[];
@@ -59,18 +61,19 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
         return inInbox(message)?inboxMessage(message):null;
       } catch(error){if(error.response?.status===404)return null;throw error;}
     })).filter(Boolean);
-    return {mailbox:email,items,nextPage:listed.nextPageToken||null,canClassify,missingLabels:ids.some(id=>!id)};
+    return {mailbox:email,items,nextPage:listed.nextPageToken||null,canClassify,missingLabels:ids.some(id=>!id)||!classifiedId};
   }
   if(action==='classify') {
-    const label=ids[body.column];if(!label)fail('labels_missing',409);
+    const label=ids[body.column];if(!label||!classifiedId)fail('labels_missing',409);
     const message=await request('/messages/'+body.messageId+'?format=metadata');
-    if(!inInbox(message))fail('not_inbox',409);
+    const current=message.labelIds||[];
+    if(current.some(id=>['TRASH','SPAM','DRAFT'].includes(id)) || (!inInbox(message)&&!current.includes(classifiedId)))fail('not_inbox',409);
     let result=message;
-    if(!(message.labelIds||[]).includes(label)) {
-      const response=await client.request({url:BASE+'/messages/'+body.messageId+'/modify',method:'POST',data:{addLabelIds:[label]},timeout:10000});
+    if(!current.includes(label)||!current.includes(classifiedId)||current.includes('INBOX')) {
+      const response=await client.request({url:BASE+'/messages/'+body.messageId+'/modify',method:'POST',data:{addLabelIds:[label,classifiedId],removeLabelIds:['INBOX']},timeout:10000});
       result=response.data;
     }
-    if(result?.id!==body.messageId || !(result.labelIds||[]).includes(label))fail('classification_unconfirmed',502);
+    if(result?.id!==body.messageId || ![label,classifiedId].every(id=>(result.labelIds||[]).includes(id)) || (result.labelIds||[]).includes('INBOX'))fail('classification_unconfirmed',502);
     return {mailbox:email,item:inboxMessage({...message,...result,threadId:message.threadId,payload:message.payload,snippet:message.snippet,internalDate:message.internalDate}),inInbox:inInbox(result)};
   }
   if(action==='board'){
@@ -101,13 +104,19 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
   if(action==='thread'&&summaryOnly)return {mailbox:email,thread:{...card,demand:publicDemand(previous)}};
   if(action==='thread')return {mailbox:email,thread:{...card,demand:publicDemand(previous),messages:thread.messages.map(message=>{
     const h=headers(message),text=plainText(message.payload);
-    return {id:message.id,from:clean(h.from),to:clean(h.to),date:Number(message.internalDate)||0,text:text||clean(message.snippet),previewOnly:!text};
+    return {id:message.id,from:clean(h.from),to:clean(h.to),date:Number(message.internalDate)||0,text:text||clean(message.snippet),previewOnly:!text,labels:LABELS.filter((_,i)=>(message.labelIds||[]).includes(ids[i])),canClassify:canClassify && !!classifiedId && !ids.some(id=>!id) && (inInbox(message)||(message.labelIds||[]).includes(classifiedId)) && !(message.labelIds||[]).some(id=>['TRASH','SPAM','DRAFT'].includes(id))};
   })}};
   if(body.version!==(previous?.version||0))fail('conflict',409);
-  const state={dueDate:body.dueDate,completed:body.completed,responsible:body.responsible.trim()};
-  if(previous && Object.keys(state).every(key=>previous[key]===state[key]))return {mailbox:email,demand:publicDemand(previous)};
+  if(!card.labels.includes(LABELS[body.column]))fail('not_found',404);
+  // Old shared responsible remains the fallback until each category is edited.
+  const responsibles={...(previous?.responsibles||{}),1:email};
+  const responsible=body.column===1?email:body.responsible.trim();
+  const priorResponsible=body.column===1?email:(responsibles[body.column]??previous?.responsible??'');
+  if(previous && previous.dueDate===body.dueDate && previous.completed===body.completed && priorResponsible===responsible)return {mailbox:email,demand:publicDemand(previous)};
+  responsibles[body.column]=responsible;
+  const state={dueDate:body.dueDate,completed:body.completed,responsible:previous?.responsible??'',responsibles};
   const before=previous?{dueDate:previous.dueDate,completed:previous.completed,responsible:previous.responsible}:null;
-  const value={...state,sourceMessageId:previous?.sourceMessageId||card.sourceMessageId,history:[...(previous?.history||[]),{at:new Date().toISOString(),before,after:state}]};
+  const value={...state,sourceMessageId:previous?.sourceMessageId||card.sourceMessageId,history:[...(previous?.history||[]),{at:new Date().toISOString(),column:body.column,before:{...before,responsible:priorResponsible},after:{...state,responsible}}]};
   const saved=await store.saveDemand(owner,id,value,body.version);
   if(!saved)fail('conflict',409);
   return {mailbox:email,demand:publicDemand(saved)};
