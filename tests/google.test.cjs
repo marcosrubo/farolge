@@ -302,7 +302,7 @@ test('identidade inválida nunca cria labels e desconectar não apaga marcadores
 
 test('endpoints de demandas exigem sessão Pessoal e protegem escrita com CSRF',async()=>{
  const h=harness();
- for(const action of ['board','thread','inbox'])assert.equal((await h.request(action,{query:'?mailbox=admin@gmail.com&column=0&id=thread1'})).status,401);
+ for(const action of ['board','thread','inbox','classified'])assert.equal((await h.request(action,{query:'?mailbox=admin@gmail.com&column=0&id=thread1'})).status,401);
  const general=await h.login('school@gmail.com','','general');
  assert.equal((await h.request('board',{cookie:general.cookie,query:'?mailbox=school@gmail.com&column=0'})).status,401);
  assert.equal((await h.request('demand',{method:'POST',body:{type:'personal'},origin:'https://evil.invalid'})).status,403);

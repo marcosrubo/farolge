@@ -23,7 +23,7 @@ function harness(){
  const client={async request({url,method='GET',data}){
   calls.push({url,method,data});if(providerFailure)throw Object.assign(new Error('provider'),{response:{status:providerFailure}});
   const parsed=new URL(url),path=parsed.pathname.split('/').at(-1);
-  if(path==='messages')return {data:{messages:[...messages.values()].filter(m=>m.labelIds.includes('INBOX')).map(m=>({id:m.id,threadId:m.threadId})),nextPageToken:parsed.searchParams.has('pageToken')?undefined:'inbox-next'}};
+  if(path==='messages')return {data:{messages:[...messages.values()].filter(m=>m.labelIds.includes(parsed.searchParams.get('labelIds'))).map(m=>({id:m.id,threadId:m.threadId})),nextPageToken:parsed.searchParams.has('pageToken')?undefined:'inbox-next'}};
   if(parsed.pathname.includes('/messages/')){
     const id=path==='modify'?parsed.pathname.split('/').at(-2):path;
     const message=messages.get(id);if(!message)throw Object.assign(new Error('missing'),{response:{status:404}});
@@ -129,6 +129,9 @@ function interactive(fetcher){
    if(selector==='[data-detail-classify]'){
     if(!this.detailButtons)this.detailButtons=[...this.innerHTML.matchAll(/<button[^>]*data-detail-classify="([0-2])" data-message="([\w-]+)"([^>]*)>/g)].map(match=>{const b=new Node();b.dataset={detailClassify:match[1],message:match[2]};b.disabled=match[3].includes('disabled');return b;});return this.detailButtons;
    }
+   if(selector==='[data-classified-classify]'){
+    this.classifiedButtons=[...this.querySelector('#classified-list').innerHTML.matchAll(/<button[^>]*data-classified-classify="([0-2])" data-message="([\w-]+)"([^>]*)>/g)].map(match=>{const b=new Node();b.dataset={classifiedClassify:match[1],message:match[2]};b.disabled=match[3].includes('disabled');return b;});return this.classifiedButtons;
+   }
    if(selector!=='[data-classify]')return [];
    const html=this.querySelector('#inbox-list').innerHTML;
    this.classifyButtons=[...html.matchAll(/<button[^>]*data-classify="([0-2])" data-message="([\w-]+)"([^>]*)>/g)].map(match=>{const button=new Node();button.dataset={classify:match[1],message:match[2]};button.disabled=match[3].includes('disabled');return button;});
@@ -146,7 +149,7 @@ test('quadro carrega três colunas e apaga dados imediatamente quando a conta mu
  const requests=[];
  const h=interactive(async(url)=>{requests.push(url);return {ok:true,json:async()=>({mailbox:'person@gmail.com',items:[],nextPage:null})};});
  h.api.connectionChanged({email:'person@gmail.com',gmail:true});h.api.mount(h.root);await settle();
- assert.equal(requests.length,4);assert.ok(h.root.querySelector('#demand-columns').innerHTML.includes('1-ME DEVEM'));
+ assert.equal(requests.length,5);assert.ok(h.root.querySelector('#demand-columns').innerHTML.includes('1-ME DEVEM'));
  h.api.connectionChanged(null);
  assert.ok(h.root.querySelector('#demand-notice').textContent.includes('Conecte a conta Pessoal'));
  assert.ok(!h.root.querySelector('#demand-columns').innerHTML.includes('person@gmail.com'));
@@ -307,5 +310,49 @@ test('adicionar categoria pela conversa preserva campos ainda não salvos e move
  assert.ok(h.messages.get('message1').labelIds.includes('L2'));assert.ok(h.messages.get('message1').labelIds.includes('L3'));
  assert.ok(!h.messages.get('message1').labelIds.includes('INBOX'));
  assert.ok(content.querySelector('#demand-save-status').textContent.includes('9-Classificado'));
+ ui.api.unmount();
+});
+
+test('lista 9-Classificado pagina mensagens individuais, exclui lixeira e não exige banco',async()=>{
+ const h=harness();h.messages.get('message1').labelIds.push('L3');
+ h.messages.get('inbox2').labelIds=['L3','TRASH'];
+ h.store.getDemands=()=>{throw new Error('não consultar banco');};
+ const result=await h.run('classified',{query:{page:'classified-next'}});
+ assert.deepEqual(result.items.map(item=>item.id),['message1']);
+ assert.deepEqual(result.items[0].labels,['1-ME DEVEM','2-MINHAS']);
+ assert.equal(result.items[0].unread,true);assert.equal(result.canClassify,true);
+ const call=new URL(h.calls.find(c=>new URL(c.url).pathname.endsWith('/messages')).url);
+ assert.equal(call.searchParams.get('labelIds'),'L3');assert.equal(call.searchParams.get('pageToken'),'classified-next');
+ assert.equal(call.searchParams.get('maxResults'),'20');assert.ok(h.calls.every(c=>c.method==='GET'));
+});
+test('interface acrescenta categoria em 9-Classificado preservando mensagem, categorias e prazo',async()=>{
+ const h=harness();h.messages.get('message1').labelIds=['L0','L3','UNREAD','CUSTOM'];
+ await h.run('demand',{body:h.body({responsible:'Ana'})});
+ const ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1),body=options.body?JSON.parse(options.body):undefined;
+  const result=await h.run(action,{body,query:Object.fromEntries(parsed.searchParams)});return {ok:true,json:async()=>result};
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ assert.ok(ui.root.classifiedButtons.find(b=>b.dataset.classifiedClassify==='0').disabled);
+ await ui.root.classifiedButtons.find(b=>b.dataset.classifiedClassify==='2').listeners.click();
+ assert.ok(ui.root.querySelector('#classified-list').innerHTML.includes('data-message="message1"'));
+ assert.ok(ui.root.classifiedButtons.find(b=>b.dataset.classifiedClassify==='2').disabled);
+ assert.ok(ui.root.querySelector('#classified-feedback').textContent.includes('mantida em 9-Classificado'));
+ assert.deepEqual(h.messages.get('message1').labelIds,['L0','L3','UNREAD','CUSTOM','L2']);
+ assert.equal(h.rows.get(h.owner+'.thread1').responsibles[0],'Ana');assert.equal(h.rows.get(h.owner+'.thread1').dueDate,'2026-11-20');
+ ui.root.querySelector('#classified-search').listeners.input({target:{value:'não existe'}});
+ assert.ok(!ui.root.querySelector('#classified-list').innerHTML.includes('data-message="message1"'));
+ ui.api.connectionChanged(null);assert.ok(!ui.root.querySelector('#classified-list').innerHTML.includes('Trabalho'));
+ ui.api.unmount();
+});
+test('classificação na entrada aparece também na lista final de classificados',async()=>{
+ const h=harness(),ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1),body=options.body?JSON.parse(options.body):undefined;
+  const result=await h.run(action,{body,query:Object.fromEntries(parsed.searchParams)});return {ok:true,json:async()=>result};
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ await ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='1').listeners.click();
+ assert.ok(ui.root.querySelector('#classified-list').innerHTML.includes('data-message="inbox2"'));
+ assert.ok(!ui.root.querySelector('#inbox-list').innerHTML.includes('data-message="inbox2"'));
  ui.api.unmount();
 });

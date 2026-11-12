@@ -150,7 +150,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classify'].includes(action))return reply(404,{error:'not_found'});
+    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify'].includes(action))return reply(404,{error:'not_found'});
     const expected=['start','disconnect','logout','demand','classify'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
@@ -200,7 +200,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
-      if(['board','thread','demand','inbox','classify'].includes(action)) {
+      if(['board','thread','demand','inbox','classified','classify'].includes(action)) {
         try {
           const current=await account('personal');
           if(!current)return reply(401,{error:'login_required'});

@@ -50,15 +50,17 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
     return {id:message.id,threadId:message.threadId,subject:clean(h.subject||'(Sem assunto)'),from:clean(h.from),to:clean(h.to),snippet:clean(message.snippet),date:Number(message.internalDate)||0,unread:labelIds.includes('UNREAD'),labels:LABELS.filter((_,i)=>labelIds.includes(ids[i]))};
   };
   const inInbox=message=>(message.labelIds||[]).includes('INBOX') && !(message.labelIds||[]).some(id=>['TRASH','SPAM','DRAFT'].includes(id));
-  if(action==='inbox') {
+  if(action==='inbox'||action==='classified') {
     const page=url.searchParams.get('page')||'';if(page.length>2048)fail('invalid_page',400);
-    const params=new URLSearchParams({labelIds:'INBOX',maxResults:'20',includeSpamTrash:'false'});if(page)params.set('pageToken',page);
+    const listLabel=action==='classified'?classifiedId:'INBOX';
+    if(!listLabel)return {mailbox:email,items:[],nextPage:null,canClassify,missingLabels:true};
+    const params=new URLSearchParams({labelIds:listLabel,maxResults:'20',includeSpamTrash:'false'});if(page)params.set('pageToken',page);
     const listed=await request('/messages?'+params);
     const items=(await limitedMap(listed.messages||[],async item=>{
       if(!validId(item.id))fail('invalid_provider',502);
       try {
         const message=await request('/messages/'+item.id+'?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To');
-        return inInbox(message)?inboxMessage(message):null;
+        return (message.labelIds||[]).includes(listLabel) && !(message.labelIds||[]).some(id=>['TRASH','SPAM','DRAFT'].includes(id))?inboxMessage(message):null;
       } catch(error){if(error.response?.status===404)return null;throw error;}
     })).filter(Boolean);
     return {mailbox:email,items,nextPage:listed.nextPageToken||null,canClassify,missingLabels:ids.some(id=>!id)||!classifiedId};
