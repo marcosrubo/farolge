@@ -108,9 +108,11 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 
 /* Caixa de entrada ocupa a largura das três colunas; ações por mensagem. */
 .inbox-panel{margin-top:28px;padding:20px;background:#fff;border:1px solid var(--border);border-radius:12px;min-width:0}
-.inbox-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.inbox-heading h2{margin:0;font-size:20px;color:var(--green)}
-.inbox-heading h2 span{display:inline-block;font-size:11px;font-weight:400;color:#617258;margin-left:10px}
+.inbox-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:-20px -20px 16px;padding:18px 20px;background:var(--green);color:#fff;border-radius:11px 11px 0 0}
+.inbox-heading h2{margin:0;font-size:20px;color:#fff}
+.inbox-heading h2 span{display:inline-block;font-size:11px;font-weight:400;color:#e3eee6;margin-left:10px}
+.inbox-heading .button{background:transparent;color:#fff;border-color:#ffffff80}
+.inbox-heading .button:hover:not(:disabled){background:#ffffff18}
 .inbox-search{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;max-width:520px;color:var(--green)}
 .inbox-search input{border:1px solid #cbd8c8;border-radius:7px;padding:10px;min-height:42px;font:inherit;width:100%}
 .inbox-message{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;padding:20px 8px;border-top:1px solid var(--border)}
@@ -122,4 +124,4 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .inbox-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .inbox-actions .button{font-size:11px;padding:9px;white-space:nowrap}
 @media(max-width:1100px){.inbox-message{grid-template-columns:minmax(0,1fr);gap:8px}.inbox-actions{justify-content:flex-start}}
-@media(max-width:600px){.inbox-panel{padding:14px}.inbox-heading h2 span{display:block;margin:8px 0}.inbox-actions .button{flex:1}}
+@media(max-width:600px){.inbox-panel{padding:14px}.inbox-heading{margin:-14px -14px 14px;padding:14px}.inbox-heading h2 span{display:block;margin:8px 0}.inbox-actions .button{flex:1}}
