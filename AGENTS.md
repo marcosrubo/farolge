@@ -13,6 +13,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 13/11/2026, Marcos pediu implementar Demandas INSTITUCIONAIS com leitura da caixa de entrada da conexão GERAL e relação de atividades por data limite identificada. Implementação inicial usa regras de texto no backend, sem IA externa, com trecho para conferência, paginação e ordenação dos itens carregados. Datas incompletas/ambíguas ficam sinalizadas; sem prazo claro, manter o e-mail na relação. Somente consulta: preservar INBOX, UNREAD e demais marcadores. Sem consulta a anexos/links nem persistência de conteúdo ou prazos institucionais. GERAL e PESSOAL permanecem isoladas; não reutilizar as regras de classificação ou acompanhamento Pessoal. Política revisão 9. Limites e validação na Vercel descritos no README.
+
 - Marcos confirmou o funcionamento dos quatro marcadores e pediu a lista de mensagens de `9-Classificado` ao final de Demandas PESSOAIS. Exibir paginação e permitir acrescentar categorias simultâneas diretamente nessa lista, mantendo sempre `9-Classificado` e as categorias anteriores. Consulta e ações exclusivas da Pessoal; preservar a Geral.
 
 - Em 12/11/2026, Marcos autorizou o novo fluxo de Demandas PESSOAIS: ao conectar/reautorizar Pessoal, verificar e criar somente os ausentes, nesta ordem: `1-ME DEVEM`, `2-MINHAS`, `3-DEVO`, `9-Classificado`. Consultar status não cria marcadores. Preservar a Geral e todos os marcadores existentes.

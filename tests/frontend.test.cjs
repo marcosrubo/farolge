@@ -64,7 +64,7 @@ test('explicações e Radar ficam disponíveis em todos os módulos sem conexão
  for(const route of ['inicio','radar','institucionais','pessoais','bi-seed','configuracoes']){
   h.context.location.hash='#'+route;h.window.listeners.hashchange();
   assert.equal(h.get('#main').hidden,false);
-  assert.ok(h.get('#main').innerHTML.includes(route==='radar'?'ANÁLISES':route==='pessoais'?'Demandas PESSOAIS':'em Desenvolvimento'));
+  assert.ok(h.get('#main').innerHTML.includes(route==='radar'?'ANÁLISES':route==='pessoais'?'Demandas PESSOAIS':route==='institucionais'?'Demandas INSTITUCIONAIS':'em Desenvolvimento'));
  }
  assert.ok(!fs.readFileSync('index.html','utf8').includes('<main hidden'));
  assert.equal(h.get('#email-general-status').textContent,'NÃO conectado');

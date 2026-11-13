@@ -125,3 +125,8 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .inbox-actions .button{font-size:11px;padding:9px;white-space:nowrap}
 @media(max-width:1100px){.inbox-message{grid-template-columns:minmax(0,1fr);gap:8px}.inbox-actions{justify-content:flex-start}}
 @media(max-width:600px){.inbox-panel{padding:14px}.inbox-heading{margin:-14px -14px 14px;padding:14px}.inbox-heading h2 span{display:block;margin:8px 0}.inbox-actions .button{flex:1}}
+
+.institutional-activity{font-size:1rem;line-height:1.5;margin:.65rem 0;overflow-wrap:anywhere}
+.institutional-evidence{white-space:pre-wrap;overflow-wrap:anywhere;border-left:3px solid #8caaa1;margin:1rem 0;padding:.5rem 1rem}
+#institutional-list details{margin:.7rem 0}
+#institutional-list summary{cursor:pointer}

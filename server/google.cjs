@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
 const {handleDemands}=require('./demands.cjs');
+const {handleInstitutional}=require('./institutional.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
@@ -150,7 +151,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify'].includes(action))return reply(404,{error:'not_found'});
+    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional'].includes(action))return reply(404,{error:'not_found'});
     const expected=['start','disconnect','logout','demand','classify'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
@@ -200,17 +201,20 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
-      if(['board','thread','demand','inbox','classified','classify'].includes(action)) {
+      if(['board','thread','demand','inbox','classified','classify','institutional'].includes(action)) {
         try {
-          const current=await account('personal');
+          const type=action==='institutional'?'general':'personal';
+          const current=await account(type);
           if(!current)return reply(401,{error:'login_required'});
-          const connection=await store.getConnection(current.user.id,'personal');
+          const connection=await store.getConnection(current.user.id,type);
           if(!connection || connection.email!==current.user.email || !connection.capabilities.gmail)return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
-          const result=await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
+          const result=action==='institutional'
+            ?await handleInstitutional({url,client,email:current.user.email})
+            :await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
           // Credential caching must not turn an already committed demand into a false failure.
           // The stored refresh token remains available for the next request.
-          try {await store.putConnection(current.user.id,'personal',{...connection,credentials:credentialsOf(client)});}catch{}
+          try {await store.putConnection(current.user.id,type,{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
           const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed'];

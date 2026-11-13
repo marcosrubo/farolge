@@ -346,3 +346,18 @@ test('permissão de classificação é exclusiva da Pessoal e recusa preserva co
  const granted=(await h.request('status',{cookie:modified.cookie})).json();
  assert.equal(granted.connections.personal.gmail,true);assert.equal(granted.connections.personal.classify,true);
 });
+
+test('Institucionais exige sessão GERAL própria, permissão de leitura e caixa verificada',async()=>{
+ const h=harness();
+ assert.equal((await h.request('institutional')).status,401);
+ const personal=await h.login();
+ assert.equal((await h.request('institutional',{cookie:personal.cookie,query:'?mailbox=admin@gmail.com'})).status,401);
+ const general=await h.login('school@gmail.com','','general');
+ assert.equal((await h.request('institutional',{cookie:general.cookie,query:'?mailbox=admin@gmail.com'})).status,409);
+ assert.equal((await h.request('institutional',{cookie:general.cookie,query:'?mailbox=school@gmail.com'})).status,200);
+ assert.equal((await h.request('institutional',{method:'POST',body:{type:'general'},cookie:general.cookie})).status,405);
+ h.setScopes('openid email profile '+DRIVE_SCOPE);
+ const denied=await h.login('other@gmail.com','','general');
+ assert.equal((await h.request('institutional',{cookie:denied.cookie,query:'?mailbox=other@gmail.com'})).status,403);
+ assert.equal((await h.request('status',{cookie:personal.cookie})).json().connections.personal.email,'admin@gmail.com');
+});
