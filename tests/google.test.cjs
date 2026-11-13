@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS}=require('../server/google.cjs');
+const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS,GENERAL_LABELS}=require('../server/google.cjs');
 const env={FAROL_GOOGLE_ENABLED:'true',FAROL_ORIGIN:'https://farol.example',GOOGLE_CLIENT_ID:'test-client',GOOGLE_CLIENT_SECRET:'test-secret',FAROL_TOKEN_KEY:Buffer.alloc(32,7).toString('base64'),FAROL_SUPABASE_URL:'https://test.supabase.co',FAROL_SUPABASE_SERVICE_ROLE_KEY:'test-service',FAROL_SUPABASE_ANON_KEY:'test-anon'};
 const GENERAL_EMAIL='escola@escola.pr.gov.br';
 const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -11,7 +11,7 @@ function harness(overrides={}){
  const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[];
  let labelFailure=null,labelRace=false;
  const labelError=status=>Object.assign(new Error('label_error'),{response:{status}});
- const store={async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async removeConnection(id,type){connections.delete(id+'.'+type);}};
+ const store={async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
  let email='admin@gmail.com',identityOverride={},scopes=null,options,issuedOptions,flowOptions=new Map(),calls=0,authUnavailable=false,nowLogout=[],gmailDenied=false,failedEmail=null,failedStatus=503,revokedAuthEmail=null;
  const userFor=value=>{if(!users.has(value))users.set(value,{id:'user-'+digest(value).slice(0,16),email:value,identities:[{provider:'google',identity_data:{sub:'sub-'+value}}]});return users.get(value);};
  const auth={async signIn(token,access,nonce){assert.equal(digest(nonce),issuedOptions.nonce);assert.equal(token,'id:'+email);const user=userFor(email);return {user,access_token:'auth:'+email,refresh_token:'refresh:'+email,expires_in:3600};},async user(token){if(authUnavailable || token.slice(5)===revokedAuthEmail)throw new Error('login_required');return userFor(token.slice(5));},async refresh(token){const value=token.slice(8);return {access_token:'auth:'+value,refresh_token:token,expires_in:3600};},async logout(token){nowLogout.push(token);}};
@@ -24,7 +24,7 @@ function harness(overrides={}){
    if(method==='POST') {
      assert.ok(users.has(value),'identity must be verified before creating labels');
      assert.deepEqual(Object.keys(data).sort(),['labelListVisibility','messageListVisibility','name']);
-     assert.ok(PERSONAL_LABELS.includes(data.name));
+     assert.ok([...PERSONAL_LABELS,...GENERAL_LABELS].includes(data.name));
      if(labelRace){names.add(data.name);labelRace=false;throw labelError(409);}
      if(names.has(data.name))throw labelError(409);
      names.add(data.name);return {data:{id:'label-'+names.size,name:data.name}};
@@ -71,7 +71,7 @@ test('CSRF e métodos inválidos são bloqueados; login inclui Gmail readonly e 
  assert.equal((await h.request('start')).status,405);
  const flow=await h.start();
  assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]);
- assert.deepEqual((await h.start('general')).options.scope,SCOPES);
+ assert.deepEqual((await h.start('general')).options.scope,[...SCOPES,MODIFY_SCOPE]);
  assert.ok(flow.options.scope.includes(READ_SCOPE));assert.ok(flow.options.scope.includes(DRIVE_SCOPE));
  assert.ok(!flow.options.scope.includes('https://www.googleapis.com/auth/drive'));
  assert.equal(flow.options.hd,undefined);assert.equal(flow.options.code_challenge_method,'S256');
@@ -262,15 +262,16 @@ test('Pessoal cria somente as quatro labels ausentes e reconectar não duplica',
  assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.personal.labels,'missing');
  assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,3,'status must never create');
 });
-test('Geral não solicita nem consulta/cria labels; Pessoal cria na própria conta',async()=>{
+test('Geral prepara somente seus dois marcadores e Pessoal mantém os próprios',async()=>{
  const h=harness(),general=await h.login('school@gmail.com','','general');
- await h.request('status',{cookie:general.cookie});assert.equal(h.labelRequests.length,0);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),GENERAL_LABELS);
+ const writes=h.labelRequests.filter(r=>r.method==='POST').length;
+ await h.request('status',{cookie:general.cookie});assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,writes);
  const personal=await h.login('person@gmail.com',general.cookie);
- assert.ok(h.labelRequests.every(r=>r.email==='person@gmail.com'));
- assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['1-ME DEVEM','2-MINHAS','3-DEVO','9-Classificado']);
+ assert.deepEqual(h.labelRequests.filter(r=>r.email==='person@gmail.com'&&r.method==='POST').map(r=>r.data.name),PERSONAL_LABELS);
  const data=(await h.request('status',{cookie:general.cookie+'; '+personal.cookie})).json();
- assert.equal(data.mode,'both');assert.equal(data.connections.general.labels,undefined);
- assert.equal(data.connections.personal.labels,'ready');assert.equal(h.labels.has('school@gmail.com'),false);
+ assert.equal(data.mode,'both');assert.equal(data.connections.general.labels,'ready');assert.equal(data.connections.general.manageInstitutional,true);
+ assert.equal(data.connections.personal.labels,'ready');assert.deepEqual([...h.labels.get('school@gmail.com')],GENERAL_LABELS);
 });
 test('recusar labels preserva conexão e não faz chamadas de gerenciamento',async()=>{
  const h=harness();h.setScopes(SCOPES.join(' '));const account=await h.login();
@@ -360,4 +361,51 @@ test('Institucionais exige sessão GERAL própria, permissão de leitura e caixa
  const denied=await h.login('other@gmail.com','','general');
  assert.equal((await h.request('institutional',{cookie:denied.cookie,query:'?mailbox=other@gmail.com'})).status,403);
  assert.equal((await h.request('status',{cookie:personal.cookie})).json().connections.personal.email,'admin@gmail.com');
+});
+
+test('GERAL cria somente ausentes, reconecta sem duplicar e status nunca cria',async()=>{
+ const h=harness();h.labels.set('school@gmail.com',new Set(['Outra','Classificadas']));
+ const first=await h.login('school@gmail.com','','general');assert.match(first.response.headers.location,/connected/);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['Arquivadas']);
+ const second=await h.login('school@gmail.com',first.cookie,'general');assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,1);
+ h.labels.get('school@gmail.com').delete('Arquivadas');
+ assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.general.labels,'missing');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,1);
+});
+test('GERAL sem modify mantém consulta e não cria marcadores; falha de preparação preserva conta',async()=>{
+ const h=harness();h.setScopes(SCOPES.join(' '));const readonly=await h.login('school@gmail.com','','general');
+ assert.match(readonly.response.headers.location,/partial/);assert.equal(h.labelRequests.length,0);
+ const status=(await h.request('status',{cookie:readonly.cookie})).json().connections.general;
+ assert.equal(status.gmail,true);assert.equal(status.manageInstitutional,false);assert.equal(status.labels,'permission_required');
+ h.setScopes([...SCOPES,MODIFY_SCOPE].join(' '));h.failLabels(503);
+ const failed=await h.login('school@gmail.com',readonly.cookie,'general');assert.match(failed.response.headers.location,/partial/);
+ assert.equal((await h.request('status',{cookie:failed.cookie})).json().connections.general.gmail,true);
+});
+test('movimentação institucional exige sessão GERAL e CSRF, sem herdar a Pessoal',async()=>{
+ const h=harness(),personal=await h.login();
+ const body={type:'general',mailbox:'admin@gmail.com',messageId:'m1',operation:'archive'};
+ assert.equal((await h.request('institutional-move',{method:'POST',body,cookie:personal.cookie})).status,401);
+ assert.equal((await h.request('institutional-move',{method:'POST',body,origin:'https://evil.invalid'})).status,403);
+ assert.equal((await h.request('institutional-move')).status,405);
+ const general=await h.login('school@gmail.com','','general');
+ assert.equal((await h.request('institutional-move',{method:'POST',body,cookie:general.cookie})).status,409);
+});
+test('tabela institucional cifra e-mail/prazo, isola proprietário e atualiza por versão',async()=>{
+ const requests=[];let row;
+ const config=configuration(env),store=makeStore(config,async(url,options)=>{
+  requests.push({url,options});
+  if(options.method==='POST'){row=JSON.parse(options.body);return {ok:true,status:200,json:async()=>[row]};}
+  if(options.method==='GET')return {ok:true,status:200,json:async()=>[row]};
+  return {ok:true,status:200,json:async()=>[]};
+ });
+ const value={mailbox:'private-school@example.com',dueDate:'2026-11-20'};
+ assert.equal((await store.saveInstitutionalDemand('owner-a','m1',value,0)).version,1);
+ assert.ok(!JSON.stringify(row).includes(value.mailbox));assert.ok(!JSON.stringify(row).includes(value.dueDate));
+ const read=(await store.getInstitutionalDemands('owner-a',['m1']))[0];assert.equal(read.mailbox,value.mailbox);assert.equal(read.messageId,'m1');
+ assert.ok(requests[1].url.includes('owner_id=eq.owner-a'));assert.ok(requests[1].url.includes('message_id=in.(m1)'));
+ await assert.rejects(store.getInstitutionalDemands('owner-b',['m1']));
+ assert.equal(await store.saveInstitutionalDemand('owner-a','m1',value,1),null);
+ assert.ok(requests.at(-1).url.includes('version=eq.1'));
+ const missing=makeStore(config,async()=>({ok:false,status:404,json:async()=>({code:'PGRST205'})}));
+ await assert.rejects(missing.getInstitutionalDemands('owner-a',['m1']),{message:'setup_required'});
 });

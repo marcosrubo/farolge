@@ -92,3 +92,12 @@ for(const [labels,expected] of [['ready','labels prontas (3/3)'],['missing','lab
  const h=ui({configured:true,connections:{personal:{email:'person@gmail.com',gmail:true,drive:true,labels}}});await settle();
  assert.ok(h.get('#email-personal-status').textContent.includes(expected));
 });
+
+test('diálogo GERAL explica marcadores e alcance da escrita antes do consentimento',async()=>{
+ const h=ui({configured:true,connections:{general:{email:'school@example.com',gmail:true,drive:true,manageInstitutional:true,labels:'ready'},personal:null}});await settle();
+ h.connect[0].listeners.click();assert.equal(h.get('#email-general-labels').hidden,false);assert.equal(h.get('#email-connection-labels').hidden,true);
+ assert.ok(h.get('#email-general-status').textContent.includes('Classificadas e Arquivadas prontas'));
+ assert.ok(h.get('#email-general-status').textContent.includes('Classificação: autorizada'));
+ h.connect[1].listeners.click();assert.equal(h.get('#email-general-labels').hidden,true);assert.equal(h.get('#email-connection-labels').hidden,false);
+ const html=fs.readFileSync('index.html','utf8');assert.ok(html.includes('A data limite, o e-mail da conta GERAL e a chave da mensagem'));
+});

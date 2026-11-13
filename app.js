@@ -91,7 +91,7 @@ function render(){
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='configuracoes'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&index<5?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
-  main.innerHTML=selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em 9-Classificado e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Atividades e prazos identificados nos e-mails da caixa de entrada da conta conectada como GERAL. Confira o trecho de origem antes de organizar a realização da atividade.</p><div id="institutional-board"></div></section>`:selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  main.innerHTML=selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em 9-Classificado e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
   if(selected.id==='institucionais')window.FarolInstitutional?.mount(document.querySelector('#institutional-board'));
   if(selected.id==='pessoais')window.FarolDemands?.mount(document.querySelector('#demands-board'));
 }
@@ -146,10 +146,10 @@ function setupEmailConnections(){
         const connected=Boolean(configured && typeof email==='string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email));
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
-        if(connected && type==='personal') {
-          const labelMessages={ready:'labels prontas (3/3)',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
+        if(connected) {
+          const labelMessages={ready:type==='personal'?'labels prontas (3/3)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
           status.textContent+=' · '+(labelMessages[connection.labels]||labelMessages.permission_required);
-          status.textContent+=' · Classificação: '+(connection.classify?'autorizada':'revisar autorização');
+          status.textContent+=' · Classificação: '+((type==='personal'?connection.classify:connection.manageInstitutional)?'autorizada':'revisar autorização');
         }
         status.classList.toggle('is-connected',connected);
         const button=document.querySelector('[data-connect-email="'+type+'"]');
@@ -179,6 +179,7 @@ function setupEmailConnections(){
     selectedType=type;
     const isGeneral=type==='general';
     document.querySelector('#email-connection-labels').hidden=isGeneral;
+    document.querySelector('#email-general-labels').hidden=!isGeneral;
     document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar conta geral da escola':'Conectar conta pessoal';
     document.querySelector('#email-connection-description').innerHTML=isGeneral
       ?'Escolha no Google a conta geral da sua escola. Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'

@@ -73,30 +73,92 @@ function extractActivities(text,subject,receivedAt){
   if(!activities.length&&subject)return extractActivities(subject,'',receivedAt).map(item=>({...item,activity:item.evidence?item.activity:subject}));
   return activities.length?activities:[{activity:subject||'(Sem assunto)',dueDate:null,evidence:'',review:'Prazo não identificado no texto disponível.'}];
 }
-async function handleInstitutional({url,client,email}){
-  if(url.searchParams.get('mailbox')!==email)fail('account_changed',409);
-  const page=url.searchParams.get('page')||'';if(page.length>2048)fail('invalid_page',400);
-  const params=new URLSearchParams({labelIds:'INBOX',maxResults:'20',includeSpamTrash:'false'});
-  if(page)params.set('pageToken',page);
+const FOLDERS=['INBOX','Classificadas','Arquivadas'];
+async function handleInstitutional({action='institutional',url,body={},client,store,owner,email,canModify=false}){
+  const moving=action==='institutional-move';
+  if((moving?body.mailbox:url.searchParams.get('mailbox'))!==email)fail('account_changed',409);
   const request=async path=>(await client.request({url:BASE+path,timeout:10000})).data;
-  const listed=await request('/messages?'+params),messages=listed.messages||[];
-  if(!Array.isArray(messages)||messages.length>20)fail('invalid_provider',502);
+  if(moving){
+    if(body.type!=='general'||!validId(body.messageId)||!['classify','archive'].includes(body.operation)||Object.keys(body).some(key=>!['type','mailbox','messageId','operation','dueDate','version'].includes(key)))fail('invalid_institutional',400);
+    if(body.operation==='classify'&&(!body.dueDate||!validDate(body.dueDate)||!Number.isSafeInteger(body.version)||body.version<0))fail('invalid_institutional',400);
+    if(!canModify)fail('institutional_scope',403);
+  }
+  const column=Number(url.searchParams.get('column')||'0');
+  const page=url.searchParams.get('page')||'';
+  if(!moving&&(!/^[0-2]$/.test(url.searchParams.get('column')||'0')))fail('invalid_column',400);
+  if(!moving&&page.length>2048)fail('invalid_page',400);
+  const {labels=[]}=await request('/labels');
+  const ids=FOLDERS.map((name,i)=>i===0?'INBOX':labels.find(label=>label.name===name)?.id||null);
+  if(moving){
+    if(ids.some(id=>!id))fail('labels_missing',409);
+    const id=body.messageId;
+    let message=await request('/messages/'+id+'?format=metadata');
+    if(message?.id!==id)fail('invalid_provider',502);
+    const eligible=m=>!(m.labelIds||[]).some(l=>['SPAM','TRASH','DRAFT'].includes(l))&&(m.labelIds||[]).some(l=>ids.includes(l));
+    if(!eligible(message))fail('not_inbox',409);
+    let saved=null;
+    if(body.operation==='classify'){
+      if((message.labelIds||[]).includes(ids[2]))fail('not_inbox',409);
+      const previous=(await store.getInstitutionalDemands(owner,[id]))[0];
+      // Retrying the same saved date is safe even if the Gmail response was lost.
+      if(previous?.mailbox===email&&previous.dueDate===body.dueDate)saved=previous;
+      else{
+        if(body.version!==(previous?.version||0))fail('conflict',409);
+        saved=await store.saveInstitutionalDemand(owner,id,{mailbox:email,dueDate:body.dueDate},body.version);
+        if(!saved)fail('conflict',409);
+      }
+      // Re-check after storing the date; never deliberately restore an archived message.
+      message=await request('/messages/'+id+'?format=metadata');
+      if(!eligible(message)||(message.labelIds||[]).includes(ids[2]))fail('not_inbox',409);
+    }
+    const target=body.operation==='classify'?ids[1]:ids[2];
+    const remove=body.operation==='classify'?['INBOX']:['INBOX',ids[1]];
+    const {data:result}=await client.request({url:BASE+'/messages/'+id+'/modify',method:'POST',data:{addLabelIds:[target],removeLabelIds:remove},timeout:10000});
+    if(result?.id!==id||!(result.labelIds||[]).includes(target)||remove.some(l=>(result.labelIds||[]).includes(l)))fail('classification_unconfirmed',502);
+    return {mailbox:email,messageId:id,operation:body.operation,demand:saved?{dueDate:saved.dueDate,version:saved.version}:null};
+  }
+  if(!ids[column])return {mailbox:email,column,items:[],nextPage:null,missingLabels:true,canModify};
+  let messages,nextPage,demands;
+  if(column===1){
+    // Gmail orders by receipt, not by the saved deadline. Scan only IDs first,
+    // then sort by encrypted auxiliary dates before retrieving this page's bodies.
+    if(page&&!/^\d{1,8}$/.test(page))fail('invalid_page',400);
+    const all=new Map();let token='';let pages=0;
+    do{
+      const params=new URLSearchParams({labelIds:ids[1],maxResults:'500',includeSpamTrash:'false'});if(token)params.set('pageToken',token);
+      const listed=await request('/messages?'+params);
+      for(const item of listed.messages||[]){if(!validId(item.id))fail('invalid_provider',502);all.set(item.id,item);}
+      token=listed.nextPageToken||'';if(++pages>=20&&token)fail('listing_limit',503);
+    }while(token);
+    const allDemands=await store.getInstitutionalDemands(owner,[...all.keys()]);
+    const byId=new Map(allDemands.filter(row=>row.mailbox===email).map(row=>[row.messageId,row]));
+    const sorted=[...all.values()].sort((a,b)=>(byId.get(a.id)?.dueDate||'9999-12-31').localeCompare(byId.get(b.id)?.dueDate||'9999-12-31')||a.id.localeCompare(b.id));
+    const offset=Number(page)||0;messages=sorted.slice(offset,offset+20);nextPage=offset+20<sorted.length?String(offset+20):null;demands=byId;
+  }else{
+    const params=new URLSearchParams({labelIds:ids[column],maxResults:'20',includeSpamTrash:'false'});if(page)params.set('pageToken',page);
+    const listed=await request('/messages?'+params);messages=listed.messages||[];nextPage=listed.nextPageToken||null;
+    if(!Array.isArray(messages)||messages.length>20||messages.some(m=>!validId(m.id)))fail('invalid_provider',502);
+    const rows=await store.getInstitutionalDemands(owner,messages.map(m=>m.id));
+    demands=new Map(rows.filter(row=>row.mailbox===email).map(row=>[row.messageId,row]));
+  }
   const items=new Array(messages.length);let cursor=0;
   await Promise.all(Array.from({length:Math.min(4,messages.length)},async()=>{
     while(cursor<messages.length){
-      const index=cursor++,id=messages[index].id;if(!validId(id))fail('invalid_provider',502);
+      const index=cursor++,id=messages[index].id;
       try {
         const message=await request('/messages/'+id+'?format=full');
         if(message.id!==id||!validId(message.threadId))fail('invalid_provider',502);
         const labels=message.labelIds||[];
-        if(!labels.includes('INBOX')||labels.some(l=>['TRASH','SPAM','DRAFT'].includes(l)))continue;
+        if(!labels.includes(ids[column])||labels.some(l=>['TRASH','SPAM','DRAFT'].includes(l)))continue;
         const headers=Object.fromEntries((message.payload?.headers||[]).map(h=>[h.name.toLowerCase(),String(h.value||'')]));
         const subject=headers.subject||'(Sem assunto)',date=Number(message.internalDate)||0;
-        const text=plainText(message.payload)||htmlText(message.payload);
-        items[index]={id,threadId:message.threadId,subject,from:headers.from||'',date,unread:labels.includes('UNREAD'),limitedText:!text||text.length>=100000,activities:extractActivities(text,subject,date)};
+        const text=plainText(message.payload)||htmlText(message.payload),demand=demands.get(id);
+        items[index]={id,threadId:message.threadId,subject,from:headers.from||'',date,unread:labels.includes('UNREAD'),dueDate:demand?.dueDate||null,version:demand?.version||0,limitedText:!text||text.length>=100000,activities:extractActivities(text,subject,date)};
       }catch(error){if(error.response?.status!==404)throw error;}
     }
   }));
-  return {mailbox:email,items:items.filter(Boolean),nextPage:listed.nextPageToken||null};
+  const result=items.filter(Boolean);
+  if(column!==1)result.sort((a,b)=>b.date-a.date||a.id.localeCompare(b.id));
+  return {mailbox:email,column,items:result,nextPage,canModify,missingLabels:ids.some(id=>!id)};
 }
-module.exports={handleInstitutional,extractActivities,htmlText,currentText};
+module.exports={handleInstitutional,extractActivities,htmlText,currentText,FOLDERS};
