@@ -5,7 +5,7 @@ window.FarolInstitutional=(()=>{
   const day=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const displayDate=value=>value.split('-').reverse().join('/');
   const received=value=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(value));
-  const errors={login_required:'Conecte novamente a conta GERAL.',missing_scope:'Use GERAL → Revisar autorização para permitir a consulta ao Gmail.',institutional_scope:'Use GERAL → Revisar autorização para permitir classificação e arquivamento.',labels_missing:'Use GERAL → Revisar autorização para preparar Classificadas e Arquivadas.',setup_required:'Execute database/institutional-demands.sql no Supabase exclusivo FAROL GE para preparar os prazos.',account_changed:'A conta GERAL mudou. Atualize o quadro.',invalid_page:'Atualize o quadro para reiniciar a paginação.',conflict:'O prazo foi alterado em outra janela. Atualize o quadro antes de tentar novamente.',not_inbox:'A mensagem foi movida ou não está mais disponível para esta operação. Atualize o quadro.',invalid_institutional:'Informe uma data limite válida antes de classificar.',classification_unconfirmed:'O Gmail não confirmou a movimentação. Atualize o quadro antes de tentar novamente.',listing_limit:'Classificadas excede o limite de 10 mil mensagens. A ordenação completa não pôde ser feita.',unavailable:'Não foi possível concluir a operação. Se estava classificando, o prazo pode ter sido salvo. Atualize para conferir e tente novamente.'};
+  const errors={login_required:'Conecte novamente a conta GERAL.',missing_scope:'Use GERAL → Revisar autorização para permitir a consulta ao Gmail.',institutional_scope:'Use GERAL → Revisar autorização para permitir classificação e arquivamento.',labels_missing:'Clique em Preparar marcadores para verificar e criar os ausentes Classificadas e Arquivadas.',setup_required:'Execute database/institutional-demands.sql no Supabase exclusivo FAROL GE para preparar os prazos.',account_changed:'A conta GERAL mudou. Atualize o quadro.',invalid_page:'Atualize o quadro para reiniciar a paginação.',conflict:'O prazo foi alterado em outra janela. Atualize o quadro antes de tentar novamente.',not_inbox:'A mensagem foi movida ou não está mais disponível para esta operação. Atualize o quadro.',invalid_institutional:'Informe uma data limite válida antes de classificar.',classification_unconfirmed:'O Gmail não confirmou a movimentação. Atualize o quadro antes de tentar novamente.',listing_limit:'Classificadas excede o limite de 10 mil mensagens. A ordenação completa não pôde ser feita.',unavailable:'Não foi possível concluir a operação. Se estava classificando, o prazo pode ter sido salvo. Atualize para conferir e tente novamente.'};
   let root=null,connection=null,columns=[],moving=false,feedback='',search='',epoch=0,drafts=new Map();
   function reset(){++epoch;columns=titles.map(()=>({items:[],nextPage:null,busy:false,loaded:false,error:''}));moving=false;feedback='';drafts=new Map();}
   function shown(index){
@@ -24,6 +24,9 @@ window.FarolInstitutional=(()=>{
     if(!root)return;
     root.querySelector('#institutional-feedback').textContent=feedback||(!connection?.gmail?'Conecte a conta GERAL para consultar os e-mails.':!connection.manageInstitutional?'Para classificar e arquivar, use GERAL → Revisar autorização.':'');
     root.querySelector('#institutional-refresh').disabled=moving||columns.some(c=>c.busy)||!connection?.gmail;
+    const prepare=root.querySelector('#institutional-prepare');
+    prepare.hidden=!connection?.gmail||!connection.manageInstitutional||(connection.labels==='ready'&&!columns.some(c=>c.missingLabels));
+    prepare.disabled=moving||columns.some(c=>c.busy);
     columns.forEach((state,index)=>{
       const items=shown(index);
       root.querySelector('#institutional-count-'+index).textContent=String(items.length);
@@ -50,6 +53,24 @@ window.FarolInstitutional=(()=>{
     }catch(cause){if(ticket===epoch)state.error=cause.message;}
     finally{if(ticket===epoch){state.busy=false;draw();}}
   }
+  async function prepareLabels(){
+    if(moving||columns.some(c=>c.busy)||!connection?.manageInstitutional)return;
+    const ticket=epoch,mailbox=connection.email;moving=true;feedback='Verificando e preparando Classificadas e Arquivadas…';draw();
+    try{
+      const response=await fetch('/api/google/institutional-labels',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify({type:'general',mailbox})});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');
+      if(ticket!==epoch)return;if(result.mailbox!==mailbox)throw new Error('account_changed');
+      if(result.labels!=='ready'){
+        const reasons={permission_denied:'O Google recusou a criação. Revise a autorização da GERAL.',name_rejected:'O Google recusou um nome de marcador. Confira no Gmail os nomes Classificadas e Arquivadas.',provider_unavailable:'Não foi possível confirmar os marcadores no Google. Tente novamente.'};
+        feedback=(reasons[result.labelDetails?.reason]||'Os marcadores ainda não foram confirmados.')+(result.labelDetails?.missing?.length?' Faltam confirmar: '+result.labelDetails.missing.join(', ')+'.':'');
+        return;
+      }
+      connection={...connection,labels:'ready',labelDetails:result.labelDetails};moving=false;
+      feedback='Classificadas e Arquivadas confirmadas. Atualizando o quadro…';await refresh();
+      if(ticket===epoch){feedback='Classificadas e Arquivadas prontas.';window.dispatchEvent(new Event('farol-connections-refresh'));}
+    }catch(cause){if(ticket===epoch)feedback=errors[cause.message]||errors.unavailable;}
+    finally{if(ticket===epoch){moving=false;draw();}}
+  }
   async function refresh(){if(moving||columns.some(c=>c.busy))return;await Promise.all(columns.map((_,i)=>load(i)));}
   async function move(id,index,operation,dueDate){
     if(moving||columns.some(c=>c.busy)||!connection?.manageInstitutional)return;
@@ -69,8 +90,9 @@ window.FarolInstitutional=(()=>{
   }
   function mount(element){
     root=element;search='';reset();
-    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nos e-mails carregados<input id="institutional-search" type="search" placeholder="Assunto, remetente ou trecho"></label><button class="button" id="institutional-refresh">Atualizar quadro</button></div><p class="demand-footnote">Defina uma data limite e clique em Classificar para mover da entrada para Classificadas. Os prazos encontrados no texto são sugestões e não são salvos automaticamente. Arquivar move somente a mensagem escolhida para Arquivadas. As ações preservam os demais marcadores e o estado de leitura.</p><p class="demand-footnote">Entrada e Arquivadas: mensagens mais recentes primeiro. Classificadas: data limite mais antiga primeiro, com ordenação de todas as mensagens do marcador antes da paginação; mensagens sem prazo salvo aparecem ao final. Páginas de 20 mensagens. Busca e contagens consideram os e-mails carregados. Calendário de Brasília.</p><p id="institutional-feedback" class="demand-notice" role="status"></p><div class="demand-columns institutional-columns">${titles.map((title,index)=>`<section class="demand-column"><h2>${title} <span id="institutional-count-${index}">0</span></h2><p class="demand-notice" role="status" id="institutional-status-${index}"></p><div class="demand-cards" id="institutional-list-${index}"></div><button class="button demand-more" id="institutional-more-${index}" hidden>Carregar mais</button></section>`).join('')}</div>`;
+    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nos e-mails carregados<input id="institutional-search" type="search" placeholder="Assunto, remetente ou trecho"></label><button class="button" id="institutional-refresh">Atualizar quadro</button><button class="button" id="institutional-prepare" hidden>Preparar marcadores</button></div><p class="demand-footnote">Defina uma data limite e clique em Classificar para mover da entrada para Classificadas. Os prazos encontrados no texto são sugestões e não são salvos automaticamente. Arquivar move somente a mensagem escolhida para Arquivadas. As ações preservam os demais marcadores e o estado de leitura.</p><p class="demand-footnote">Entrada e Arquivadas: mensagens mais recentes primeiro. Classificadas: data limite mais antiga primeiro, com ordenação de todas as mensagens do marcador antes da paginação; mensagens sem prazo salvo aparecem ao final. Páginas de 20 mensagens. Busca e contagens consideram os e-mails carregados. Calendário de Brasília.</p><p id="institutional-feedback" class="demand-notice" role="status"></p><div class="demand-columns institutional-columns">${titles.map((title,index)=>`<section class="demand-column"><h2>${title} <span id="institutional-count-${index}">0</span></h2><p class="demand-notice" role="status" id="institutional-status-${index}"></p><div class="demand-cards" id="institutional-list-${index}"></div><button class="button demand-more" id="institutional-more-${index}" hidden>Carregar mais</button></section>`).join('')}</div>`;
     root.querySelector('#institutional-refresh').addEventListener('click',refresh);
+    root.querySelector('#institutional-prepare').addEventListener('click',prepareLabels);
     titles.forEach((_,i)=>root.querySelector('#institutional-more-'+i).addEventListener('click',()=>load(i,true)));
     root.querySelector('#institutional-search').addEventListener('input',event=>{search=event.target.value;draw();});
     draw();if(connection?.gmail)refresh();

@@ -101,3 +101,9 @@ test('diálogo GERAL explica marcadores e alcance da escrita antes do consentime
  h.connect[1].listeners.click();assert.equal(h.get('#email-general-labels').hidden,true);assert.equal(h.get('#email-connection-labels').hidden,false);
  const html=fs.readFileSync('index.html','utf8');assert.ok(html.includes('A data limite, o e-mail da conta GERAL e a chave da mensagem'));
 });
+
+test('status GERAL mostra exatamente quais marcadores estão faltando',async()=>{
+ const h=ui({configured:true,connections:{general:{email:'school@example.com',gmail:true,drive:true,manageInstitutional:true,labels:'missing',labelDetails:{missing:['Arquivadas']}},personal:null}});await settle();
+ assert.ok(h.get('#email-general-status').textContent.includes('Faltam marcadores: Arquivadas'));
+ assert.ok(!h.get('#email-general-status').textContent.includes('revise a autorização'));
+});

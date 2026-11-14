@@ -143,11 +143,11 @@ function ui(){
    };nodes.set(selector,node);
   }return nodes.get(selector);
  };
- const root={querySelector:get,innerHTML:''},window={};
- const context=vm.createContext({window,URLSearchParams,Intl,Date,Map,fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}))});
+ const root={querySelector:get,innerHTML:''},window={events:[],dispatchEvent(event){this.events.push(event.type);}};
+ const context=vm.createContext({window,URLSearchParams,Intl,Date,Map,Event:class Event{constructor(type){this.type=type;}},fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}))});
  vm.runInContext(fs.readFileSync('institutional.js','utf8'),context);
  const respond=(index,items=[],extra={})=>{const req=requests.filter(r=>!r.done&&r.url.includes('/institutional?')&&Number(new URL('https://farol.invalid'+r.url).searchParams.get('column'))===index)[0];assert.ok(req);req.done=true;req.resolve({ok:true,json:async()=>({mailbox:'school@example.com',column:index,items,nextPage:null,canModify:true,missingLabels:false,...extra})});};
- return {app:window.FarolInstitutional,root,get,requests,respond};
+ return {app:window.FarolInstitutional,root,get,requests,respond,window};
 }
 const makeItem=(id,date=received,dueDate=null)=>({id,threadId:'t'+id,subject:'Relatório '+id,from:'Pessoa',date,dueDate,version:dueDate?1:0,activities:[{activity:id,dueDate:'2026-11-20',evidence:'<script>não executar</script>',review:null}]});
 test('três colunas ficam visíveis sem conexão e respostas antigas não voltam após desconectar',async()=>{
@@ -192,4 +192,24 @@ test('arquivar usa operação dedicada; erro não anuncia sucesso nem remove a l
 test('também identifica prazo informado somente no assunto',()=>{
  const result=extractActivities('Prezados, segue a atividade solicitada.','Entrega do relatório até 24/11/2026',received);
  assert.equal(result[0].dueDate,'2026-11-24');assert.ok(result[0].evidence.includes('Entrega do relatório'));
+});
+
+test('botão prepara marcadores usando a GERAL autorizada e atualiza o quadro',async()=>{
+ const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true,labels:'missing'});h.app.mount(h.root);
+ for(let i=0;i<3;i++)h.respond(i,[],{missingLabels:true});await settle();
+ assert.equal(h.get('#institutional-prepare').hidden,false);
+ h.get('#institutional-prepare').listeners.click();
+ const req=h.requests.at(-1);assert.equal(req.url,'/api/google/institutional-labels');
+ assert.deepEqual(JSON.parse(req.options.body),{type:'general',mailbox:'school@example.com'});
+ req.resolve({ok:true,json:async()=>({mailbox:'school@example.com',labels:'ready',labelDetails:{status:'ready',missing:[],reason:null}})});await settle();
+ for(let i=0;i<3;i++)h.respond(i);await settle();
+ assert.equal(h.get('#institutional-prepare').hidden,true);assert.ok(h.get('#institutional-feedback').textContent.includes('prontas'));
+ assert.equal(h.window.events[0],'farol-connections-refresh');
+});
+test('falha de preparação mantém bloqueio e exibe nomes não confirmados',async()=>{
+ const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true,labels:'missing'});h.app.mount(h.root);
+ for(let i=0;i<3;i++)h.respond(i,[],{missingLabels:true});await settle();h.get('#institutional-prepare').listeners.click();
+ h.requests.at(-1).resolve({ok:true,json:async()=>({mailbox:'school@example.com',labels:'unavailable',labelDetails:{reason:'permission_denied',missing:['Arquivadas']}})});await settle();
+ assert.equal(h.get('#institutional-prepare').hidden,false);assert.ok(h.get('#institutional-feedback').textContent.includes('Arquivadas'));
+ assert.ok(!h.get('#institutional-feedback').textContent.includes('prontas'));assert.equal(h.window.events.length,0);
 });

@@ -153,3 +153,16 @@ Referências oficiais: [listar mensagens](https://developers.google.com/workspac
 
 
 Arquivos desta atualização: `institutional.js`, `server/institutional.cjs`, `server/google.cjs`, `database/institutional-demands.sql`, `app.js`, `index.html`, `styles.css`, `privacidade.html`, `README.md`, `CONEXOES_GOOGLE.md`, `AGENTS.md`, `tests/institutional.test.cjs`, `tests/google.test.cjs` e `tests/frontend.test.cjs`.
+
+
+## Correção de preparação de marcadores — 14/11/2026
+
+Se a linha GERAL indicar Classificação autorizada, mas marcadores incompletos, a autorização de escrita já foi reconhecida pelo FAROL: o bloqueio é a ausência de confirmação de Classificadas e/ou Arquivadas. O status agora mostra exatamente quais desses dois nomes faltam. A imagem do Google não comprova, por si só, a preparação dos marcadores da conexão ativa.
+
+O botão **Preparar marcadores** aparece no quadro institucional quando há permissão de escrita e os marcadores não estão confirmados. Ele usa `POST /api/google/institutional-labels`, com CSRF e sessão GERAL verificada, sem refazer OAuth: lista e cria somente os ausentes Classificadas/Arquivadas, confirma os nomes por nova listagem e atualiza o quadro e a conexão. Não movimenta e-mails, não altera a Pessoal e não aceita nomes arbitrários. GET de status e listagens continuam sem criar marcadores. A confirmação de criação faz uma nova leitura sem cache e uma conferência adicional se a primeira listagem ainda não refletir o resultado. Não libera ações com base apenas na resposta de criação.
+
+Falhas são informadas por categorias seguras (permissão recusada, nome recusado, indisponibilidade ou nomes não confirmados), sem exibir respostas brutas do Google, tokens ou logs de conteúdo. Não foi possível determinar a causa remota da ausência dos marcadores somente pela captura de tela; o fluxo agora permite tentar a preparação diretamente e distinguir essas condições. A comparação dos nomes permanece exata, sem renomear ou adotar outros marcadores.
+
+Para ativar, publicar os arquivos pelo Git/Vercel e clicar em **Preparar marcadores** na tela institucional. Não há SQL, variável ou escopo adicional nesta correção. O SQL institucional da entrega anterior continua necessário. Política revisão 11 informa a preparação explícita. Foram verificados testes automatizados com dados fictícios, sintaxe e diferenças Git; não houve acesso à sessão Google real, alteração de marcadores reais ou validação visual remota nesta correção.
+
+Arquivos alterados nesta correção: `server/google.cjs`, `institutional.js`, `app.js`, `index.html`, `privacidade.html`, `README.md`, `CONEXOES_GOOGLE.md`, `AGENTS.md`, `tests/google.test.cjs`, `tests/institutional.test.cjs` e `tests/frontend.test.cjs`.

@@ -163,3 +163,10 @@ As três colunas usam GET `/api/google/institutional` com `column=0|1|2`. POST `
 Tabela auxiliar: chave por identidade proprietária + ID da mensagem; payload AES-GCM com mailbox (e-mail GERAL verificado) e dueDate, sem conteúdo de e-mails. RLS sem acesso anon/authenticated; somente service_role. Versão evita sobrescritas concorrentes. Supabase e Gmail não são transação única: prazo pode permanecer salvo após falha de movimentação, permitindo repetir com a mesma data; interface orienta conferência. Desconexão/arquivamento preservam dados; exclusão da identidade remove em cascata. Não há histórico institucional nesta versão.
 
 Classificadas ordena por prazo todas as mensagens do marcador antes da paginação (limite explícito de 10 mil IDs); metadados e corpo somente da página. Entrada/Arquivadas usam recebimento decrescente. Roteiro completo de validação e limitações no README. Nenhuma alteração remota de SQL, consentimento Google ou infraestrutura foi executada por esta entrega.
+
+
+### Preparação explícita dos marcadores GERAL — 14/11/2026
+
+Além do callback OAuth, o botão **Preparar marcadores** permite repetir somente a criação dos ausentes Classificadas/Arquivadas com gmail.modify já concedido. POST `/api/google/institutional-labels` exige Origin/X-Farol-Request, sessão GERAL, e-mail esperado e capacidade de escrita verificada. Aceita apenas type/mailbox; não aceita nomes de marcadores. Retorna os nomes esperados ausentes e uma categoria segura de falha, sem resposta bruta do provedor. Não move mensagens nem cria marcadores Pessoais. GET status permanece sem escrita. A confirmação usa nova listagem; a interface só considera pronto o resultado confirmado.
+
+Publicar a correção/política revisão 11 e usar esse botão quando a classificação estiver autorizada, mas os marcadores incompletos. Sem novo SQL, variável ou escopo. A preparação na conta real continua dependendo do clique no FAROL publicado e do resultado retornado pelo Google; a captura de tela não permitiu identificar a causa técnica original da ausência dos marcadores.

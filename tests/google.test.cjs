@@ -409,3 +409,35 @@ test('tabela institucional cifra e-mail/prazo, isola proprietário e atualiza po
  const missing=makeStore(config,async()=>({ok:false,status:404,json:async()=>({code:'PGRST205'})}));
  await assert.rejects(missing.getInstitutionalDemands('owner-a',['m1']),{message:'setup_required'});
 });
+
+test('preparação explícita GERAL cria somente marcadores ausentes sem outro OAuth',async()=>{
+ const h=harness(),general=await h.login('school@gmail.com','','general');
+ h.labels.get('school@gmail.com').delete('Arquivadas');
+ const before=h.calls(),writes=h.labelRequests.filter(r=>r.method==='POST').length;
+ const result=await h.request('institutional-labels',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:'school@gmail.com'}});
+ assert.equal(result.status,200);assert.equal(result.json().labels,'ready');assert.deepEqual(result.json().labelDetails.missing,[]);
+ assert.equal(h.calls(),before,'no OAuth exchange required');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,writes+1);
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').at(-1).data.name,'Arquivadas');
+ const status=await h.request('status',{cookie:general.cookie});assert.equal(status.json().connections.general.labels,'ready');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,writes+1,'status never writes');
+});
+test('preparação GERAL exige sessão, conta correspondente, permissão e CSRF',async()=>{
+ const h=harness(),personal=await h.login();const body={type:'general',mailbox:'school@gmail.com'};
+ assert.equal((await h.request('institutional-labels')).status,405);
+ assert.equal((await h.request('institutional-labels',{method:'POST',body,cookie:personal.cookie})).status,401);
+ assert.equal((await h.request('institutional-labels',{method:'POST',body,origin:'https://evil.invalid'})).status,403);
+ const general=await h.login('school@gmail.com','','general');
+ assert.equal((await h.request('institutional-labels',{method:'POST',cookie:general.cookie,body:{...body,mailbox:'other@gmail.com'}})).status,409);
+ assert.equal((await h.request('institutional-labels',{method:'POST',cookie:general.cookie,body:{...body,label:'ARBITRARY'}})).status,400);
+ h.setScopes(SCOPES.join(' '));const readonly=await h.login('readonly@gmail.com','','general');
+ assert.equal((await h.request('institutional-labels',{method:'POST',cookie:readonly.cookie,body:{type:'general',mailbox:'readonly@gmail.com'}})).status,403);
+});
+test('status identifica os nomes ausentes e preparação informa recusa sem detalhes sensíveis',async()=>{
+ const h=harness(),general=await h.login('school@gmail.com','','general');h.labels.get('school@gmail.com').delete('Arquivadas');
+ const status=await h.request('status',{cookie:general.cookie});assert.deepEqual(status.json().connections.general.labelDetails.missing,['Arquivadas']);
+ h.failLabels(403,'POST');
+ const result=await h.request('institutional-labels',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:'school@gmail.com'}});
+ assert.equal(result.json().labels,'unavailable');assert.equal(result.json().labelDetails.reason,'permission_denied');
+ assert.deepEqual(result.json().labelDetails.missing,['Arquivadas']);assert.ok(!result.body.includes('google:'));
+});

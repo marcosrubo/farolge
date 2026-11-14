@@ -135,41 +135,47 @@ function validateAccount(identity,profile,nonce) {
   return email;
 }
 const credentialsOf=client=>({access_token:client.credentials.access_token,expiry_date:client.credentials.expiry_date,refresh_token:client.credentials.refresh_token});
-// Status only checks labels; creation is restricted to the OAuth callback.
-async function mailboxLabels(client,allowed,create=false,expectedLabels=PERSONAL_LABELS) {
-  if(!allowed)return 'permission_required';
+// GET status never creates labels. OAuth and the explicit GERAL repair action may create.
+async function mailboxLabels(client,allowed,create=false,expectedLabels=PERSONAL_LABELS,details=false) {
+  const finish=(status,names=new Set(),reason=null)=>details?{status,missing:expectedLabels.filter(name=>!names.has(name)),reason}:status;
+  if(!allowed)return finish('permission_required');
+  let names=new Set();
   const list=async()=>{
-    const {data}=await client.request({url:LABEL_URL,timeout:10000});
+    const {data}=await client.request({url:LABEL_URL,headers:{'Cache-Control':'no-cache'},timeout:10000});
     if(data.labels!==undefined && !Array.isArray(data.labels))throw new Error('invalid_labels');
     return new Set((data.labels||[]).map(label=>label.name));
   };
   try {
-    let names=await list();
+    names=await list();
     for(const name of expectedLabels) {
       if(names.has(name))continue;
-      if(!create)return 'missing';
+      if(!create)return finish('missing',names);
       try {
         await client.request({url:LABEL_URL,method:'POST',data:{name,labelListVisibility:'labelShow',messageListVisibility:'show'},timeout:10000});
         names.add(name);
       } catch(error) {
-        // Another callback can create the same name while this one is running.
+        // Only accept a creation conflict after checking the requested name.
         if(![400,409].includes(error.response?.status))throw error;
         names=await list();
         if(!names.has(name))throw error;
       }
     }
-    // Confirm the result instead of inferring success from POST responses.
     names=await list();
-    return expectedLabels.every(name=>names.has(name))?'ready':'missing';
-  } catch {return 'unavailable';}
+    // A successful POST is not proof of readiness. Recheck a temporarily stale list once.
+    if(create&&!expectedLabels.every(name=>names.has(name)))names=await list();
+    return finish(expectedLabels.every(name=>names.has(name))?'ready':'missing',names);
+  } catch(error) {
+    const status=error.response?.status;
+    return finish('unavailable',names,status===403?'permission_denied':[400,409].includes(status)?'name_rejected':'provider_unavailable');
+  }
 }
 function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAuth,clientFactory=c=>new OAuth2Client(c.clientId,c.clientSecret,`${c.origin}/api/google/callback`)}={}) {
   return async function handler(req,res) {
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move'].includes(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','institutional-move'].includes(action)?'POST':'GET';
+    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels'].includes(action))return reply(404,{error:'not_found'});
+    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
@@ -218,7 +224,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
-      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move'].includes(action)) {
+      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels'].includes(action)) {
         try {
           const type=action.startsWith('institutional')?'general':'personal';
           const current=await account(type);
@@ -226,6 +232,14 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const connection=await store.getConnection(current.user.id,type);
           if(!connection || connection.email!==current.user.email || !connection.capabilities.gmail)return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
+          if(action==='institutional-labels'){
+            if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox'].includes(key)))return reply(400,{error:'invalid_institutional'});
+            if(body.mailbox!==current.user.email)return reply(409,{error:'account_changed'});
+            if(!connection.capabilities.manageInstitutional)return reply(403,{error:'institutional_scope'});
+            const labelDetails=await mailboxLabels(client,true,true,GENERAL_LABELS,true);
+            try {await store.putConnection(current.user.id,type,{...connection,labelsAllowed:true,credentials:credentialsOf(client)});}catch{}
+            return reply(200,{mailbox:current.user.email,labels:labelDetails.status,labelDetails});
+          }
           const result=action.startsWith('institutional')
             ?await handleInstitutional({action,url,body,client,store,owner:current.user.id,email:current.user.email,canModify:connection.capabilities.manageInstitutional===true})
             :await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
@@ -339,10 +353,11 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             const {data}=await client.request({url:'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',timeout:10000});
             if(emailOf(data.user?.emailAddress)!==connection.email)throw new Error('wrong_account');
           }
-          const labels=await mailboxLabels(client,connection.labelsAllowed===true,false,type==='personal'?PERSONAL_LABELS:GENERAL_LABELS);
+          const labelDetails=type==='general'?await mailboxLabels(client,connection.labelsAllowed===true,false,GENERAL_LABELS,true):null;
+          const labels=type==='general'?labelDetails.status:await mailboxLabels(client,connection.labelsAllowed===true);
           connection.credentials=credentialsOf(client);
           await store.putConnection(current.user.id,type,connection);
-          connections[type]={email:connection.email,...connection.capabilities,labels};
+          connections[type]={email:connection.email,...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};
         } catch(error) {
           const googleError=error.response?.data?.error;
           if(error.response?.status===401 || googleError==='invalid_grant' || error.message==='wrong_account') {

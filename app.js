@@ -148,7 +148,7 @@ function setupEmailConnections(){
         status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
         if(connected) {
           const labelMessages={ready:type==='personal'?'labels prontas (3/3)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
-          status.textContent+=' · '+(labelMessages[connection.labels]||labelMessages.permission_required);
+          status.textContent+=' · '+(type==='general'&&connection.labels==='missing'&&connection.labelDetails?.missing?.length?'Faltam marcadores: '+connection.labelDetails.missing.join(', '):(labelMessages[connection.labels]||labelMessages.permission_required));
           status.textContent+=' · Classificação: '+((type==='personal'?connection.classify:connection.manageInstitutional)?'autorizada':'revisar autorização');
         }
         status.classList.toggle('is-connected',connected);
@@ -224,6 +224,7 @@ function setupEmailConnections(){
     params.delete('mailbox');
     window.history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():'')+location.hash);
   }
+  window.addEventListener('farol-connections-refresh',refresh);
   window.addEventListener('focus',refresh);
   refresh();
 }
