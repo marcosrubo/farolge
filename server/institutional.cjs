@@ -1,5 +1,6 @@
 'use strict';
 const {plainText,validDate}=require('./demands.cjs');
+const {GENERAL_LABELS}=require('./mailbox-labels.cjs');
 const BASE='https://gmail.googleapis.com/gmail/v1/users/me';
 const validId=value=>typeof value==='string'&&/^[\w-]{1,128}$/.test(value);
 const fail=(code,status)=>{throw Object.assign(new Error(code),{status});};
@@ -73,7 +74,7 @@ function extractActivities(text,subject,receivedAt){
   if(!activities.length&&subject)return extractActivities(subject,'',receivedAt).map(item=>({...item,activity:item.evidence?item.activity:subject}));
   return activities.length?activities:[{activity:subject||'(Sem assunto)',dueDate:null,evidence:'',review:'Prazo não identificado no texto disponível.'}];
 }
-const FOLDERS=['INBOX','Classificadas','Arquivadas'];
+const FOLDERS=['INBOX',...GENERAL_LABELS];
 async function handleInstitutional({action='institutional',url,body={},client,store,owner,email,canModify=false}){
   const moving=action==='institutional-move';
   if((moving?body.mailbox:url.searchParams.get('mailbox'))!==email)fail('account_changed',409);

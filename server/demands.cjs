@@ -1,6 +1,5 @@
 'use strict';
-const LABELS=['1-ME DEVEM','2-MINHAS','3-DEVO'];
-const CLASSIFIED='9-Classificado';
+const {PERSONAL_CATEGORIES:LABELS,DISPATCHED_LABEL}=require('./mailbox-labels.cjs');
 const BASE='https://gmail.googleapis.com/gmail/v1/users/me';
 const validId=value=>typeof value==='string' && /^[\w-]{1,128}$/.test(value);
 const fail=(code,status)=>{throw Object.assign(new Error(code),{status});};
@@ -43,7 +42,7 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
   }
   const {labels=[]}=await request('/labels');
   const ids=LABELS.map(name=>labels.find(label=>label.name===name)?.id||null);
-  const classifiedId=labels.find(label=>label.name===CLASSIFIED)?.id;
+  const classifiedId=labels.find(label=>label.name===DISPATCHED_LABEL)?.id;
   const inboxMessage=message=>{
     if(!validId(message.id)||!validId(message.threadId))fail('invalid_provider',502);
     const h=headers(message),labelIds=message.labelIds||[];

@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const {handleDemands,validDate,plainText}=require('../server/demands.cjs');
-const LABELS=['1-ME DEVEM','2-MINHAS','3-DEVO','9-Classificado'];
+const LABELS=['1-ME DEVEM','2-MINHAS','3-DEVO','4-DESPACHADO'];
 function harness(){
  const rows=new Map(),threads=new Map(),messages=new Map(),calls=[];
  const email='person@gmail.com',owner='owner-a';
@@ -175,7 +175,7 @@ test('Caixa de entrada lista mensagens individuais inclusive já classificadas s
  assert.equal(call.searchParams.get('labelIds'),'INBOX');assert.equal(call.searchParams.get('pageToken'),'page1');
  assert.equal(call.searchParams.get('maxResults'),'20');assert.equal(h.rows.size,0);assert.ok(h.calls.every(c=>c.method==='GET'));
 });
-test('classifica só a mensagem escolhida movendo para 9-Classificado e preservando UNREAD e outras etiquetas',async()=>{
+test('classifica só a mensagem escolhida movendo para 4-DESPACHADO e preservando UNREAD e outras etiquetas',async()=>{
  const h=harness(),body={type:'personal',mailbox:h.email,messageId:'inbox2',column:2};
  const result=await h.run('classify',{body});
  assert.deepEqual(h.calls.find(c=>c.method==='POST').data,{addLabelIds:['L2','L3'],removeLabelIds:['INBOX']});
@@ -215,7 +215,7 @@ test('interface confirma etiqueta removendo a linha e insere a conversa nas colu
  const button=ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='2');
  assert.equal(button.disabled,false);await button.listeners.click();
  assert.equal(posted.length,1);assert.equal(posted[0].messageId,'inbox2');
- assert.ok(ui.root.querySelector('#inbox-feedback').textContent.includes('movida para 9-Classificado'));
+ assert.ok(ui.root.querySelector('#inbox-feedback').textContent.includes('movida para 4-DESPACHADO'));
  assert.ok(!ui.root.querySelector('#inbox-list').innerHTML.includes('data-message="inbox2"'));
  assert.ok(!ui.root.classifyButtons.some(b=>b.dataset.message==='inbox2'));
  assert.ok(ui.root.querySelector('#demand-columns').innerHTML.includes('data-thread="thread2"'));
@@ -309,11 +309,11 @@ test('adicionar categoria pela conversa preserva campos ainda não salvos e move
  assert.equal(content.querySelector('#demand-responsible').value,'Ainda editando');
  assert.ok(h.messages.get('message1').labelIds.includes('L2'));assert.ok(h.messages.get('message1').labelIds.includes('L3'));
  assert.ok(!h.messages.get('message1').labelIds.includes('INBOX'));
- assert.ok(content.querySelector('#demand-save-status').textContent.includes('9-Classificado'));
+ assert.ok(content.querySelector('#demand-save-status').textContent.includes('4-DESPACHADO'));
  ui.api.unmount();
 });
 
-test('lista 9-Classificado pagina mensagens individuais, exclui lixeira e não exige banco',async()=>{
+test('lista 4-DESPACHADO pagina mensagens individuais, exclui lixeira e não exige banco',async()=>{
  const h=harness();h.messages.get('message1').labelIds.push('L3');
  h.messages.get('inbox2').labelIds=['L3','TRASH'];
  h.store.getDemands=()=>{throw new Error('não consultar banco');};
@@ -325,7 +325,7 @@ test('lista 9-Classificado pagina mensagens individuais, exclui lixeira e não e
  assert.equal(call.searchParams.get('labelIds'),'L3');assert.equal(call.searchParams.get('pageToken'),'classified-next');
  assert.equal(call.searchParams.get('maxResults'),'20');assert.ok(h.calls.every(c=>c.method==='GET'));
 });
-test('interface acrescenta categoria em 9-Classificado preservando mensagem, categorias e prazo',async()=>{
+test('interface acrescenta categoria em 4-DESPACHADO preservando mensagem, categorias e prazo',async()=>{
  const h=harness();h.messages.get('message1').labelIds=['L0','L3','UNREAD','CUSTOM'];
  await h.run('demand',{body:h.body({responsible:'Ana'})});
  const ui=interactive(async(url,options={})=>{
@@ -337,7 +337,7 @@ test('interface acrescenta categoria em 9-Classificado preservando mensagem, cat
  await ui.root.classifiedButtons.find(b=>b.dataset.classifiedClassify==='2').listeners.click();
  assert.ok(ui.root.querySelector('#classified-list').innerHTML.includes('data-message="message1"'));
  assert.ok(ui.root.classifiedButtons.find(b=>b.dataset.classifiedClassify==='2').disabled);
- assert.ok(ui.root.querySelector('#classified-feedback').textContent.includes('mantida em 9-Classificado'));
+ assert.ok(ui.root.querySelector('#classified-feedback').textContent.includes('mantida em 4-DESPACHADO'));
  assert.deepEqual(h.messages.get('message1').labelIds,['L0','L3','UNREAD','CUSTOM','L2']);
  assert.equal(h.rows.get(h.owner+'.thread1').responsibles[0],'Ana');assert.equal(h.rows.get(h.owner+'.thread1').dueDate,'2026-11-20');
  ui.root.querySelector('#classified-search').listeners.input({target:{value:'não existe'}});

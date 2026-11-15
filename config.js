@@ -8,6 +8,7 @@ window.FAROL_CONFIG = {
   gmailLabels: {
     incoming: '1-ME DEVEM',
     personal: '2-MINHAS',
-    outgoing: '3-DEVO'
+    outgoing: '3-DEVO',
+    dispatched: '4-DESPACHADO'
   }
 };

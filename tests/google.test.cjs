@@ -441,3 +441,24 @@ test('status identifica os nomes ausentes e preparação informa recusa sem deta
  assert.equal(result.json().labels,'unavailable');assert.equal(result.json().labelDetails.reason,'permission_denied');
  assert.deepEqual(result.json().labelDetails.missing,['Arquivadas']);assert.ok(!result.body.includes('google:'));
 });
+
+test('nomes definidos por conexão permanecem separados na mesma conta após apagar marcadores',async()=>{
+ assert.deepEqual(PERSONAL_LABELS,['1-ME DEVEM','2-MINHAS','3-DEVO','4-DESPACHADO']);
+ assert.deepEqual(GENERAL_LABELS,['Classificadas','Arquivadas']);
+ const h=harness(),email='shared@gmail.com';
+ const personal=await h.login(email),general=await h.login(email,personal.cookie,'general');
+ assert.deepEqual([...h.labels.get(email)].sort(),[...PERSONAL_LABELS,...GENERAL_LABELS].sort());
+ h.labels.get(email).clear();const writes=h.labelRequests.filter(r=>r.method==='POST').length;
+ const status=(await h.request('status',{cookie:personal.cookie+'; '+general.cookie})).json();
+ assert.equal(status.connections.personal.labels,'missing');assert.equal(status.connections.general.labels,'missing');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,writes,'status must not recreate labels');
+ const nextPersonal=await h.login(email,personal.cookie+'; '+general.cookie);
+ assert.deepEqual([...h.labels.get(email)],PERSONAL_LABELS,'Pessoal recreates only its four labels');
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').slice(writes).map(r=>r.data.name),PERSONAL_LABELS);
+ const nextGeneral=await h.login(email,nextPersonal.cookie+'; '+general.cookie,'general');
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').slice(writes+4).map(r=>r.data.name),GENERAL_LABELS);
+ const complete=(await h.request('status',{cookie:nextPersonal.cookie+'; '+nextGeneral.cookie})).json();
+ assert.equal(complete.connections.personal.labels,'ready');assert.equal(complete.connections.general.labels,'ready');
+ const finalWrites=h.labelRequests.filter(r=>r.method==='POST');
+ assert.ok(finalWrites.every(r=>r.data.name!=='INBOX'&&r.data.name!=='Caixa de Entrada'));
+});
