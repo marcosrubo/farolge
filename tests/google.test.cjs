@@ -443,7 +443,7 @@ test('status identifica os nomes ausentes e preparação informa recusa sem deta
 });
 
 test('nomes definidos por conexão permanecem separados na mesma conta após apagar marcadores',async()=>{
- assert.deepEqual(PERSONAL_LABELS,['1-ME DEVEM','2-MINHAS','3-DEVO','4-DESPACHADO']);
+ assert.deepEqual(PERSONAL_LABELS,['1-ME DEVEM','2-MINHAS','3-DEVO','4-DESPACHADAS']);
  assert.deepEqual(GENERAL_LABELS,['Classificadas','Arquivadas']);
  const h=harness(),email='shared@gmail.com';
  const personal=await h.login(email),general=await h.login(email,personal.cookie,'general');
@@ -461,4 +461,16 @@ test('nomes definidos por conexão permanecem separados na mesma conta após apa
  assert.equal(complete.connections.personal.labels,'ready');assert.equal(complete.connections.general.labels,'ready');
  const finalWrites=h.labelRequests.filter(r=>r.method==='POST');
  assert.ok(finalWrites.every(r=>r.data.name!=='INBOX'&&r.data.name!=='Caixa de Entrada'));
+});
+
+test('totais da Visão GERAL exigem a sessão do tipo solicitado sem herdar a outra conta',async()=>{
+ const h=harness();assert.equal((await h.request('overview',{query:'?type=general&mailbox=school@gmail.com'})).status,401);
+ assert.equal((await h.request('overview',{query:'?type=invalid'})).status,400);
+ const personal=await h.login();
+ assert.equal((await h.request('overview',{cookie:personal.cookie,query:'?type=general&mailbox=admin@gmail.com'})).status,401);
+ const general=await h.login('school@gmail.com','','general');
+ assert.equal((await h.request('overview',{cookie:general.cookie,query:'?type=personal&mailbox=school@gmail.com'})).status,401);
+ assert.equal((await h.request('overview',{cookie:general.cookie,query:'?type=general&mailbox=other@gmail.com'})).status,409);
+ const result=await h.request('overview',{cookie:general.cookie,query:'?type=general&mailbox=school@gmail.com'});assert.equal(result.status,200);assert.equal(result.json().mailbox,'school@gmail.com');assert.equal(result.json().type,'general');
+ assert.equal((await h.request('overview',{method:'POST',body:{type:'general'},cookie:general.cookie})).status,405);
 });

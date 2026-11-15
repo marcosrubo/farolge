@@ -61,29 +61,22 @@ function renderRadar(){
 
 function renderDevelopment(id){
   const descriptions={
-    inicio:'Nesta tela serão mostrados indicadores gerais de',
     'bi-seed':'Aqui serão apresentados os indicadores/resumos do BI para que possa ter uma visão simplificada da situação da escola.',
     institucionais:'Nesta tela serão disponibilizados os recursos de organização das demandas do colégio a partir do e-mail institucional geral LDA....@escola.pr.gov.br.',
     pessoais:'Nesta tela serão disponibilizados os recursos de organização das demandas pessoais de quem estiver conectado (diretora, secretária, pedagogas e quem mais utilizar o sistema) a partir do e-mail pessoal institucional fulano.ciclano....@escola.pr.gov.br.',
     configuracoes:'Aqui serão disponibilizados os recursos para conexão com o e-mail institucional geral, pessoal institucional e demais dados de configuração/parametrização do sistema.'
   };
   if(!Object.hasOwn(descriptions,id))return '';
-  const indicators=[
-    'Acompanhamento de Alunos',
-    'Resumo das Demandas INSTITUCIONAIS da escola',
-    'Resumo das Demandas PESSOAIS de quem estiver conectado',
-    'Índices do BI da SEED'
-  ];
   return `<section class="development-content" aria-labelledby="development-title">
     <h1 id="development-title">em Desenvolvimento</h1>
     <p>${descriptions[id]}</p>
-    ${id==='inicio'?`<ul>${indicators.map(item=>`<li>${item}</li>`).join('')}</ul>`:''}
   </section>`;
 }
 
 function render(){
   window.FarolDemands?.unmount();
   window.FarolInstitutional?.unmount();
+  window.FarolOverview?.unmount();
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const selected=modules.find(item=>item.id===route)||modules[0];
   document.title='FAROL GE · '+selected.label;
@@ -91,7 +84,8 @@ function render(){
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='configuracoes'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&index<5?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
-  main.innerHTML=selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em 4-DESPACHADO e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  main.innerHTML=selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em 4-DESPACHADAS e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  if(selected.id==='inicio')window.FarolOverview?.mount(document.querySelector('#overview-board'));
   if(selected.id==='institucionais')window.FarolInstitutional?.mount(document.querySelector('#institutional-board'));
   if(selected.id==='pessoais')window.FarolDemands?.mount(document.querySelector('#demands-board'));
 }
@@ -140,6 +134,7 @@ function setupEmailConnections(){
       configured=result.configured===true;
       window.FarolDemands?.connectionChanged(configured?result.connections?.personal||null:null);
       window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
+      for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.connections?.[type]||null:null);
       for(const type of types){
         const connection=result.connections?.[type];
         const email=connection?.email;
@@ -164,6 +159,7 @@ function setupEmailConnections(){
       configured=false;
       window.FarolDemands?.connectionChanged(null);
       window.FarolInstitutional?.connectionChanged(null);
+      for(const type of types)window.FarolOverview?.connectionChanged(type,null);
       for(const type of types){
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent='Conexão não verificada';
@@ -209,6 +205,7 @@ function setupEmailConnections(){
         ++statusVersion;
         if(button.dataset.disconnectEmail==='personal')window.FarolDemands?.connectionChanged(null);
         if(button.dataset.disconnectEmail==='general')window.FarolInstitutional?.connectionChanged(null);
+        window.FarolOverview?.connectionChanged(button.dataset.disconnectEmail,null);
         await api('disconnect',{type:button.dataset.disconnectEmail});
         feedback.textContent='Autorização removida do FAROL GE para esta conta. A outra conexão foi preservada.';
         await refresh();

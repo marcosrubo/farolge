@@ -9,6 +9,6 @@ window.FAROL_CONFIG = {
     incoming: '1-ME DEVEM',
     personal: '2-MINHAS',
     outgoing: '3-DEVO',
-    dispatched: '4-DESPACHADO'
+    dispatched: '4-DESPACHADAS'
   }
 };
