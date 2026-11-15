@@ -82,11 +82,11 @@ test('desconectar Geral preserva Pessoal e a explicação do módulo',async()=>{
  assert.equal(JSON.parse(h.requests.find(r=>r.url.endsWith('/disconnect')).opts.body).type,'general');
 });
 
-test('diálogo explica criação de labels somente em Pessoal',async()=>{
+test('diálogo separa marcadores da Pessoal e da Geral',async()=>{
  const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
  h.connect[1].listeners.click();assert.equal(h.get('#email-connection-labels').hidden,false);
  h.connect[0].listeners.click();assert.equal(h.get('#email-connection-labels').hidden,true);
- assert.ok(fs.readFileSync('index.html','utf8').includes('2-MINHAS'));
+ assert.ok(fs.readFileSync('index.html','utf8').includes('GE_MINHAS'));
 });
 for(const [labels,expected] of [['ready','labels prontas (4/4)'],['missing','labels incompletas'],['permission_required','autorize o gerenciamento'],['unavailable','não foi possível verificar']])test('situação real das labels: '+labels,async()=>{
  const h=ui({configured:true,connections:{personal:{email:'person@gmail.com',gmail:true,drive:true,labels}}});await settle();

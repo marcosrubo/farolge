@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const {handleOverview}=require('../server/overview.cjs');
 function backend(){
- const calls=[],names=['1-ME DEVEM','2-MINHAS','3-DEVO','4-DESPACHADAS','Classificadas','Arquivadas'];
+ const calls=[],names=['GE_ME DEVEM','GE_MINHAS','GE_DEVO','GE_Despachadas','GE_Classificadas','GE_Arquivadas'];
  const labels=names.map((name,index)=>({id:'L'+index,name}));
  const counts=new Map([['INBOX',12345],...labels.map((label,index)=>[label.id,index*10])]);
  const failures=new Map();
@@ -18,16 +18,16 @@ function backend(){
 }
 test('conta mensagens de todas as páginas por marcador, sem usar contagem de conversas ou listar e-mails',async()=>{
  const h=backend(),result=await h.run();
- assert.deepEqual(result.items.map(i=>i.name),['INBOX','Classificadas','Arquivadas']);
+ assert.deepEqual(result.items.map(i=>i.name),['INBOX','GE_Classificadas','GE_Arquivadas']);
  assert.equal(result.items[0].total,12345);assert.equal(result.items[0].status,'ready');assert.equal(h.calls.length,4);
  assert.ok(h.calls.every(call=>!call.method&&!call.data&&call.url.includes('/labels')));
  assert.ok(h.calls.every(call=>!call.url.includes('/messages')));
- const personal=await h.run('personal');assert.deepEqual(personal.items.map(i=>i.name),['1-ME DEVEM','2-MINHAS','3-DEVO','INBOX','4-DESPACHADAS']);
+ const personal=await h.run('personal');assert.deepEqual(personal.items.map(i=>i.name),['GE_ME DEVEM','GE_MINHAS','GE_DEVO','INBOX','GE_Despachadas']);
  assert.equal(personal.items[0].total,0);assert.equal(personal.items[0].status,'ready');
 });
 test('ausência, falha parcial e resposta inválida não viram zero',async()=>{
  const h=backend();h.labels.pop();h.failures.set('L4',503);
- const result=await h.run();assert.equal(result.items[0].status,'ready');assert.deepEqual(result.items[1],{name:'Classificadas',total:null,status:'unavailable'});assert.deepEqual(result.items[2],{name:'Arquivadas',total:null,status:'missing'});
+ const result=await h.run();assert.equal(result.items[0].status,'ready');assert.deepEqual(result.items[1],{name:'GE_Classificadas',total:null,status:'unavailable'});assert.deepEqual(result.items[2],{name:'GE_Arquivadas',total:null,status:'missing'});
  h.counts.set('INBOX',-1);assert.equal((await h.run()).items[0].total,null);
  h.failures.set('INBOX',404);assert.equal((await h.run()).items[0].status,'missing');
 });
@@ -45,8 +45,8 @@ function frontend(){
  const respond=(type,mailbox,items,ok=true)=>{const req=requests.find(r=>!r.done&&new URL('https://farol.invalid'+r.url).searchParams.get('type')===type);assert.ok(req);req.done=true;req.resolve({ok,json:async()=>ok?{type,mailbox,items}:{error:'unavailable'}});};
  return {app:window.FarolOverview,root,get,requests,respond};
 }
-const generalItems=[{name:'INBOX',total:1234,status:'ready'},{name:'Classificadas',total:0,status:'ready'},{name:'Arquivadas',total:null,status:'missing'}];
-const personalItems=['1-ME DEVEM','2-MINHAS','3-DEVO','INBOX','4-DESPACHADAS'].map(name=>({name,total:12,status:'ready'}));
+const generalItems=[{name:'INBOX',total:1234,status:'ready'},{name:'GE_Classificadas',total:0,status:'ready'},{name:'GE_Arquivadas',total:null,status:'missing'}];
+const personalItems=['GE_ME DEVEM','GE_MINHAS','GE_DEVO','INBOX','GE_Despachadas'].map(name=>({name,total:12,status:'ready'}));
 test('Visão GERAL exibe oito caixas sem autenticação, sem inventar totais',()=>{
  const h=frontend();h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.root.innerHTML.includes('E-mails da ESCOLA'));assert.ok(h.root.innerHTML.includes('E-mails PESSOAIS'));
  const combined=h.get('#overview-cards-general').innerHTML+h.get('#overview-cards-personal').innerHTML;
@@ -62,4 +62,11 @@ test('troca de conta descarta resposta anterior; falha não mostra zero nem tota
  const h=frontend();h.app.mount(h.root);h.app.connectionChanged('general',{email:'old@example.com',gmail:true});h.app.connectionChanged('general',{email:'new@example.com',gmail:true});
  h.respond('general','old@example.com',generalItems);await settle();assert.ok(!h.get('#overview-cards-general').innerHTML.includes('1.234'));
  h.respond('general','new@example.com',[],false);await settle();assert.ok(h.get('#overview-status-general').textContent.includes('Não foi possível'));assert.ok(!h.get('#overview-cards-general').innerHTML.includes('>0</strong>'));
+});
+
+test('títulos da Visão GERAL não expõem GE_ nem os números antigos',()=>{
+ const h=frontend();h.app.mount(h.root);
+ const html=h.get('#overview-cards-general').innerHTML+h.get('#overview-cards-personal').innerHTML;
+ assert.ok(!html.includes('GE_'));assert.ok(!html.includes('1-ME'));assert.ok(!html.includes('4-DESPACH'));
+ for(const title of ['ME DEVEM','MINHAS','DEVO','Despachadas','Classificadas','Arquivadas'])assert.ok(html.includes(title));
 });

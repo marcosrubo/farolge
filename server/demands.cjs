@@ -1,5 +1,5 @@
 'use strict';
-const {PERSONAL_CATEGORIES:LABELS,DISPATCHED_LABEL}=require('./mailbox-labels.cjs');
+const {PERSONAL_CATEGORIES:LABEL_NAMES,PERSONAL_TITLES:LABELS,DISPATCHED_LABEL}=require('./mailbox-labels.cjs');
 const BASE='https://gmail.googleapis.com/gmail/v1/users/me';
 const validId=value=>typeof value==='string' && /^[\w-]{1,128}$/.test(value);
 const fail=(code,status)=>{throw Object.assign(new Error(code),{status});};
@@ -41,7 +41,7 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
     if(!canClassify)fail('classify_scope',403);
   }
   const {labels=[]}=await request('/labels');
-  const ids=LABELS.map(name=>labels.find(label=>label.name===name)?.id||null);
+  const ids=LABEL_NAMES.map(name=>labels.find(label=>label.name===name)?.id||null);
   const classifiedId=labels.find(label=>label.name===DISPATCHED_LABEL)?.id;
   const inboxMessage=message=>{
     if(!validId(message.id)||!validId(message.threadId))fail('invalid_provider',502);

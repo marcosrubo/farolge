@@ -60,16 +60,16 @@ Na conexão Pessoal, o backend verifica e cria somente os marcadores ausentes en
 
 | Marcador | Destino |
 | --- | --- |
-| `1-ME DEVEM` | 1-ME DEVEM |
-| `2-MINHAS` | 2-MINHAS |
-| `3-DEVO` | 3-DEVO |
-| `4-DESPACHADAS` | Mensagens classificadas |
+| `GE_ME DEVEM` | GE_ME DEVEM |
+| `GE_MINHAS` | GE_MINHAS |
+| `GE_DEVO` | GE_DEVO |
+| `GE_Despachadas` | Mensagens classificadas |
 
-As três colunas mostram as conversas dos marcadores. Uma conversa com múltiplos marcadores aparece nas respectivas colunas com o mesmo prazo e conclusão, mas responsáveis por categoria. A precedência de arquivadas ainda não foi definida; não é aplicada exclusão de conversas por estarem fora da Caixa de entrada. Spam, lixeira e rascunhos não originam cartões. Não são renomeados/excluídos marcadores antigos. A Caixa de entrada abaixo do quadro permite adicionar uma das três etiquetas à mensagem escolhida, adicionando também 4-DESPACHADAS e removendo somente INBOX. A data de um e-mail não deve ser convertida automaticamente em prazo.
+As três colunas mostram as conversas dos marcadores. Uma conversa com múltiplos marcadores aparece nas respectivas colunas com o mesmo prazo e conclusão, mas responsáveis por categoria. A precedência de arquivadas ainda não foi definida; não é aplicada exclusão de conversas por estarem fora da Caixa de entrada. Spam, lixeira e rascunhos não originam cartões. Não são renomeados/excluídos marcadores antigos. A Caixa de entrada abaixo do quadro permite adicionar uma das três etiquetas à mensagem escolhida, adicionando também GE_Despachadas e removendo somente INBOX. A data de um e-mail não deve ser convertida automaticamente em prazo.
 
 A Pessoal solicita adicionalmente `gmail.labels`. Após publicar, contas já conectadas precisam usar **Revisar autorização** e conceder essa permissão. O status mostra se as quatro labels existem; consultar status não cria marcadores. Falhas mantêm a conta conectada e pedem nova revisão para tentar novamente. A Geral não solicita esse escopo nem consulta/cria essas labels. Desconectar preserva os marcadores no Gmail. Marcos confirmou a criação real na Vercel com os nomes anteriores. A alteração para os nomes numerados ainda deve ser validada após publicação. Os nomes usados no servidor são fixos; editar `config.js` não altera as operações do backend.
 
-A revisão 3 acrescentou a consulta e criação dos três marcadores na conexão Pessoal e sua retenção no Gmail. A revisão 4 atualiza seus nomes para `1-ME DEVEM`, `2-MINHAS` e `3-DEVO`, nessa ordem de criação. O backend não renomeia nem remove os marcadores anteriores; Marcos informou que os excluirá manualmente no Gmail.
+A revisão 3 acrescentou a consulta e criação dos três marcadores na conexão Pessoal e sua retenção no Gmail. A revisão 4 atualiza seus nomes para `GE_ME DEVEM`, `GE_MINHAS` e `GE_DEVO`, nessa ordem de criação. O backend não renomeia nem remove os marcadores anteriores; Marcos informou que os excluirá manualmente no Gmail.
 
 ## Limites e próximos passos
 
@@ -87,7 +87,7 @@ Marcos autorizou implementar o quadro e o acompanhamento para conferir na Vercel
 
 Ao abrir um cartão: leitura de mensagens em texto simples, remetente/destinatário e data; quando só há HTML ou texto externo à resposta da API, exibe prévia e link para o Gmail. HTML não é inserido na página, imagens remotas não são carregadas, anexos não são baixados e ler no FAROL não marca como lido. Uma resposta não conclui a demanda.
 
-O formulário permite definir/editar/remover a data limite, informar responsável por categoria (nome/e-mail livre em 1-ME DEVEM e 3-DEVO; conta Pessoal em 2-MINHAS), concluir/reabrir o trabalho e consultar o histórico. Prazos são datas civis no fuso America/Sao_Paulo, sem hora limite; ficam visíveis como sem prazo, vence em data, vence hoje, atraso em dias ou concluída. Não há notificação nem envio automático; comunicar o prazo ao destinatário no texto do e-mail.
+O formulário permite definir/editar/remover a data limite, informar responsável por categoria (nome/e-mail livre em GE_ME DEVEM e GE_DEVO; conta Pessoal em GE_MINHAS), concluir/reabrir o trabalho e consultar o histórico. Prazos são datas civis no fuso America/Sao_Paulo, sem hora limite; ficam visíveis como sem prazo, vence em data, vence hoje, atraso em dias ou concluída. Não há notificação nem envio automático; comunicar o prazo ao destinatário no texto do e-mail.
 
 Uma demanda pertence à identidade da conta Pessoal e à conversa (`threadId`), com ID próprio e referência à mensagem de origem. Não correlaciona automaticamente cópias nas caixas de remetente/destinatário nem compartilha dados com outra pessoa ou escola. As respostas usam o acompanhamento da mesma conversa. Alterações concorrentes são rejeitadas por versão, para não perder histórico. O backend verifica a identidade e os marcadores antes de ler/gravar; a conta Geral não dá acesso.
 
@@ -95,27 +95,27 @@ Uma demanda pertence à identidade da conta Pessoal e à conversa (`threadId`), 
 
 1. No SQL Editor do Supabase **exclusivo FAROL GE**, executar `database/personal-demands.sql` (depois das tabelas de `database/google-sessions.sql`, já usadas pelas conexões).
 2. Publicar os arquivos pelo Git/Vercel. Para leitura e prazos não há variável ou escopo Google novo: usa o `gmail.readonly` já autorizado. Para classificação da Caixa de entrada, acrescentar `gmail.modify` conforme a seção abaixo. Política atualizada para revisão 5, incluindo leitura de conversas, dados de acompanhamento, histórico e retenção.
-3. Na Vercel, abrir Demandas PESSOAIS com a conta Pessoal conectada. Classificar um e-mail em `1-ME DEVEM` no Gmail, clicar Atualizar no FAROL, abrir o cartão e salvar um prazo. Atualizar/recarregar a página para confirmar persistência. Conferir edição/remoção, conclusão/reabertura, duas janelas e conta diferente. Nenhum teste visual local ou publicação remota foi realizado por esta entrega.
+3. Na Vercel, abrir Demandas PESSOAIS com a conta Pessoal conectada. Classificar um e-mail em `GE_ME DEVEM` no Gmail, clicar Atualizar no FAROL, abrir o cartão e salvar um prazo. Atualizar/recarregar a página para confirmar persistência. Conferir edição/remoção, conclusão/reabertura, duas janelas e conta diferente. Nenhum teste visual local ou publicação remota foi realizado por esta entrega.
 
 A tabela `farol_personal_demands` tem RLS, sem policies/acesso de anon/authenticated, com FK para auth.users e exclusão em cascata. O backend cifra prazo, responsável, conclusão, mensagem de origem e histórico com AES-GCM; IDs técnicos de proprietário/conversa, ID próprio, versão e horário permanecem metadados. Não grava corpo, assunto, trechos, anexos ou lista de participantes. Disconnect remove a conexão, mas preserva acompanhamento e histórico para a reconexão da mesma conta; exclusão integral é administrativa conforme política. Não manter cópias de e-mails em logs ou armazenamento local.
 
 ## Classificação atualizada — 12/11/2026
 
-A conexão Pessoal prepara os marcadores ausentes `1-ME DEVEM`, `2-MINHAS`, `3-DEVO` e `4-DESPACHADAS`, nessa ordem. Geral permanece independente. Consultar status não cria marcadores. Depois de publicar, usar **Pessoal → Revisar autorização** para preparar o quarto marcador; não há novo escopo, SQL ou variável nesta atualização. Continuam necessários gmail.labels e gmail.modify já descritos acima.
+A conexão Pessoal prepara os marcadores ausentes `GE_ME DEVEM`, `GE_MINHAS`, `GE_DEVO` e `GE_Despachadas`, nessa ordem. Geral permanece independente. Consultar status não cria marcadores. Depois de publicar, usar **Pessoal → Revisar autorização** para preparar o quarto marcador; não há novo escopo, SQL ou variável nesta atualização. Continuam necessários gmail.labels e gmail.modify já descritos acima.
 
-A Caixa de entrada lista mensagens individuais em páginas de 20. Classificar usa users.messages.modify na mensagem escolhida com addLabelIds contendo a categoria e 4-DESPACHADAS, e removeLabelIds contendo somente INBOX. Preserva UNREAD e as outras etiquetas. A mensagem sai da lista após sucesso confirmado e a conversa aparece nas colunas correspondentes. Não duplica e-mails. Ao abrir uma conversa, cada mensagem elegível tem botões para adicionar categorias, inclusive depois de movida para 4-DESPACHADAS; múltiplas categorias são permitidas. Mensagens fora de INBOX e 4-DESPACHADAS, spam, lixeira e rascunhos são recusadas. Não há envio, edição de conteúdo, exclusão ou alteração de leitura.
+A Caixa de entrada lista mensagens individuais em páginas de 20. Classificar usa users.messages.modify na mensagem escolhida com addLabelIds contendo a categoria e GE_Despachadas, e removeLabelIds contendo somente INBOX. Preserva UNREAD e as outras etiquetas. A mensagem sai da lista após sucesso confirmado e a conversa aparece nas colunas correspondentes. Não duplica e-mails. Ao abrir uma conversa, cada mensagem elegível tem botões para adicionar categorias, inclusive depois de movida para GE_Despachadas; múltiplas categorias são permitidas. Mensagens fora de INBOX e GE_Despachadas, spam, lixeira e rascunhos são recusadas. Não há envio, edição de conteúdo, exclusão ou alteração de leitura.
 
-Responsável é separado por categoria no payload criptografado (mapa responsibles). Em 2-MINHAS é derivado automaticamente da identidade Pessoal verificada e não editável. Em 1-ME DEVEM e 3-DEVO é textual e independente; registros antigos conservam o responsável como valor inicial até edição da categoria. Prazo e conclusão continuam compartilhados por conversa. Versão global protege alterações concorrentes e o histórico identifica a categoria alterada. Não é necessário migrar o banco; preserva os registros existentes.
+Responsável é separado por categoria no payload criptografado (mapa responsibles). Em GE_MINHAS é derivado automaticamente da identidade Pessoal verificada e não editável. Em GE_ME DEVEM e GE_DEVO é textual e independente; registros antigos conservam o responsável como valor inicial até edição da categoria. Prazo e conclusão continuam compartilhados por conversa. Versão global protege alterações concorrentes e o histórico identifica a categoria alterada. Não é necessário migrar o banco; preserva os registros existentes.
 
-A política pública e o diálogo passam à revisão 7. Publicar pelo Git/Vercel e validar na nuvem: preparação dos quatro marcadores sem duplicação; classificar e conferir saída de INBOX, presença em 4-DESPACHADAS e categoria, preservação de UNREAD e outras etiquetas; adicionar as outras categorias pela conversa; salvar responsáveis diferentes; conferir 2-MINHAS com o próprio e-mail, persistência e histórico; contas distintas, recusa de permissões e falhas de rede. Nenhuma classificação retroativa em lote é executada. Mensagens antigas que ainda estejam em INBOX podem ser classificadas novamente para completar a movimentação.
+A política pública e o diálogo passam à revisão 7. Publicar pelo Git/Vercel e validar na nuvem: preparação dos quatro marcadores sem duplicação; classificar e conferir saída de INBOX, presença em GE_Despachadas e categoria, preservação de UNREAD e outras etiquetas; adicionar as outras categorias pela conversa; salvar responsáveis diferentes; conferir GE_MINHAS com o próprio e-mail, persistência e histórico; contas distintas, recusa de permissões e falhas de rede. Nenhuma classificação retroativa em lote é executada. Mensagens antigas que ainda estejam em INBOX podem ser classificadas novamente para completar a movimentação.
 
 Referências oficiais: [marcadores Gmail](https://developers.google.com/workspace/gmail/api/guides/labels) e [users.messages.modify](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/modify).
 
-## Lista de 4-DESPACHADAS no final da tela
+## Lista de GE_Despachadas no final da tela
 
-Demandas PESSOAIS exibe, abaixo da Caixa de entrada, a relação de mensagens individuais de `4-DESPACHADAS`, com remetente, assunto, data, trecho, estado de leitura, categorias e link para o Gmail. Usa páginas de 20, botão Carregar mais, atualização própria e busca nos registros carregados, independente dos filtros das três colunas. Categorias já aplicadas aparecem com indicação e botão desabilitado. As demais podem ser acrescentadas individualmente, preservando sempre `4-DESPACHADAS`, UNREAD e todas as categorias anteriores. A classificação na entrada atualiza também essa lista e as colunas sem exigir recarga da página.
+Demandas PESSOAIS exibe, abaixo da Caixa de entrada, a relação de mensagens individuais de `GE_Despachadas`, com remetente, assunto, data, trecho, estado de leitura, categorias e link para o Gmail. Usa páginas de 20, botão Carregar mais, atualização própria e busca nos registros carregados, independente dos filtros das três colunas. Categorias já aplicadas aparecem com indicação e botão desabilitado. As demais podem ser acrescentadas individualmente, preservando sempre `GE_Despachadas`, UNREAD e todas as categorias anteriores. A classificação na entrada atualiza também essa lista e as colunas sem exigir recarga da página.
 
-`GET /api/google/classified` exige a mesma identidade Pessoal e permissão de leitura dos demais endpoints; resolve o ID de 4-DESPACHADAS no servidor e lista somente metadados de mensagens desse marcador, sem spam, lixeira ou rascunhos. A consulta não cria marcadores e não depende da tabela de prazos. As ações continuam usando o endpoint classify existente, sem aceitar operações arbitrárias. Não há novo escopo, SQL ou variável. Política revisão 8. Publicar e validar na Vercel: listagem, paginação, categorias simultâneas, permanência em 4-DESPACHADAS, preservação de prazos/responsáveis e troca de conta.
+`GET /api/google/classified` exige a mesma identidade Pessoal e permissão de leitura dos demais endpoints; resolve o ID de GE_Despachadas no servidor e lista somente metadados de mensagens desse marcador, sem spam, lixeira ou rascunhos. A consulta não cria marcadores e não depende da tabela de prazos. As ações continuam usando o endpoint classify existente, sem aceitar operações arbitrárias. Não há novo escopo, SQL ou variável. Política revisão 8. Publicar e validar na Vercel: listagem, paginação, categorias simultâneas, permanência em GE_Despachadas, preservação de prazos/responsáveis e troca de conta.
 
 
 ## Demandas INSTITUCIONAIS — três colunas e prazo confirmado
@@ -172,16 +172,16 @@ Arquivos alterados nesta correção: `server/google.cjs`, `institutional.js`, `a
 
 | Conexão | Marcadores utilizados |
 | --- | --- |
-| PESSOAL | `1-ME DEVEM`, `2-MINHAS`, `3-DEVO`, `4-DESPACHADAS` |
+| PESSOAL | `GE_ME DEVEM`, `GE_MINHAS`, `GE_DEVO`, `GE_Despachadas` |
 | GERAL | Caixa de Entrada existente do Gmail (`INBOX`), `Classificadas`, `Arquivadas` |
 
-O quarto marcador Pessoal passa a ser **4-DESPACHADAS** em criação, conferência, classificação, leitura de conversas, lista final, mensagens da interface e política. Classificar continua adicionando a categoria escolhida e esse marcador, retirando somente INBOX e preservando UNREAD e as outras etiquetas. A lista 4-DESPACHADAS permite acrescentar categorias sem retirar as anteriores. O nome não significa envio de mensagem: não há alteração de conteúdo ou envio pelo FAROL.
+O quarto marcador Pessoal passa a ser **GE_Despachadas** em criação, conferência, classificação, leitura de conversas, lista final, mensagens da interface e política. Classificar continua adicionando a categoria escolhida e esse marcador, retirando somente INBOX e preservando UNREAD e as outras etiquetas. A lista GE_Despachadas permite acrescentar categorias sem retirar as anteriores. O nome não significa envio de mensagem: não há alteração de conteúdo ou envio pelo FAROL.
 
 Os nomes do backend estão em `server/mailbox-labels.cjs`, compartilhados pela preparação OAuth e pelos endpoints Pessoal/Geral. As rotas internas `classified` e os IDs técnicos de interface correspondentes foram preservados; elas agora consultam somente o novo marcador pessoal. A configuração pública espelha os quatro nomes pessoais, mas não concede operações arbitrárias ao frontend. O status Pessoal mostra quatro marcadores prontos (4/4).
 
-Não há renomeação, exclusão, transferência de marcadores antigos ou classificação retroativa. Se o marcador anterior continuar no Gmail, não será usado como substituto de 4-DESPACHADAS. Mensagens que tiverem somente o marcador anterior não passam automaticamente para a nova lista; suas demais etiquetas permanecem. Prazos existentes por conversa/identidade continuam no banco e são reutilizados quando as conversas voltam a ter os marcadores exigidos. A GERAL mantém seus nomes e não cria INBOX. Quando a mesma conta é usada nas duas conexões, cada tipo prepara apenas seus próprios marcadores.
+Não há renomeação, exclusão, transferência de marcadores antigos ou classificação retroativa. Se o marcador anterior continuar no Gmail, não será usado como substituto de GE_Despachadas. Mensagens que tiverem somente o marcador anterior não passam automaticamente para a nova lista; suas demais etiquetas permanecem. Prazos existentes por conversa/identidade continuam no banco e são reutilizados quando as conversas voltam a ter os marcadores exigidos. A GERAL mantém seus nomes e não cria INBOX. Quando a mesma conta é usada nas duas conexões, cada tipo prepara apenas seus próprios marcadores.
 
-Após publicar, Marcos pode testar a recriação dos marcadores que apagar manualmente: usar **Pessoal → Revisar autorização** para preparar os quatro pessoais e **GERAL → Revisar autorização** ou **Preparar marcadores** para os dois institucionais. Conferir os nomes, atualização da lista 4-DESPACHADAS, status 4/4, inclusão de categorias simultâneas e preservação de UNREAD. As duas conexões continuam independentes.
+Após publicar, Marcos pode testar a recriação dos marcadores que apagar manualmente: usar **Pessoal → Revisar autorização** para preparar os quatro pessoais e **GERAL → Revisar autorização** ou **Preparar marcadores** para os dois institucionais. Conferir os nomes, atualização da lista GE_Despachadas, status 4/4, inclusão de categorias simultâneas e preservação de UNREAD. As duas conexões continuam independentes.
 
 Sem novo SQL, escopo ou variável. Política revisão 12. Testes automatizados cobrem a recriação por tipo após exclusão dos marcadores na mesma conta e a ausência de escrita pelo status. O teste com a conta real requer publicação na Vercel; nenhuma conta ou marcador real foi alterado nesta atualização. A falha anterior de criação automática de Arquivadas não teve sua causa determinada e não deve ser considerada corrigida por esta troca de nomes.
 
@@ -190,7 +190,7 @@ Arquivos desta atualização: `server/mailbox-labels.cjs`, `server/google.cjs`, 
 
 ## Visão GERAL e linguagem feminina — 15/11/2026
 
-Marcos definiu que as demandas devem ser sempre tratadas no feminino: Classificadas, Arquivadas e Despachadas. O quarto marcador Pessoal é **4-DESPACHADAS** em todo o código, preparação, classificação, lista final e política. Corrigir brevemente referências masculinas que surgirem na conversa. Não renomear/excluir marcadores já existentes nem migrar mensagens automaticamente; usar Pessoal → Revisar autorização para criar o novo nome se estiver ausente. A nomenclatura geral permanece Classificadas e Arquivadas, com INBOX padrão.
+Marcos definiu que as demandas devem ser sempre tratadas no feminino: Classificadas, Arquivadas e Despachadas. O quarto marcador Pessoal é **GE_Despachadas** em todo o código, preparação, classificação, lista final e política. Corrigir brevemente referências masculinas que surgirem na conversa. Não renomear/excluir marcadores já existentes nem migrar mensagens automaticamente; usar Pessoal → Revisar autorização para criar o novo nome se estiver ausente. A nomenclatura geral permanece Classificadas e Arquivadas, com INBOX padrão.
 
 Visão GERAL agora exibe oito caixas:
 
@@ -199,14 +199,43 @@ Visão GERAL agora exibe oito caixas:
 | E-mails da ESCOLA (GERAL) | Caixa de Entrada, Classificadas, Arquivadas |
 | E-mails PESSOAIS | ME DEVEM, MINHAS, DEVO, Caixa de Entrada, Despachadas |
 
-Os totais são **mensagens** (`messagesTotal` de `users.labels.get`), incluindo lidas e não lidas e todas as páginas. Não são conversas (`threadsTotal`), estimativas de busca, cartões carregados ou demandas únicas. Contagens por marcadores podem se sobrepor, incluindo 4-DESPACHADAS e categorias pessoais; não há soma geral nem indicadores de risco ou conclusão. Cada grupo mostra o e-mail verificado da conexão que forneceu seus números e pode ser atualizado separadamente. Os dados são carregados ao entrar na tela ou mudar a identidade/permissão da conexão. Não há atualização periódica; usar Atualizar totais para consultar novamente enquanto permanece na tela.
+Os totais são **mensagens** (`messagesTotal` de `users.labels.get`), incluindo lidas e não lidas e todas as páginas. Não são conversas (`threadsTotal`), estimativas de busca, cartões carregados ou demandas únicas. Contagens por marcadores podem se sobrepor, incluindo GE_Despachadas e categorias pessoais; não há soma geral nem indicadores de risco ou conclusão. Cada grupo mostra o e-mail verificado da conexão que forneceu seus números e pode ser atualizado separadamente. Os dados são carregados ao entrar na tela ou mudar a identidade/permissão da conexão. Não há atualização periódica; usar Atualizar totais para consultar novamente enquanto permanece na tela.
 
 `GET /api/google/overview?type=general|personal&mailbox=...` exige a sessão própria do tipo solicitado, e-mail esperado e autorização de consulta ao Gmail. Geral nunca dá acesso a totais da Pessoal e vice-versa. O backend resolve somente os marcadores fixos da conexão e consulta as contagens com concorrência limitada. Não consulta mensagens/conversas, não lê corpo/assunto/anexos, não grava totais no banco/localStorage e não cria/modifica marcadores. Uma falha isolada de contagem pode ser mostrada no cartão sem apagar contagens válidas do mesmo grupo; falhas de autenticação/permissão interrompem a resposta do grupo. Ausência de marcador é sinalizada. Apenas um total zero confirmado pelo Gmail é apresentado como zero; demais estados exibem traço e explicação.
 
 Os grupos e suas explicações ficam visíveis sem conexão e em falhas de status. Trocar/desconectar uma conta limpa imediatamente seus totais e invalida respostas pendentes, preservando o outro grupo. Os módulos Radar, BI SEED, Demandas e Configurações mantêm suas funções. A Visão GERAL mantém indicação do desenvolvimento futuro de acompanhamento de alunos e índices BI SEED, sem inventar indicadores adicionais.
 
-Sem novo SQL, escopo ou variável. Política revisão 13 e diálogo de conexão atualizados. Publicar na Vercel, reautorizar Pessoal para preparar 4-DESPACHADAS e validar: comparar os totais com mensagens por marcador no Gmail (a interface Gmail pode agrupar conversas); conta Geral e Pessoal distintas; somente uma conectada; marcadores ausentes; zero real; falha de rede; troca/desconexão durante consulta; atualização manual e categorias simultâneas. Não houve publicação nem validação visual/contagens na conta real nesta entrega. A falha anterior de criação automática de Arquivadas continua sem causa determinada; esta implementação de contadores não a corrige.
+Sem novo SQL, escopo ou variável. Política revisão 13 e diálogo de conexão atualizados. Publicar na Vercel, reautorizar Pessoal para preparar GE_Despachadas e validar: comparar os totais com mensagens por marcador no Gmail (a interface Gmail pode agrupar conversas); conta Geral e Pessoal distintas; somente uma conectada; marcadores ausentes; zero real; falha de rede; troca/desconexão durante consulta; atualização manual e categorias simultâneas. Não houve publicação nem validação visual/contagens na conta real nesta entrega. A falha anterior de criação automática de Arquivadas continua sem causa determinada; esta implementação de contadores não a corrige.
 
 Arquivos principais: `overview.js`, `server/overview.cjs`, `server/google.cjs`, `server/mailbox-labels.cjs`, `app.js`, `demands.js`, `config.js`, `index.html`, `styles.css`, `privacidade.html`, documentação e testes. Testes da entrega: `tests/overview.test.cjs`, `tests/google.test.cjs`, `tests/frontend.test.cjs`, `tests/demands.test.cjs`.
 
 Referências: [Label e messagesTotal](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels) e [users.labels.get](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.labels/get).
+
+
+## Marcadores GE_ e títulos da interface — nomes confirmados
+
+Marcos confirmou e corrigiu a distribuição por conexão em 15/11/2026. Esta seção substitui as nomenclaturas anteriores deste documento.
+
+| Conexão | Nome exato no Gmail | Nome mostrado na interface |
+| --- | --- | --- |
+| PESSOAL | `GE_ME DEVEM` | ME DEVEM |
+| PESSOAL | `GE_MINHAS` | MINHAS |
+| PESSOAL | `GE_DEVO` | DEVO |
+| PESSOAL | `GE_Despachadas` | Despachadas |
+| GERAL | `GE_Classificadas` | Classificadas |
+| GERAL | `GE_Arquivadas` | Arquivadas |
+| Ambas, cada qual na própria conta | `INBOX` do Gmail | Caixa de Entrada |
+
+O prefixo GE_ identifica os marcadores do FAROL no Gmail. A INBOX padrão não é criada como marcador personalizado. Não inverter os tipos de conexão. O backend compartilha os nomes em `server/mailbox-labels.cjs`; os títulos das categorias Pessoais são separados dos nomes Gmail para que botões, categorias simultâneas e responsáveis por categoria continuem funcionando. As respostas de categorias Pessoais usam os títulos sem prefixo; os contadores resolvem nomes Gmail exatos, que o frontend associa aos títulos visuais.
+
+Pessoal classifica a mensagem adicionando o ID da categoria GE_ escolhida e de GE_Despachadas, removendo apenas INBOX. A lista Despachadas consulta GE_Despachadas. Geral classifica com data confirmada em GE_Classificadas e arquiva em GE_Arquivadas, removendo somente INBOX e, no arquivamento, GE_Classificadas. Os outros marcadores e UNREAD são preservados. Visão GERAL mostra três caixas da Escola e cinco Pessoais com os nomes visuais solicitados e consulta os totais dos novos marcadores GE_. Nenhuma operação foi transferida de uma conexão à outra.
+
+Preparação: no callback OAuth, cada tipo verifica/cria somente seus nomes ausentes, na ordem da tabela. GERAL também mantém o botão Preparar marcadores com autorização existente. Status e contadores não criam. Se uma criação falhar, tenta os demais nomes fixos e retorna a falha sem simular sucesso completo; reconectar/preparar novamente tenta somente o que ainda falta. Conflitos ou respostas perdidas são reavaliados por nova listagem. Sucesso depende de confirmar todos os nomes reais no Gmail.
+
+Marcadores sem GE_ e os nomes numéricos anteriores não são adotados como aliases nem renomeados ou excluídos. Não há migração automática de mensagens. Marcadores antigos, suas mensagens e dados de acompanhamento permanecem; mensagens precisam receber os novos marcadores para aparecer nas novas seleções. Não há alteração de SQL, variáveis ou escopos. Política revisão 14 e diálogo de conexão atualizados.
+
+Após publicar na Vercel: reautorizar PESSOAL e confirmar os quatro nomes GE_ criados pela aplicação; reautorizar GERAL ou usar Preparar marcadores e confirmar GE_Classificadas e GE_Arquivadas criados pela aplicação. Conferir status 4/4 e nomes gerais prontos, contadores com títulos sem prefixo, classificação com categorias simultâneas, data institucional e arquivamento com preservação de UNREAD/outros marcadores. Testar também somente um marcador ausente, reconexão sem duplicação, mesma conta nas duas conexões e contas distintas. Não apagar/renomear marcadores para teste automaticamente.
+
+Nesta entrega, a criação e as ações foram verificadas com testes automatizados e dados fictícios. Não houve criação manual ou automática na conta real, publicação ou validação visual na Vercel. O novo prefixo e o tratamento de falhas não comprovam a resolução da rejeição anterior do Google: a confirmação real precisa ser feita pela aplicação publicada, sem criar manualmente o marcador como substituto desse teste.
+
+Arquivos alterados: `server/mailbox-labels.cjs`, `server/demands.cjs`, `server/google.cjs`, `demands.js`, `overview.js`, `institutional.js`, `app.js`, `config.js`, `index.html`, `privacidade.html`, `AGENTS.md`, `README.md`, `CONEXOES_GOOGLE.md`, `tests/demands.test.cjs`, `tests/google.test.cjs`, `tests/institutional.test.cjs`, `tests/overview.test.cjs`.

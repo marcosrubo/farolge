@@ -41,7 +41,7 @@ test('HTML vira texto inerte, ignora anexos e não usa snippets incompletos',asy
  assert.equal(htmlText({...payload,filename:'anexo.html'}),'');
 });
 function harness(){
- const calls=[],rows=new Map(),messages=new Map(),labels=[{id:'C',name:'Classificadas'},{id:'A',name:'Arquivadas'}];
+ const calls=[],rows=new Map(),messages=new Map(),labels=[{id:'C',name:'GE_Classificadas'},{id:'A',name:'GE_Arquivadas'}];
  let failStore=false,failModify=false,missingLabel=false;
  const message=(id,date=received,labels=['INBOX','UNREAD','CUSTOM'])=>({id,threadId:'t'+id,internalDate:String(date),labelIds:[...labels],payload:{mimeType:'text/plain',headers:[{name:'Subject',value:'Relatório '+id},{name:'From',value:'Pessoa <pessoa@example.com>'}],body:{data:Buffer.from('Enviar relatório até 20/11/2026.').toString('base64url')}}});
  messages.set('m1',message('m1'));messages.set('m2',message('m2',received-10000));

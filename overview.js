@@ -1,6 +1,6 @@
 'use strict';
 window.FarolOverview=(()=>{
-  const groups={general:{title:'E-mails da ESCOLA',labels:[['INBOX','Caixa de Entrada'],['Classificadas','Classificadas'],['Arquivadas','Arquivadas']]},personal:{title:'E-mails PESSOAIS',labels:[['1-ME DEVEM','ME DEVEM'],['2-MINHAS','MINHAS'],['3-DEVO','DEVO'],['INBOX','Caixa de Entrada'],['4-DESPACHADAS','Despachadas']]}};
+  const groups={general:{title:'E-mails da ESCOLA',labels:[['INBOX','Caixa de Entrada'],['GE_Classificadas','Classificadas'],['GE_Arquivadas','Arquivadas']]},personal:{title:'E-mails PESSOAIS',labels:[['GE_ME DEVEM','ME DEVEM'],['GE_MINHAS','MINHAS'],['GE_DEVO','DEVO'],['INBOX','Caixa de Entrada'],['GE_Despachadas','Despachadas']]}};
   const types=Object.keys(groups),escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number=new Intl.NumberFormat('pt-BR');
   let root=null,states=Object.fromEntries(types.map(type=>[type,{connection:null,items:[],busy:false,error:'',version:0}]));

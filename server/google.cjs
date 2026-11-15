@@ -145,8 +145,10 @@ async function mailboxLabels(client,allowed,create=false,expectedLabels=PERSONAL
     if(data.labels!==undefined && !Array.isArray(data.labels))throw new Error('invalid_labels');
     return new Set((data.labels||[]).map(label=>label.name));
   };
+  const reasonOf=error=>error.response?.status===403?'permission_denied':[400,409].includes(error.response?.status)?'name_rejected':'provider_unavailable';
   try {
     names=await list();
+    let failureReason=null;
     for(const name of expectedLabels) {
       if(names.has(name))continue;
       if(!create)return finish('missing',names);
@@ -154,19 +156,18 @@ async function mailboxLabels(client,allowed,create=false,expectedLabels=PERSONAL
         await client.request({url:LABEL_URL,method:'POST',data:{name,labelListVisibility:'labelShow',messageListVisibility:'show'},timeout:10000});
         names.add(name);
       } catch(error) {
-        // Only accept a creation conflict after checking the requested name.
-        if(![400,409].includes(error.response?.status))throw error;
-        names=await list();
-        if(!names.has(name))throw error;
+        // A timeout or conflict may mean another request already created it.
+        // Confirm the exact name, then continue preparing the other fixed labels.
+        try {names=await list();}catch{throw error;}
+        if(!names.has(name))failureReason=reasonOf(error);
       }
     }
     names=await list();
-    // A successful POST is not proof of readiness. Recheck a temporarily stale list once.
     if(create&&!expectedLabels.every(name=>names.has(name)))names=await list();
-    return finish(expectedLabels.every(name=>names.has(name))?'ready':'missing',names);
+    const ready=expectedLabels.every(name=>names.has(name));
+    return finish(ready?'ready':failureReason?'unavailable':'missing',names,ready?null:failureReason);
   } catch(error) {
-    const status=error.response?.status;
-    return finish('unavailable',names,status===403?'permission_denied':[400,409].includes(status)?'name_rejected':'provider_unavailable');
+    return finish('unavailable',names,reasonOf(error));
   }
 }
 function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAuth,clientFactory=c=>new OAuth2Client(c.clientId,c.clientSecret,`${c.origin}/api/google/callback`)}={}) {

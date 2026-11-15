@@ -18,7 +18,7 @@ function harness(overrides={}){
  const clientFactory=()=>({credentials:{},async generateCodeVerifierAsync(){return {codeVerifier:'verifier',codeChallenge:'challenge'};},generateAuthUrl(opts){options=opts;flowOptions.set(opts.state,opts);return 'https://accounts.google.com/o/oauth2/v2/auth?state='+opts.state;},async getToken(opts){assert.equal(opts.codeVerifier,'verifier');issuedOptions=flowOptions.get(opts.code);calls++;return {tokens:{access_token:'google:'+email,refresh_token:'grefresh:'+email,id_token:'id:'+email,scope:scopes??issuedOptions.scope.join(' '),expiry_date:Date.now()+3600000}};},async verifyIdToken(opts){assert.equal(opts.audience,'test-client');return {getPayload:()=>({email_verified:true,email,sub:'sub-'+email,nonce:issuedOptions.nonce,...identityOverride})};},setCredentials(value){this.credentials=value;},async request({url,method='GET',data}){if(this.credentials.access_token.slice(7)===failedEmail)throw Object.assign(new Error('provider_error'),{response:{status:failedStatus}});if(gmailDenied && url.includes('/gmail/'))throw Object.assign(new Error('service_unavailable'),{response:{status:403}});const value=this.credentials.access_token.slice(7);
  if(url.endsWith('/labels')) {
    labelRequests.push({email:value,method,data});
-   if(labelFailure && (labelFailure.method===method || !labelFailure.method))throw labelError(labelFailure.status);
+   if(labelFailure && (labelFailure.method===method || !labelFailure.method) && (!labelFailure.name||labelFailure.name===data?.name))throw labelError(labelFailure.status);
    if(!labels.has(value))labels.set(value,new Set());
    const names=labels.get(value);
    if(method==='POST') {
@@ -45,7 +45,7 @@ function harness(overrides={}){
  }
  async function callback(flow,cookie=flow.cookie){return request('callback',{cookie,query:'?state='+flow.state+'&code='+encodeURIComponent(flow.state)});}
  async function login(value='admin@gmail.com',cookie='',type='personal'){email=value;const flow=await start(type,cookie);const response=await callback(flow,flow.cookie+'; '+cookie);return {response,cookie:sessionCookie(response,type)};}
- return {labels,labelRequests,failLabels:(status,method)=>labelFailure=status?{status,method}:null,raceLabels:()=>labelRace=true,rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503)=>{failedEmail=value;failedStatus=status;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
+ return {labels,labelRequests,failLabels:(status,method,name)=>labelFailure=status?{status,method,name}:null,raceLabels:()=>labelRace=true,rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503)=>{failedEmail=value;failedStatus=status;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
 }
 test('conexões não exigem domínio nem endereço Geral fixo',()=>{
  assert.ok(configuration(env));
@@ -364,11 +364,11 @@ test('Institucionais exige sessão GERAL própria, permissão de leitura e caixa
 });
 
 test('GERAL cria somente ausentes, reconecta sem duplicar e status nunca cria',async()=>{
- const h=harness();h.labels.set('school@gmail.com',new Set(['Outra','Classificadas']));
+ const h=harness();h.labels.set('school@gmail.com',new Set(['Outra','GE_Classificadas']));
  const first=await h.login('school@gmail.com','','general');assert.match(first.response.headers.location,/connected/);
- assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['Arquivadas']);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['GE_Arquivadas']);
  const second=await h.login('school@gmail.com',first.cookie,'general');assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,1);
- h.labels.get('school@gmail.com').delete('Arquivadas');
+ h.labels.get('school@gmail.com').delete('GE_Arquivadas');
  assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.general.labels,'missing');
  assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,1);
 });
@@ -412,13 +412,13 @@ test('tabela institucional cifra e-mail/prazo, isola proprietário e atualiza po
 
 test('preparação explícita GERAL cria somente marcadores ausentes sem outro OAuth',async()=>{
  const h=harness(),general=await h.login('school@gmail.com','','general');
- h.labels.get('school@gmail.com').delete('Arquivadas');
+ h.labels.get('school@gmail.com').delete('GE_Arquivadas');
  const before=h.calls(),writes=h.labelRequests.filter(r=>r.method==='POST').length;
  const result=await h.request('institutional-labels',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:'school@gmail.com'}});
  assert.equal(result.status,200);assert.equal(result.json().labels,'ready');assert.deepEqual(result.json().labelDetails.missing,[]);
  assert.equal(h.calls(),before,'no OAuth exchange required');
  assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,writes+1);
- assert.equal(h.labelRequests.filter(r=>r.method==='POST').at(-1).data.name,'Arquivadas');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').at(-1).data.name,'GE_Arquivadas');
  const status=await h.request('status',{cookie:general.cookie});assert.equal(status.json().connections.general.labels,'ready');
  assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,writes+1,'status never writes');
 });
@@ -434,17 +434,17 @@ test('preparação GERAL exige sessão, conta correspondente, permissão e CSRF'
  assert.equal((await h.request('institutional-labels',{method:'POST',cookie:readonly.cookie,body:{type:'general',mailbox:'readonly@gmail.com'}})).status,403);
 });
 test('status identifica os nomes ausentes e preparação informa recusa sem detalhes sensíveis',async()=>{
- const h=harness(),general=await h.login('school@gmail.com','','general');h.labels.get('school@gmail.com').delete('Arquivadas');
- const status=await h.request('status',{cookie:general.cookie});assert.deepEqual(status.json().connections.general.labelDetails.missing,['Arquivadas']);
+ const h=harness(),general=await h.login('school@gmail.com','','general');h.labels.get('school@gmail.com').delete('GE_Arquivadas');
+ const status=await h.request('status',{cookie:general.cookie});assert.deepEqual(status.json().connections.general.labelDetails.missing,['GE_Arquivadas']);
  h.failLabels(403,'POST');
  const result=await h.request('institutional-labels',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:'school@gmail.com'}});
  assert.equal(result.json().labels,'unavailable');assert.equal(result.json().labelDetails.reason,'permission_denied');
- assert.deepEqual(result.json().labelDetails.missing,['Arquivadas']);assert.ok(!result.body.includes('google:'));
+ assert.deepEqual(result.json().labelDetails.missing,['GE_Arquivadas']);assert.ok(!result.body.includes('google:'));
 });
 
 test('nomes definidos por conexão permanecem separados na mesma conta após apagar marcadores',async()=>{
- assert.deepEqual(PERSONAL_LABELS,['1-ME DEVEM','2-MINHAS','3-DEVO','4-DESPACHADAS']);
- assert.deepEqual(GENERAL_LABELS,['Classificadas','Arquivadas']);
+ assert.deepEqual(PERSONAL_LABELS,['GE_ME DEVEM','GE_MINHAS','GE_DEVO','GE_Despachadas']);
+ assert.deepEqual(GENERAL_LABELS,['GE_Classificadas','GE_Arquivadas']);
  const h=harness(),email='shared@gmail.com';
  const personal=await h.login(email),general=await h.login(email,personal.cookie,'general');
  assert.deepEqual([...h.labels.get(email)].sort(),[...PERSONAL_LABELS,...GENERAL_LABELS].sort());
@@ -473,4 +473,23 @@ test('totais da Visão GERAL exigem a sessão do tipo solicitado sem herdar a ou
  assert.equal((await h.request('overview',{cookie:general.cookie,query:'?type=general&mailbox=other@gmail.com'})).status,409);
  const result=await h.request('overview',{cookie:general.cookie,query:'?type=general&mailbox=school@gmail.com'});assert.equal(result.status,200);assert.equal(result.json().mailbox,'school@gmail.com');assert.equal(result.json().type,'general');
  assert.equal((await h.request('overview',{method:'POST',body:{type:'general'},cookie:general.cookie})).status,405);
+});
+
+test('falha em um marcador GERAL não impede tentar GE_Arquivadas e reconexão completa só o ausente',async()=>{
+ const h=harness();h.failLabels(400,'POST','GE_Classificadas');
+ const first=await h.login('school@gmail.com','','general');
+ assert.match(first.response.headers.location,/partial/);
+ assert.deepEqual([...h.labels.get('school@gmail.com')],['GE_Arquivadas']);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['GE_Classificadas','GE_Arquivadas']);
+ h.failLabels(null);const next=await h.login('school@gmail.com',first.cookie,'general');
+ assert.match(next.response.headers.location,/connected/);
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST'&&r.data.name==='GE_Arquivadas').length,1);
+ assert.equal((await h.request('status',{cookie:next.cookie})).json().connections.general.labels,'ready');
+});
+
+test('Geral cria os nomes GE_ mesmo se os antigos sem prefixo existirem e preserva os antigos',async()=>{
+ const h=harness();h.labels.set('school@gmail.com',new Set(['Classificadas','Arquivadas','Outro']));
+ const general=await h.login('school@gmail.com','','general');assert.match(general.response.headers.location,/connected/);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['GE_Classificadas','GE_Arquivadas']);
+ assert.deepEqual([...h.labels.get('school@gmail.com')],['Classificadas','Arquivadas','Outro','GE_Classificadas','GE_Arquivadas']);
 });
