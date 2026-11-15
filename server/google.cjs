@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const {handleDemands}=require('./demands.cjs');
 const {handleOverview}=require('./overview.cjs');
+const {gmailFailure}=require('./gmail-errors.cjs');
 const {handleInstitutional}=require('./institutional.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
@@ -254,6 +255,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           if(known.includes(error.message))return reply(error.status,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
+          const failure=action.startsWith('institutional')?gmailFailure(error):null;
+          if(failure)return reply(failure.status,{error:failure.code==='missing_scope'&&action==='institutional-move'?'institutional_scope':failure.code});
           if(error.response?.status===403)return reply(403,{error:action==='classify'?'classify_scope':action==='institutional-move'?'institutional_scope':'missing_scope'});
           if(error.response?.status===404)return reply(404,{error:'not_found'});
           return reply(503,{error:'unavailable'});

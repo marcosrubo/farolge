@@ -72,7 +72,7 @@ test('entrada e arquivadas ordenam data/hora decrescente, com paginação e sem 
  const inbox=await h.run();assert.deepEqual(inbox.items.map(m=>m.id),['last','m1','m2']);
  assert.equal(inbox.items[1].unread,true);assert.equal(inbox.column,0);
  assert.equal((await h.run({query:{column:2}})).items[0].id,'archived');
- assert.ok(h.calls.every(c=>!c.method&&!c.data));assert.equal(h.rows.size,0);
+ assert.ok(h.calls.every(c=>(!c.method||c.method==='GET')&&!c.data));assert.equal(h.rows.size,0);
  h.messages.set('gone',h.message('gone',received,['TRASH','INBOX']));assert.equal((await h.run()).items.length,3);
 });
 test('classificar exige data válida, salva conta verificada/chave e move apenas a mensagem',async()=>{
@@ -154,7 +154,7 @@ test('três colunas ficam visíveis sem conexão e respostas antigas não voltam
  const h=ui();h.app.mount(h.root);assert.equal(h.requests.length,0);for(const name of ['Caixa de entrada','Classificadas','Arquivadas'])assert.ok(h.root.innerHTML.includes(name));
  h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});assert.equal(h.requests.length,3);
  h.app.connectionChanged(null);for(let i=0;i<3;i++)h.respond(i,[makeItem('secret')]);await settle();
- for(let i=0;i<3;i++){assert.equal(h.get('#institutional-count-'+i).textContent,'0');assert.ok(!h.get('#institutional-list-'+i).innerHTML.includes('secret'));}
+ for(let i=0;i<3;i++){assert.equal(h.get('#institutional-count-'+i).textContent,'—');assert.ok(!h.get('#institutional-list-'+i).innerHTML.includes('secret'));}
 });
 test('tela ordena cada coluna, escapa texto e não preenche prazo com sugestão',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
@@ -178,7 +178,7 @@ test('classificação exige data explícita e só remove origem após confirmaç
  const req=h.requests.at(-1),body=JSON.parse(req.options.body);
  assert.deepEqual(body,{type:'general',mailbox:'school@example.com',messageId:'m1',operation:'classify',dueDate:'2026-11-20',version:0});
  assert.equal(req.options.headers['X-Farol-Request'],'1');req.resolve({ok:true,json:async()=>({mailbox:'school@example.com',messageId:'m1',operation:'classify'})});await settle();
- h.respond(0);h.respond(1,[makeItem('m1',received,'2026-11-20')]);h.respond(2);await settle();
+ h.respond(0);await settle();h.respond(1,[makeItem('m1',received,'2026-11-20')]);await settle();
  assert.ok(!list.innerHTML.includes('Relatório m1'));assert.ok(h.get('#institutional-list-1').innerHTML.includes('Relatório m1'));
 });
 test('arquivar usa operação dedicada; erro não anuncia sucesso nem remove a linha',async()=>{
@@ -212,4 +212,35 @@ test('falha de preparação mantém bloqueio e exibe nomes não confirmados',asy
  h.requests.at(-1).resolve({ok:true,json:async()=>({mailbox:'school@example.com',labels:'unavailable',labelDetails:{reason:'permission_denied',missing:['Arquivadas']}})});await settle();
  assert.equal(h.get('#institutional-prepare').hidden,false);assert.ok(h.get('#institutional-feedback').textContent.includes('Arquivadas'));
  assert.ok(!h.get('#institutional-feedback').textContent.includes('prontas'));assert.equal(h.window.events.length,0);
+});
+
+test('arquivar a segunda mensagem mantém as restantes se a recarga da entrada falhar',async()=>{
+ const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
+ h.respond(0,[makeItem('m1'),makeItem('m2'),makeItem('m3')]);h.respond(1);h.respond(2);await settle();
+ async function archive(id){
+  h.get('#institutional-list-0').querySelectorAll('[data-archive]').find(b=>b.dataset.archive===id).listeners.click();
+  const req=h.requests.at(-1);assert.equal(JSON.parse(req.options.body).messageId,id);
+  req.resolve({ok:true,json:async()=>({mailbox:'school@example.com',messageId:id,operation:'archive'})});await settle();
+ }
+ await archive('m1');h.respond(0,[makeItem('m2'),makeItem('m3')]);await settle();h.respond(2,[makeItem('m1')]);await settle();
+ await archive('m2');
+ // The source and the confirmed destination remain visible while refreshing.
+ assert.ok(h.get('#institutional-list-0').innerHTML.includes('Relatório m3'));
+ assert.ok(h.get('#institutional-list-2').innerHTML.includes('Relatório m2'));
+ const read=h.requests.find(r=>!r.done&&r.url.includes('/institutional?')&&new URL('https://farol.invalid'+r.url).searchParams.get('column')==='0');
+ read.done=true;read.resolve({ok:false,json:async()=>({error:'gmail_rate_limit'})});await settle();
+ h.respond(2,[makeItem('m1'),makeItem('m2')]);await settle();
+ const inbox=h.get('#institutional-list-0').innerHTML;
+ assert.ok(inbox.includes('Relatório m3'));assert.ok(!inbox.includes('Relatório m2'));
+ assert.equal(h.get('#institutional-count-0').textContent,'1');assert.equal(h.get('#institutional-count-2').textContent,'2');
+ assert.ok(h.get('#institutional-status-0').textContent.includes('lista anterior foi mantida'));
+ assert.ok(h.get('#institutional-feedback').textContent.includes('movimentação foi confirmada'));
+ // Updating again replaces the cached list instead of merging stale rows.
+ h.get('#institutional-refresh').listeners.click();h.respond(0,[makeItem('m4')]);h.respond(1);h.respond(2,[makeItem('m1'),makeItem('m2')]);await settle();
+ assert.ok(!h.get('#institutional-list-0').innerHTML.includes('Relatório m3'));assert.ok(h.get('#institutional-list-0').innerHTML.includes('Relatório m4'));
+});
+test('erro na primeira leitura mostra indisponibilidade, sem indicar caixa vazia',async()=>{
+ const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
+ const req=h.requests.find(r=>new URL('https://farol.invalid'+r.url).searchParams.get('column')==='0');req.done=true;req.resolve({ok:false,json:async()=>({error:'unavailable'})});h.respond(1);h.respond(2);await settle();
+ assert.equal(h.get('#institutional-count-0').textContent,'—');assert.ok(!h.get('#institutional-list-0').innerHTML.includes('Nenhum e-mail'));
 });

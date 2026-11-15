@@ -1,6 +1,7 @@
 'use strict';
 const {plainText,validDate}=require('./demands.cjs');
 const {GENERAL_LABELS}=require('./mailbox-labels.cjs');
+const {readGmail}=require('./gmail-errors.cjs');
 const BASE='https://gmail.googleapis.com/gmail/v1/users/me';
 const validId=value=>typeof value==='string'&&/^[\w-]{1,128}$/.test(value);
 const fail=(code,status)=>{throw Object.assign(new Error(code),{status});};
@@ -78,7 +79,7 @@ const FOLDERS=['INBOX',...GENERAL_LABELS];
 async function handleInstitutional({action='institutional',url,body={},client,store,owner,email,canModify=false}){
   const moving=action==='institutional-move';
   if((moving?body.mailbox:url.searchParams.get('mailbox'))!==email)fail('account_changed',409);
-  const request=async path=>(await client.request({url:BASE+path,timeout:10000})).data;
+  const request=async path=>(await readGmail(client,{url:BASE+path,timeout:10000})).data;
   if(moving){
     if(body.type!=='general'||!validId(body.messageId)||!['classify','archive'].includes(body.operation)||Object.keys(body).some(key=>!['type','mailbox','messageId','operation','dueDate','version'].includes(key)))fail('invalid_institutional',400);
     if(body.operation==='classify'&&(!body.dueDate||!validDate(body.dueDate)||!Number.isSafeInteger(body.version)||body.version<0))fail('invalid_institutional',400);
