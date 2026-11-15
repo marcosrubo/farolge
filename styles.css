@@ -151,5 +151,6 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .overview-card{background:#f3f6ee;border:1px solid #dce5d7;border-radius:10px;padding:20px;min-width:0}
 .overview-card h3{font-size:13px;color:var(--green);margin:0 0 18px;font-weight:600}
 .overview-card strong{display:block;font-size:32px;line-height:1.2;color:var(--green);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.overview-card strong.overview-inbox-total{color:#b42318}
 .overview-card span{display:block;font-size:11px;color:#617258;margin-top:8px}
 @media(max-width:600px){.overview-group{padding:16px}.overview-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-card{padding:15px}}

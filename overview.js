@@ -14,7 +14,7 @@ window.FarolOverview=(()=>{
     root.querySelector('#overview-cards-'+type).innerHTML=group.labels.map(([name,title])=>{
       const item=s.items.find(item=>item.name===name),ready=connected&&!s.busy&&!s.error&&item?.status==='ready'&&Number.isSafeInteger(item.total)&&item.total>=0;
       const status=s.busy?'Consultando':!connected?'Sem conexão':s.error?'Indisponível':item?.status==='missing'?'Marcador ausente':item?.status==='unavailable'?'Indisponível':ready?'mensagens':'Aguardando consulta';
-      return `<article class="overview-card"><h3>${escape(title)}</h3><strong aria-label="${escape(title+': '+(ready?number.format(item.total)+' mensagens':status))}">${ready?number.format(item.total):'—'}</strong><span>${escape(status)}</span></article>`;
+      return `<article class="overview-card"><h3>${escape(title)}</h3><strong${name==='INBOX'&&ready?' class="overview-inbox-total"':''} aria-label="${escape(title+': '+(ready?number.format(item.total)+' mensagens':status))}">${ready?number.format(item.total):'—'}</strong><span>${escape(status)}</span></article>`;
     }).join('');
     root.querySelector('#overview-refresh-'+type).disabled=s.busy||!connected;
   }
