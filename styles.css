@@ -157,3 +157,6 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .overview-status:empty{display:none}
 .overview-refresh{margin-top:14px;padding:6px 10px;font-size:11px}
 @media(max-width:600px){.overview-groups{grid-template-columns:minmax(0,1fr)}.overview-group{padding:16px}}
+
+/* Nomes de arquivos do Drive, inclusive nomes longos em telas estreitas. */
+.maintenance-files{padding-left:22px;line-height:1.7}.maintenance-files li{padding:8px 0;overflow-wrap:anywhere}

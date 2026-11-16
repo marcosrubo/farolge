@@ -191,3 +191,10 @@ GET `/api/google/overview?type=general|personal&mailbox=...` exige sessão do pr
 PESSOAL: GE_ME DEVEM, GE_MINHAS, GE_DEVO, GE_Despachadas. GERAL: GE_Classificadas e GE_Arquivadas, mais INBOX padrão existente. A interface omite GE_ e os números antigos. Consultas/contagens/ações usam somente os novos nomes exatos; não adotam nem migram marcadores anteriores. Os tokens, proprietários, tabelas de acompanhamento e escopos continuam separados por tipo.
 
 Após publicação, reautorizar cada conexão (ou Preparar marcadores na GERAL já autorizada) para criar apenas os ausentes. Cada falha de criação é conferida por listagem e não impede tentar os demais nomes fixos; prontidão exige confirmar todos. Status/indicadores não criam marcadores. Sem SQL, variável ou escopo novo. Política revisão 14. Validar no Gmail que os nomes foram criados **pela aplicação** publicada e que as operações usam seus IDs, sem criação manual como substituto da validação. Roteiro completo e limites no README.
+
+
+## Manutenção — metadados do Drive GERAL (16/11/2026)
+
+A Geral solicita adicionalmente `https://www.googleapis.com/auth/drive.metadata.readonly`. Habilitar Drive API e cadastrar o escopo no Data Access do projeto FAROL GE; publicar política revisão 15 e revisar a autorização Geral. A permissão permite consulta de metadados em todo o Drive, com possíveis requisitos de verificação Google; a aplicação a usa para procurar a pasta própria FarolGE, localizar sua subpasta FaltasSemanais e listar nomes dos arquivos diretamente nessa subpasta, sem ler conteúdo ou modificar arquivos. A Pessoal mantém seus escopos. Sem novo SQL, segredo ou variável.
+
+O endpoint GET `/api/google/maintenance` verifica sessão Geral, identidade e conta esperada; exige a nova capacidade `driveMetadata` e não depende da permissão Gmail. Pastas duplicadas são sinalizadas. Consulta paginada somente em memória, sem gravação de nomes. Detalhes e validação na seção Manutenção do README.

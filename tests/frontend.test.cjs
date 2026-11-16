@@ -107,3 +107,15 @@ test('status GERAL mostra exatamente quais marcadores estão faltando',async()=>
  assert.ok(h.get('#email-general-status').textContent.includes('Faltam marcadores: Arquivadas'));
  assert.ok(!h.get('#email-general-status').textContent.includes('revise a autorização'));
 });
+
+
+test('Manutenção recebe somente a conexão Geral e informa seu escopo no diálogo',async()=>{
+ const general={email:'school@example.com',driveMetadata:true},personal={email:'personal@example.com',drive:true};
+ const h=ui({configured:true,connections:{general,personal}}),received=[];
+ h.window.FarolMaintenance={connectionChanged:value=>received.push(value),mount:()=>received.push('mounted'),unmount(){}};
+ await settle();assert.equal(received[0],general);
+ h.context.location.hash='#manutencao-sistema';h.window.listeners.hashchange();
+ assert.ok(h.get('#main').innerHTML.includes('maintenance-board'));assert.ok(received.includes('mounted'));
+ h.connect[0].listeners.click();assert.equal(h.get('#email-drive-metadata').hidden,false);
+ h.connect[1].listeners.click();assert.equal(h.get('#email-drive-metadata').hidden,true);
+});

@@ -15,6 +15,7 @@
   <script src="demands.js" defer></script>
   <script src="institutional.js" defer></script>
   <script src="overview.js" defer></script>
+  <script src="maintenance.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -47,7 +48,8 @@
     <p>Em Demandas INSTITUCIONAIS, a conexão GERAL consulta as três colunas e identifica possíveis prazos por regras de texto, com trechos para conferência. O prazo só é salvo quando você define a data e classifica. A análise ocorre no backend do FAROL, sem serviço externo de IA. Anexos e links não são consultados.</p>
     <p>No Gmail, os marcadores próprios do FAROL usam GE_. Na interface, omitimos esse prefixo. A Caixa de Entrada é a padrão do Gmail.</p>
     <p>Na Visão GERAL, cada conexão autorizada permite consultar os totais de mensagens dos respectivos marcadores e da Caixa de Entrada. Esses indicadores não consultam o conteúdo das mensagens e não gravam as contagens no banco.</p>
-    <p>A senha será informada apenas ao Google. O FAROL GE solicitará consulta ao Gmail e acesso para consultar, criar e alterar arquivos do Drive criados pelo aplicativo ou selecionados para uso nele. Não será solicitado acesso a todo o Drive.</p>
+    <p>A senha será informada apenas ao Google. O FAROL GE solicitará consulta ao Gmail e acesso para consultar, criar e alterar arquivos do Drive criados pelo aplicativo ou selecionados para uso nele. Essa permissão não concede acesso irrestrito ao Drive.</p>
+    <p id="email-drive-metadata" hidden>Na conta GERAL, solicitamos também consulta dos metadados do Drive (drive.metadata.readonly) para localizar FarolGE e sua subpasta FaltasSemanais e listar os nomes dos arquivos nessa subpasta. O Google concede essa consulta de metadados para todo o Drive; o FAROL restringe a listagem à pasta FarolGE/FaltasSemanais, sem ler o conteúdo dos arquivos. Essa permissão não permite alterar arquivos.</p>
     <p>Consulte a <a href="privacidade.html" target="_blank" rel="noopener noreferrer">Política de Privacidade (abre em outra aba)</a> antes de autorizar a conexão.</p>
     <div class="button-row"><button type="button" class="button primary" id="email-connection-continue" hidden>Continuar com Google</button><form method="dialog"><button class="button" autofocus>Fechar</button></form></div>
   </dialog>

@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS,GENERAL_LABELS}=require('../server/google.cjs');
+const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,DRIVE_METADATA_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS,GENERAL_LABELS}=require('../server/google.cjs');
 const env={FAROL_GOOGLE_ENABLED:'true',FAROL_ORIGIN:'https://farol.example',GOOGLE_CLIENT_ID:'test-client',GOOGLE_CLIENT_SECRET:'test-secret',FAROL_TOKEN_KEY:Buffer.alloc(32,7).toString('base64'),FAROL_SUPABASE_URL:'https://test.supabase.co',FAROL_SUPABASE_SERVICE_ROLE_KEY:'test-service',FAROL_SUPABASE_ANON_KEY:'test-anon'};
 const GENERAL_EMAIL='escola@escola.pr.gov.br';
 const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -31,6 +31,7 @@ function harness(overrides={}){
    }
    return {data:{labels:[...names].map(name=>({id:'id-'+name,name}))}};
  }
+ if(url.includes('/drive/v3/files?'))return {data:{files:new URL(url).searchParams.get('q').includes("name = 'FarolGE'")?[{id:'folder-1',name:'FarolGE'}]:new URL(url).searchParams.get('q').includes("name = 'FaltasSemanais'")?[{id:'folder-weekly',name:'FaltasSemanais'}]:[{id:'file-1',name:'Ata da escola'}]}};
  return {data:url.includes('drive/v3')?{user:{emailAddress:value}}:{emailAddress:value}};}});
  const handler=makeHandler({env:{...env,...overrides},storeFactory:()=>store,authFactory:()=>auth,clientFactory});
  async function request(action,{method='GET',body,cookie='',origin=env.FAROL_ORIGIN,query=''}={}){
@@ -71,7 +72,8 @@ test('CSRF e métodos inválidos são bloqueados; login inclui Gmail readonly e 
  assert.equal((await h.request('start')).status,405);
  const flow=await h.start();
  assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]);
- assert.deepEqual((await h.start('general')).options.scope,[...SCOPES,MODIFY_SCOPE]);
+ assert.deepEqual((await h.start('general')).options.scope,[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE]);
+ assert.ok(!flow.options.scope.includes(DRIVE_METADATA_SCOPE));
  assert.ok(flow.options.scope.includes(READ_SCOPE));assert.ok(flow.options.scope.includes(DRIVE_SCOPE));
  assert.ok(!flow.options.scope.includes('https://www.googleapis.com/auth/drive'));
  assert.equal(flow.options.hd,undefined);assert.equal(flow.options.code_challenge_method,'S256');
@@ -505,4 +507,23 @@ test('erro 403 institucional só pede nova autorização quando o motivo confirm
  const limited=await h.request('institutional',{cookie:general.cookie,query:'?mailbox=school@gmail.com'});
  assert.equal(limited.status,503);assert.equal(limited.json().error,'gmail_rate_limit');
  assert.ok(!limited.body.includes('provider_error'));
+});
+
+
+test('Manutenção usa somente Geral e não exige Gmail, sem aceitar a sessão Pessoal',async()=>{
+ const h=harness();
+ assert.equal((await h.request('maintenance',{query:'?mailbox='+GENERAL_EMAIL})).status,401);
+ const personal=await h.login('personal@example.com');
+ assert.equal((await h.request('maintenance',{cookie:personal.cookie,query:'?mailbox=personal@example.com'})).status,401);
+ h.setScopes(['openid','email','profile',DRIVE_METADATA_SCOPE].join(' '));
+ const general=await h.login(GENERAL_EMAIL,personal.cookie,'general');
+ const status=(await h.request('status',{cookie:general.cookie})).json();
+ assert.equal(status.connections.general.driveMetadata,true);assert.equal(status.connections.general.gmail,false);
+ const listing=await h.request('maintenance',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});
+ assert.equal(listing.status,200);assert.deepEqual(listing.json().files,[{id:'file-1',name:'Ata da escola'}]);
+ assert.equal((await h.request('maintenance',{cookie:general.cookie,query:'?mailbox=other@example.com'})).json().error,'account_changed');
+ assert.equal((await h.request('maintenance',{method:'POST',cookie:general.cookie,body:{type:'general'}})).status,405);
+ h.setScopes([...SCOPES,MODIFY_SCOPE].join(' '));
+ const old=await h.login(GENERAL_EMAIL,general.cookie,'general');
+ assert.equal((await h.request('maintenance',{cookie:old.cookie,query:'?mailbox='+GENERAL_EMAIL})).status,403);
 });
