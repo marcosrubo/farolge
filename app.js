@@ -6,6 +6,7 @@ const icons = {
   demandas:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/>',
   radar:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 7-7"/><circle cx="12" cy="12" r="1"/>',
   indicadores:'<path d="M4 20V10m6 10V4m6 16v-7m5 7H2"/>',
+  equipe:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m1-16a3 3 0 0 1 0 6m3 10v-2a6 6 0 0 0-3-5"/>',
   configuracoes:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/>'
 };
 const modules = [
@@ -14,6 +15,7 @@ const modules = [
   {id:'institucionais',icon:'demandas',label:'Demandas INSTITUCIONAIS'},
   {id:'pessoais',icon:'demandas',label:'Demandas PESSOAIS'},
   {id:'bi-seed',icon:'indicadores',label:'BI SEED'},
+  {id:'inspetores-monitores',icon:'equipe',label:'Inspetores/Monitores'},
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
@@ -81,7 +83,7 @@ function render(){
   const selected=modules.find(item=>item.id===route)||modules[0];
   document.title='FAROL GE · '+selected.label;
   document.querySelector('#breadcrumb-title').textContent=selected.label;
-  document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='configuracoes'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&index<5?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
+  document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='configuracoes'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&item.id!=='configuracoes'?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
   main.innerHTML=selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='radar'?renderRadar():renderDevelopment(selected.id);

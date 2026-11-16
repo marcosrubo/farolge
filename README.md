@@ -5,7 +5,7 @@ Protótipo para apresentar a proposta da plataforma à equipe da escola. Fronten
 ## Estrutura atual para apresentação
 
 - Logos da plataforma e do colégio, com o nome da instituição em três linhas.
-- Menu: Visão GERAL, Radar, Demandas INSTITUCIONAIS, Demandas PESSOAIS e BI SEED; um divisor separa Configurações.
+- Menu: Visão GERAL, Radar, Demandas INSTITUCIONAIS, Demandas PESSOAIS, BI SEED e Inspetores/Monitores; um divisor separa Configurações. Inspetores/Monitores mostra inicialmente apenas o breadcrumb, aguardando definição do conteúdo.
 - As opções mostram “Meu espaço / nome da opção”. Radar também apresenta o fluxo solicitado: RCO, SINAN, SERP, ATAS, Busca ATIVA e Alunos convergem para ANÁLISES, com saídas DOSSIÊ individual e Relação diária de FALTAS.
 - BI SEED e Configurações exibem “em Desenvolvimento” e os textos definidos por Marcos em 06/11/2026. A Visão GERAL apresenta os totais de mensagens dos marcadores da Escola e Pessoal descritos ao final deste README. BI SEED apresenta o texto sobre os indicadores/resumos previstos para uma visão simplificada da situação da escola.
 - O menu destaca a opção ativa e o título da aba acompanha a seleção.

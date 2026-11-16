@@ -12,7 +12,7 @@ const {PERSONAL_LABELS,GENERAL_LABELS}=require('./mailbox-labels.cjs');
 const LABEL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/labels';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
-const ROUTES = new Set(['inicio','radar','institucionais','pessoais','bi-seed','configuracoes']);
+const ROUTES = new Set(['inicio','radar','institucionais','pessoais','bi-seed','inspetores-monitores','configuracoes']);
 const TYPES = ['general','personal'];
 const TTL = 30 * 24 * 3600;
 const random = () => crypto.randomBytes(32).toString('base64url');
