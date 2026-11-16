@@ -47,10 +47,10 @@ function frontend(){
 }
 const generalItems=[{name:'INBOX',total:1234,status:'ready'},{name:'GE_Classificadas',total:0,status:'ready'},{name:'GE_Arquivadas',total:null,status:'missing'}];
 const personalItems=['GE_ME DEVEM','GE_MINHAS','GE_DEVO','INBOX','GE_Despachadas'].map(name=>({name,total:12,status:'ready'}));
-test('Visão GERAL exibe oito caixas sem autenticação, sem inventar totais',()=>{
+test('Visão GERAL exibe dois quadros com oito linhas sem autenticação, sem inventar totais',()=>{
  const h=frontend();h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.root.innerHTML.includes('E-mails da ESCOLA'));assert.ok(h.root.innerHTML.includes('E-mails PESSOAIS'));
  const combined=h.get('#overview-cards-general').innerHTML+h.get('#overview-cards-personal').innerHTML;
- assert.equal((combined.match(/<article /g)||[]).length,8);assert.ok(combined.includes('Classificadas'));assert.ok(combined.includes('Arquivadas'));assert.ok(combined.includes('Despachadas'));assert.ok(!combined.includes('>0<'));
+ assert.equal((h.root.innerHTML.match(/class="overview-group"/g)||[]).length,2);assert.equal((combined.match(/<dt>/g)||[]).length,8);assert.ok(combined.includes('Classificadas'));assert.ok(combined.includes('Arquivadas'));assert.ok(combined.includes('Despachadas'));assert.ok(!combined.includes('>0<'));
 });
 test('totais independentes mostram zero confirmado, ausência e limpam somente a conta desconectada',async()=>{
  const h=frontend();h.app.mount(h.root);h.app.connectionChanged('general',{email:'school@example.com',gmail:true});h.app.connectionChanged('personal',{email:'person@example.com',gmail:true});
