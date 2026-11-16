@@ -16,6 +16,8 @@ A simplificação foi solicitada por Marcos em 05/11/2026 para construir o conte
 
 ## Publicação na nuvem
 
+O atalho na Tela de Início do iPhone usa o logo existente em `arte/farol-ge-simbolo-quadrado.png`, indicado por `apple-touch-icon`, com o nome FAROL GE. Após publicar essa configuração, remover o atalho antigo e adicionar novamente pelo Safari para conferir o ícone. A arte original foi preservada.
+
 Os testes visuais e a demonstração de Marcos serão feitos sempre pela Vercel. Não iniciar servidor local ou abrir HTML local para testes, salvo novo pedido explícito.
 
 1. Criar um repositório próprio chamado `farolge` no GitHub. Se for enviar esta pasta pelo Git, criar o repositório vazio, sem outro README.
