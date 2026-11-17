@@ -282,3 +282,12 @@ A consulta anterior exigia `'me' in owners`, excluindo FarolGE quando a pasta pe
 Sem novo escopo, SQL ou variável. A captura mostra a consulta de nomes no Drive autorizada; depois de publicar a correção, clicar **Atualizar lista**. Não é necessário revisar a autorização apenas por essa correção. Testes fictícios cobrem pasta pertencente a outra conta, subpasta direta e arquivos compartilhados. Validar o arquivo real pela aplicação na Vercel; a captura não comprova por si só que as duas janelas usam a mesma Conta Google.
 
 Arquivos desta correção: `server/maintenance.cjs`, `maintenance.js`, `tests/maintenance.test.cjs`, `index.html`, `privacidade.html`, `README.md`, `CONEXOES_GOOGLE.md` e `AGENTS.md`. Referência: [pesquisa de arquivos no Drive](https://developers.google.com/workspace/drive/api/guides/search-files).
+
+
+## Carga de Faltas do RCO — 17/11/2026
+
+A Manutenção do Sistema apresenta, abaixo do quadro de arquivos, o quadro **Carga de Faltas do RCO** com as quatro orientações solicitadas por Marcos: gerar relatórios por período e semana no RCO, renomear como `AAAA_MM_DDMM_DDMM_Periodo.PDF` (AAAA: ano; MM: mês; DD: dia; Periodo: Manha/Tarde), copiar para FarolGE/FaltasSemanais no Drive do Colégio e executar a captura no FAROL. As orientações permanecem visíveis sem conexão.
+
+A relação **Arquivos disponíveis para captura** mostra os nomes com extensão `.pdf` (sem distinguir maiúsculas/minúsculas) entre os arquivos carregados da mesma consulta Geral. Ambos os quadros compartilham atualização, paginação e invalidação ao trocar/desconectar a conta. Se houver páginas restantes, informa que é preciso Carregar mais; falhas não declaram ausência de PDFs. Não valida o conteúdo nem o formato dos nomes nesta etapa.
+
+Esta entrega exibe orientações e disponibilidade; a captura/importação de dados dos relatórios ainda não foi implementada, e a tela informa isso. Não abre PDFs nem grava dados de estudantes; sem novo escopo, SQL ou variável. Política revisão 15 permanece aplicável à consulta de nomes. Validação visual na Vercel pendente. Arquivos alterados: `maintenance.js`, `styles.css`, `tests/maintenance.test.cjs`, `README.md` e `AGENTS.md`.

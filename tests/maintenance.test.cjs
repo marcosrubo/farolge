@@ -89,3 +89,29 @@ test('Manutenção limpa dados e invalida respostas na troca, desconexão e saí
   h.app.connectionChanged(null);h.respond(1,{...result,mailbox:'new@example.com'});await settle();assert.equal(h.get('#maintenance-files').innerHTML,'');
   h.app.connectionChanged(connection);h.app.unmount();h.app.mount(h.root);h.respond(2,result);await settle();assert.equal(h.get('#maintenance-files').innerHTML,'');
 });
+
+test('quadro RCO aparece após os arquivos e mantém as quatro orientações sem conexão',()=>{
+  const h=frontend();h.app.mount(h.root);
+  assert.ok(h.root.innerHTML.indexOf('id="rco-title"')>h.root.innerHTML.indexOf('id="maintenance-title"'));
+  for(const text of ['Orientações:','por período (manhã e tarde) e por semana','AAAA_MM_DDMM_DDMM_Periodo.PDF','Manha/Tarde','Copie os arquivos','Execute o processo de captura'])assert.ok(h.root.innerHTML.includes(text));
+  assert.equal(h.requests.length,0);assert.equal(h.get('#rco-files').innerHTML,'');
+  assert.ok(h.get('#rco-status').textContent.includes('Conecte a conta GERAL'));
+  assert.ok(h.root.innerHTML.includes('será disponibilizada em uma próxima etapa'));
+});
+test('RCO lista somente PDFs carregados, pagina, preserva falha e limpa na desconexão',async()=>{
+  const h=frontend();h.app.connectionChanged(connection);h.app.mount(h.root);
+  h.respond(0,{...result,files:[{id:'text',name:'Teste'},{id:'csv',name:'faltas.csv'}]});await settle();
+  assert.equal(h.get('#rco-files').innerHTML,'');assert.ok(h.get('#rco-status').textContent.includes('páginas carregadas'));
+  assert.ok(!h.get('#rco-more').hidden);
+  h.get('#rco-more').listeners.click();
+  h.respond(1,{...result,files:[{id:'pdf',name:'2026_11_0911_1311_Manha.PDF'},{id:'escape',name:'<b>relatório</b>.pdf'}],nextPageToken:null});await settle();
+  const html=h.get('#rco-files').innerHTML;
+  assert.ok(html.includes('2026_11_0911_1311_Manha.PDF'));assert.ok(html.includes('&lt;b&gt;'));
+  assert.ok(!html.includes('faltas.csv'));assert.ok(!html.includes('<b>'));assert.equal((html.match(/<li>/g)||[]).length,2);
+  assert.equal(h.get('#rco-more').hidden,true);
+  h.get('#rco-refresh').listeners.click();h.respond(2,{error:'unavailable'},false);await settle();
+  assert.equal(h.get('#rco-files').innerHTML,html);assert.ok(h.get('#rco-status').textContent.includes('lista anterior'));
+  h.get('#rco-refresh').listeners.click();h.respond(3,{...result,files:[],nextPageToken:null});await settle();
+  assert.ok(h.get('#rco-status').textContent.includes('Nenhum arquivo PDF disponível'));
+  h.app.connectionChanged(null);assert.equal(h.get('#rco-files').innerHTML,'');assert.ok(h.get('#rco-status').textContent.includes('Conecte'));
+});

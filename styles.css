@@ -160,3 +160,5 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 
 /* Nomes de arquivos do Drive, inclusive nomes longos em telas estreitas. */
 .maintenance-files{padding-left:22px;line-height:1.7}.maintenance-files li{padding:8px 0;overflow-wrap:anywhere}
+
+.rco-instructions{padding-left:24px;line-height:1.8}.rco-instructions>li{padding:5px 0}.rco-instructions code{overflow-wrap:anywhere}.rco-filename-guide{margin:8px 0}.rco-filename-guide>div{display:flex;gap:8px}.rco-filename-guide dt{min-width:62px;font-weight:600}.rco-filename-guide dd{margin:0}.rco-filename-guide dd::before{content:"— ";}

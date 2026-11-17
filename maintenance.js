@@ -12,6 +12,15 @@ window.FarolMaintenance=(()=>{
     root.querySelector('#maintenance-refresh').disabled=busy||!connection?.driveMetadata;
     root.querySelector('#maintenance-more').hidden=!next;
     root.querySelector('#maintenance-more').disabled=busy||Boolean(error);
+    const pdfs=files.filter(file=>/\.pdf$/i.test(file.name));
+    root.querySelector('#rco-files').innerHTML=pdfs.map(file=>`<li>${escape(file.name)}</li>`).join('');
+    const unavailable=busy||!connection?.driveMetadata||error||!loaded;
+    root.querySelector('#rco-status').textContent=unavailable
+      ?root.querySelector('#maintenance-status').textContent
+      :(pdfs.length?'':next?'Nenhum PDF nas páginas carregadas.':'Nenhum arquivo PDF disponível nesta pasta.')+(next?' Há mais arquivos na pasta. Use Carregar mais para consultar os demais.':'');
+    root.querySelector('#rco-refresh').disabled=busy||!connection?.driveMetadata;
+    root.querySelector('#rco-more').hidden=!next;
+    root.querySelector('#rco-more').disabled=busy||Boolean(error);
   }
   async function load(more=false){
     if(!root||!connection?.driveMetadata||busy)return;
@@ -41,6 +50,31 @@ window.FarolMaintenance=(()=>{
   function mount(element){
     root=element;clear();
     root.innerHTML='<h1>Manutenção do Sistema</h1><section class="panel" aria-labelledby="maintenance-title"><h2 id="maintenance-title">Arquivos da pasta FarolGE/FaltasSemanais</h2><p class="demand-intro">Arquivos diretamente na pasta FarolGE/FaltasSemanais acessível à conta GERAL da escola, inclusive em Compartilhados comigo, em ordem alfabética.</p><p id="maintenance-identity" class="overview-identity"></p><p id="maintenance-status" class="overview-status" role="status"></p><ul id="maintenance-files" class="maintenance-files"></ul><div class="button-row"><button type="button" class="button" id="maintenance-refresh">Atualizar lista</button><button type="button" class="button" id="maintenance-more" hidden>Carregar mais</button></div></section>';
+    root.innerHTML+=`<section class="panel rco-load" aria-labelledby="rco-title">
+      <h2 id="rco-title">Carga de Faltas do RCO</h2>
+      <p><strong>Orientações:</strong></p>
+      <ol class="rco-instructions">
+        <li>Acesse o sistema RCO e gere um relatório por período (manhã e tarde) e por semana.</li>
+        <li>Renomeie os arquivos no formato <code>AAAA_MM_DDMM_DDMM_Periodo.PDF</code>, sendo:
+          <dl class="rco-filename-guide">
+            <div><dt>AAAA</dt><dd>ano</dd></div>
+            <div><dt>MM</dt><dd>mês</dd></div>
+            <div><dt>DD</dt><dd>dia</dd></div>
+            <div><dt>Periodo</dt><dd>Manha/Tarde</dd></div>
+          </dl>
+        </li>
+        <li>Copie os arquivos para o DRIVE do Colégio no diretório <strong>FarolGE/FaltasSemanais</strong>.</li>
+        <li>Execute o processo de captura dos arquivos aqui no FarolGE.</li>
+      </ol>
+      <h3>Arquivos disponíveis para captura</h3>
+      <p class="demand-intro">Arquivos PDF encontrados na pasta FarolGE/FaltasSemanais da conta GERAL.</p>
+      <p id="rco-status" class="overview-status" role="status"></p>
+      <ul id="rco-files" class="maintenance-files"></ul>
+      <div class="button-row"><button type="button" class="button" id="rco-refresh">Atualizar lista</button><button type="button" class="button" id="rco-more" hidden>Carregar mais</button></div>
+      <p class="demand-footnote">A captura dos dados dos relatórios será disponibilizada em uma próxima etapa.</p>
+    </section>`;
+    root.querySelector('#rco-refresh').addEventListener('click',()=>load());
+    root.querySelector('#rco-more').addEventListener('click',()=>load(true));
     root.querySelector('#maintenance-refresh').addEventListener('click',()=>load());
     root.querySelector('#maintenance-more').addEventListener('click',()=>load(true));
     draw();if(connection?.driveMetadata)load();
