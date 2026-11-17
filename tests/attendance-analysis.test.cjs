@@ -46,8 +46,13 @@ test('matriz mostra todos os alunos em uma página, distingue zero e sem registr
  h.respond(0,h.response(0,items));await settle();
  const html=h.get('#attendance-rows').innerHTML;assert.ok(html.includes('&lt;b&gt;'));assert.ok(!html.includes('<b>'));assert.ok(html.includes('attendance-zero'));assert.ok(html.includes('attendance-missing'));assert.equal((html.match(/<tr>/g)||[]).length,51);
  assert.ok(html.includes('ALUNO 50'));assert.ok(!h.root.innerHTML.includes('attendance-next'));assert.ok(!h.root.innerHTML.includes('attendance-prev'));
- h.get('#attendance-class').value='B';h.get('#attendance-class').listeners.change();assert.equal((h.get('#attendance-rows').innerHTML.match(/<tr>/g)||[]).length,1);
- h.get('#attendance-class').value='';h.get('#attendance-search').value='ALUNO 50';h.get('#attendance-search').listeners.input();assert.ok(h.get('#attendance-rows').innerHTML.includes('ALUNO 50'));assert.equal(h.requests.length,1);
+ const select=(value,checked)=>h.get('#attendance-classes').listeners.change({target:{value,checked,matches:()=>true}});
+ assert.ok(h.get('#attendance-classes').innerHTML.includes('type="checkbox"'));
+ select('B',true);assert.equal((h.get('#attendance-rows').innerHTML.match(/<tr>/g)||[]).length,1);
+ select('A',true);assert.equal((h.get('#attendance-rows').innerHTML.match(/<tr>/g)||[]).length,51);
+ select('B',false);assert.equal((h.get('#attendance-rows').innerHTML.match(/<tr>/g)||[]).length,50);
+ h.get('#attendance-all-classes').listeners.click();assert.equal((h.get('#attendance-rows').innerHTML.match(/<tr>/g)||[]).length,51);
+ h.get('#attendance-search').value='ALUNO 50';h.get('#attendance-search').listeners.input();assert.ok(h.get('#attendance-rows').innerHTML.includes('ALUNO 50'));assert.equal(h.requests.length,1);
 });
 test('alteração do período valida intervalo, preserva dados na falha e descarta resposta após troca de conta',async()=>{
  const h=frontend();h.app.connectionChanged({email});h.app.mount(h.root);h.respond(0,h.response(0,[{name:'ALUNA',school:'Escola',cgm:'1',classes:['A'],counts:{},total:0}]));await settle();
