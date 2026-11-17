@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const {makeStudentStore}=require('./student-store.cjs');
 const {handleStudents}=require('./students.cjs');
+const {handleAuthorizedUsers}=require('./authorized-users.cjs');
 const {handleStudentImport}=require('./student-import.cjs');
 const {handleDemands}=require('./demands.cjs');
 const {handleMaintenance}=require('./maintenance.cjs');
@@ -67,7 +68,12 @@ function makeStore(config,fetcher=fetch) {
     });
     if(!response.ok){
       let code;try {code=(await response.json()).code;}catch{}
-      if(table==='EmailsAutorizados')throw new Error(['42P01','42703','PGRST204','PGRST205'].includes(code)?'access_setup_required':'access_unavailable');
+      if(table==='EmailsAutorizados'){
+        if(['42P01','42703','PGRST204','PGRST205'].includes(code))throw new Error('access_setup_required');
+        if(method!=='GET'&&[401,403].includes(response.status))throw Object.assign(new Error('authorized_write_denied'),{status:503});
+        if(code==='23505')throw Object.assign(new Error('email_exists'),{status:409});
+        throw new Error('access_unavailable');
+      }
       throw new Error(['farol_personal_demands','farol_institutional_demands'].includes(table) && ['42P01','PGRST205'].includes(code)?'setup_required':'storage_unavailable');
     }
     return response.status===204 || !prefer?.includes('representation')?null:response.json();
@@ -84,6 +90,28 @@ function makeStore(config,fetcher=fetch) {
         if(!Array.isArray(rows))throw new Error('access_unavailable');
         return rows.some(row=>row.email===emailOf(email));
       }catch(error){if(error.message==='access_setup_required')throw error;throw new Error('access_unavailable');}
+    },
+    async getAuthorizedEmail(email){
+      const rows=await call('EmailsAutorizados','GET','email=eq.'+encodeURIComponent(emailOf(email))+'&select=email,Nome,Escola&limit=1',null,'return=representation');
+      return rows[0]||null;
+    },
+    async listAuthorizedEmails(pageToken=''){
+      let after='';
+      if(pageToken){
+        let cursor;try{if(pageToken.length>1024)throw new Error();cursor=Buffer.from(pageToken,'base64url').toString('utf8');}catch{throw Object.assign(new Error('invalid_page'),{status:400});}
+        if(cursor.length>254||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cursor))throw Object.assign(new Error('invalid_page'),{status:400});
+        after='&email=gt.'+encodeURIComponent(cursor);
+      }
+      const rows=await call('EmailsAutorizados','GET','select=Escola,Nome,email&order=email.asc&limit=51'+after,null,'return=representation');
+      if(!Array.isArray(rows))throw new Error('access_unavailable');
+      return {users:rows.slice(0,50),nextPageToken:rows.length>50?Buffer.from(rows[49].email).toString('base64url'):null};
+    },
+    async includeAuthorizedEmail(row){
+      const rows=await call('EmailsAutorizados','POST','',row,'return=representation');
+      if(!rows?.length)throw new Error('access_unavailable');
+    },
+    async excludeAuthorizedEmail(email){
+      await call('EmailsAutorizados','DELETE','email=eq.'+encodeURIComponent(email),null,'return=representation');
     },
     async get(id) {const rows=await sessions('GET',`id=eq.${id}&select=id,payload,expires_at`,null,'return=representation');return decode(rows[0]);},
     async take(id) {const rows=await sessions('DELETE',`id=eq.${id}`,null,'return=representation');return decode(rows[0]);},
@@ -193,8 +221,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','access-denied','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import'].includes(action)?'POST':'GET';
+    if(!['status','access-denied','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action))return reply(404,{error:'not_found'});
+    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import','authorized-email'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
@@ -212,6 +240,11 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       let allowed;
       try{allowed=await store.isEmailAuthorized(email);}catch(error){throw new Error(error.message==='access_setup_required'?'access_setup_required':'access_unavailable');}
       if(allowed!==true)throw Object.assign(new Error('access_denied'),{email});
+    }
+    async function authorizedName(email){
+      let profile;
+      try{profile=await store.getAuthorizedEmail(email);}catch(error){if(email!==FIXED_AUTHORIZED_EMAIL)throw error;}
+      return (typeof profile?.Nome==='string'?profile.Nome.trim():'')||(email===FIXED_AUTHORIZED_EMAIL?'Marcos Rubo':'');
     }
     async function account(type,checkAccess=true) {
       const name=accountCookie(type),id=jar[name];
@@ -258,14 +291,14 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         if(!denied||denied.expiresAt<=Date.now()||typeof denied.email!=='string')return reply(404,{error:'not_found'});
         return reply(200,{email:denied.email});
       }
-      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action)) {
+      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action)) {
         try {
-          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))?'general':'personal';
+          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action))?'general':'personal';
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
           const current=await account(type);
           if(!current)return reply(401,{error:'login_required'});
           const connection=await store.getConnection(current.user.id,type);
-          if(!connection || connection.email!==current.user.email || !(['students','occurrences','occurrence'].includes(action)?true:action==='student-import'?connection.capabilities.driveRead:['maintenance','student-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
+          if(!connection || connection.email!==current.user.email || !(['students','occurrences','occurrence','authorized-emails','authorized-email'].includes(action)?true:action==='student-import'?connection.capabilities.driveRead:['maintenance','student-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
           if(action==='institutional-labels'){
             if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox'].includes(key)))return reply(400,{error:'invalid_institutional'});
@@ -275,7 +308,16 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             try {await store.putConnection(current.user.id,type,{...connection,labelsAllowed:true,credentials:credentialsOf(client)});}catch{}
             return reply(200,{mailbox:current.user.email,labels:labelDetails.status,labelDetails});
           }
-          const result=['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrences','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
+          let actor;
+          if(action==='occurrence'){
+            let personal;
+            try{personal=await account('personal');}catch(error){error.type='personal';throw error;}
+            if(!personal)return reply(401,{error:'author_required'});
+            const name=await authorizedName(personal.user.email);
+            if(!name)return reply(409,{error:'author_profile_required'});
+            actor={email:personal.user.email,name};
+          }
+          const result=['authorized-emails','authorized-email'].includes(action)?await handleAuthorizedUsers({action,url,body,store,email:current.user.email}):['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrences','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email,actor}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
             ?await handleInstitutional({action,url,body,client,store,owner:current.user.id,email:current.user.email,canModify:connection.capabilities.manageInstitutional===true})
             :await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
           // Credential caching must not turn an already committed demand into a false failure.
@@ -283,9 +325,9 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           try {await store.putConnection(current.user.id,type,{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
-          if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))?'general':'personal'});
+          if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||(action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action))?'general':'personal')});
           if(['access_setup_required','access_unavailable'].includes(error.message))return reply(503,{error:error.message});
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied'];
           if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
@@ -413,7 +455,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const labels=type==='general'?labelDetails.status:await mailboxLabels(client,connection.labelsAllowed===true);
           connection.credentials=credentialsOf(client);
           await store.putConnection(current.user.id,type,connection);
-          connections[type]={email:connection.email,...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};
+          connections[type]={email:connection.email,...(type==='personal'?{name:await authorizedName(connection.email)}:{}),...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};
         } catch(error) {
           if(error.message==='access_denied'){errors[type]='access_denied';denied[type]=error.email;continue;}
           if(['access_setup_required','access_unavailable'].includes(error.message)){errors[type]=error.message;continue;}

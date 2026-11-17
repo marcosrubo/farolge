@@ -23,8 +23,8 @@ create trigger farol_normalize_authorized_email before insert or update of email
 on public."EmailsAutorizados" for each row execute function public.farol_normalize_authorized_email();
 alter table public."EmailsAutorizados" enable row level security;
 revoke all on public."EmailsAutorizados" from public,anon,authenticated,service_role;
-grant select on public."EmailsAutorizados" to service_role;
--- Sem policies de navegador. Inclusão/remoção administrativa no Supabase.
+grant select, insert, delete on public."EmailsAutorizados" to service_role;
+-- Sem policies de navegador. Administração pelo backend exige sessão Geral autorizada.
 -- Escola e Nome são informações administrativas; o acesso é verificado pelo email.
 -- Escola é informação administrativa: não concede acesso aos dados de outra conta.
 commit;

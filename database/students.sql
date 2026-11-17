@@ -24,6 +24,8 @@ create table if not exists public."Ocorrencias" (
   "Data" date not null,
   "Hora" time not null,
   "Ocorrencia" text not null,
+  "EmailAutor" text,
+  "NomeAutor" text,
   created_at timestamptz not null default now(),
   primary key (owner_id,id),
   foreign key (owner_id,cgm_key) references public."Alunos"(owner_id,cgm_key)

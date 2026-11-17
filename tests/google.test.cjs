@@ -11,7 +11,7 @@ function harness(overrides={}){
  const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[];
  let labelFailure=null,labelRace=false;
  const labelError=status=>Object.assign(new Error('label_error'),{response:{status}});
- const store={async isEmailAuthorized(){return true;},async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
+ const store={async getAuthorizedEmail(email){return {email,Nome:'Pessoa fictícia',Escola:'Escola fictícia'};},async isEmailAuthorized(){return true;},async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
  let email='admin@gmail.com',identityOverride={},scopes=null,options,issuedOptions,flowOptions=new Map(),calls=0,authUnavailable=false,nowLogout=[],gmailDenied=false,failedEmail=null,failedStatus=503,failedReason=null,revokedAuthEmail=null;
  const userFor=value=>{if(!users.has(value))users.set(value,{id:'user-'+digest(value).slice(0,16),email:value,identities:[{provider:'google',identity_data:{sub:'sub-'+value}}]});return users.get(value);};
  const auth={async signIn(token,access,nonce){assert.equal(digest(nonce),issuedOptions.nonce);assert.equal(token,'id:'+email);const user=userFor(email);return {user,access_token:'auth:'+email,refresh_token:'refresh:'+email,expires_in:3600};},async user(token){if(authUnavailable || token.slice(5)===revokedAuthEmail)throw new Error('login_required');return userFor(token.slice(5));},async refresh(token){const value=token.slice(8);return {access_token:'auth:'+value,refresh_token:token,expires_in:3600};},async logout(token){nowLogout.push(token);}};
@@ -539,7 +539,7 @@ test('Alunos e ocorrências exigem Geral própria; gravação exige CSRF e rejei
  const body={type:'general',mailbox:GENERAL_EMAIL,studentId:'a'.repeat(64),id:'12345678-1234-4234-8234-123456789abc',ocorrencia:'Fato registrado.'};
  assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie,body,origin:'https://elsewhere.invalid'})).status,403);
  assert.equal((await h.request('occurrence',{method:'GET',cookie:general.cookie})).status,405);
- assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie,body:{...body,Nome:'forged'}})).status,400);
+ assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie+'; '+personal.cookie,body:{...body,Nome:'forged'}})).status,400);
  assert.equal((await h.request('student-import',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:GENERAL_EMAIL}})).status,403);
  assert.equal((await h.request('student-import',{method:'GET',cookie:general.cookie})).status,405);
 });
@@ -626,4 +626,24 @@ test('exceção fixa não aceita aliases/endereço parecido nem dispensa identid
   const login=await h.login(email);assert.match(login.response.headers.location,/access_denied/);assert.equal(login.cookie,undefined);
  }
  h.setIdentity({email_verified:false});const invalid=await h.login('marcos.rubo@gmail.com');assert.match(invalid.response.headers.location,/wrong_account/);assert.equal(invalid.cookie,undefined);
+});
+
+test('cadastro de e-mails exige Geral autorizada e CSRF, sem herdar Pessoal ou precisar de Gmail',async()=>{
+ const h=harness();h.store.listAuthorizedEmails=async()=>({users:[],nextPageToken:null});const changes=[];h.store.includeAuthorizedEmail=async row=>changes.push(row);
+ const personal=await h.login('personal@example.com');assert.equal((await h.request('authorized-emails',{cookie:personal.cookie,query:'?mailbox=personal@example.com'})).status,401);
+ h.setScopes('openid email profile');const general=await h.login(GENERAL_EMAIL,personal.cookie,'general');assert.equal((await h.request('authorized-emails',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
+ const body={type:'general',mailbox:GENERAL_EMAIL,operation:'include',email:'new@example.com',nome:'Pessoa',escola:'Escola'};
+ assert.equal((await h.request('authorized-email',{method:'POST',cookie:general.cookie,body,origin:'https://elsewhere.invalid'})).status,403);assert.equal(changes.length,0);
+ assert.equal((await h.request('authorized-email',{method:'POST',cookie:general.cookie,body})).status,200);assert.equal(changes[0].Nome,'Pessoa');
+});
+test('ocorrência grava autor Pessoal validado com nome do cadastro; requer Pessoal e rejeita autoria forjada',async()=>{
+ const h=harness();const general=await h.login(GENERAL_EMAIL,'','general');const personal=await h.login('monitor@example.com',general.cookie,'personal');
+ h.store.getStudent=async()=>({id:'a'.repeat(64),CGM:'000123',Nome:'Aluno fictício',Escola:'Escola'});let recorded;
+ h.store.getAuthorizedEmail=async email=>({email,Nome:'Monitor cadastrado',Escola:'Escola'});h.store.saveOccurrence=async(o,id,v)=>{recorded=v;return v;};
+ const body={type:'general',mailbox:GENERAL_EMAIL,authorMailbox:'monitor@example.com',studentId:'a'.repeat(64),id:'12345678-1234-4234-8234-123456789abc',ocorrencia:'Fato.'};
+ assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie,body})).json().error,'author_required');
+ const cookie=general.cookie+'; '+personal.cookie;assert.equal((await h.request('occurrence',{method:'POST',cookie,body})).status,200);assert.equal(recorded.EmailAutor,'monitor@example.com');assert.equal(recorded.NomeAutor,'Monitor cadastrado');
+ assert.equal((await h.request('occurrence',{method:'POST',cookie,body:{...body,NomeAutor:'Forjado'}})).status,400);
+ assert.equal((await h.request('occurrence',{method:'POST',cookie,body:{...body,authorMailbox:'other@example.com'}})).json().error,'author_changed');
+ h.store.isEmailAuthorized=async email=>email!=='monitor@example.com';const denied=await h.request('occurrence',{method:'POST',cookie,body});assert.equal(denied.status,403);assert.equal(denied.json().type,'personal');
 });

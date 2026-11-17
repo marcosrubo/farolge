@@ -9,6 +9,7 @@ const {makeStudentStore}=require('../server/student-store.cjs');
 const {seal,unseal}=require('../server/google.cjs');
 const student={id:'a'.repeat(64),Escola:'ESCOLA FICTICIA',CGM:'0001234567',Nome:'ALUNA FICTICIA',Serie:'8º Ano',Turma:'A',Turno:'Manhã'};
 const email='school@example.com',owner='owner-a';
+const actor={email:'monitor@example.com',name:'Monitor Fictício'};
 const id='12345678-1234-4234-8234-123456789abc';
 const url=new URL('https://farol.invalid/?mailbox='+email);
 const line=(y,...items)=>({y,items:items.map(([x,text])=>({x,text})),text:items.map(i=>i[1]).join(' ')});
@@ -48,11 +49,11 @@ test('PDF.js lê arquivo fictício e extrai a geração do PDF, sem depender da 
 test('alunos ordenados em português e ocorrências derivam identidade, escola/aluno e horário de Brasília',async()=>{
  const saved=[];const store={getStudents:async o=>{assert.equal(o,owner);return [{...student,Nome:'ZÉ'},{...student,Nome:'ÁGATA'}];},getStudent:async(o,s)=>{assert.equal(o,owner);return s===student.id?student:null;},saveOccurrence:async(o,i,v)=>{assert.equal(o,owner);assert.equal(i,id);saved.push(v);return v;}};
  const listed=await handleStudents({action:'students',url,store,owner,email});assert.equal(listed.students[0].Nome,'ÁGATA');
- const body={type:'general',mailbox:email,id,studentId:student.id,ocorrencia:' Registro factual. '};
- const result=await handleStudents({action:'occurrence',body,store,owner,email,now:new Date('2026-11-18T01:30:00Z')});
- assert.equal(result.date,'2026-11-17');assert.equal(result.time,'22:30:00');assert.equal(saved[0].Escola,student.Escola);assert.equal(saved[0].Nome,student.Nome);assert.equal(saved[0].Ocorrencia,'Registro factual.');
- await assert.rejects(handleStudents({action:'occurrence',body:{...body,Nome:'forged'},store,owner,email}),{message:'invalid_occurrence'});
- await assert.rejects(handleStudents({action:'occurrence',body:{...body,studentId:'b'.repeat(64)},store,owner,email}),{message:'student_missing'});
+ const body={type:'general',mailbox:email,authorMailbox:actor.email,id,studentId:student.id,ocorrencia:' Registro factual. '};
+ const result=await handleStudents({action:'occurrence',body,store,owner,email,actor,now:new Date('2026-11-18T01:30:00Z')});
+ assert.equal(result.date,'2026-11-17');assert.equal(result.time,'22:30:00');assert.equal(saved[0].Escola,student.Escola);assert.equal(saved[0].Nome,student.Nome);assert.equal(saved[0].Ocorrencia,'Registro factual.');assert.equal(saved[0].EmailAutor,actor.email);assert.equal(saved[0].NomeAutor,actor.name);
+ await assert.rejects(handleStudents({action:'occurrence',body:{...body,Nome:'forged'},store,owner,email,actor}),{message:'invalid_occurrence'});
+ await assert.rejects(handleStudents({action:'occurrence',body:{...body,studentId:'b'.repeat(64)},store,owner,email,actor}),{message:'student_missing'});
  await assert.rejects(handleStudents({action:'students',url:new URL('https://farol.invalid/?mailbox=other'),store,owner,email}),{message:'account_changed'});
 });
 function importHarness(){
@@ -102,11 +103,11 @@ test('lista consulta geração por faixa limitada sem importar alunos nem confun
  requests.length=0;const denied=await handleStudentImport({action:'student-files',url,client,email,canRead:false});assert.equal(requests.length,3);assert.equal(denied.files[0].generationStatus,'permission_required');
 });
 test('reenvio de ocorrência após resposta perdida reutiliza o registro; conflito não sobrescreve texto',async()=>{
- const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,4)},value={...student,studentId:student.id,Ocorrencia:'Fato.',Data:'2026-11-17',Hora:'09:00:00'};
+ const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,4)},value={...student,studentId:student.id,EmailAutor:actor.email,NomeAutor:actor.name,Ocorrencia:'Fato.',Data:'2026-11-17',Hora:'09:00:00'};
  let row=null;const calls=[];
  const store=makeStudentStore(cfg,async(url,opts)=>{calls.push(opts);if(opts.method==='POST'){const data=JSON.parse(opts.body);if(row)return {ok:true,status:200,json:async()=>[]};row=data;return {ok:true,status:200,json:async()=>[data]};}return {ok:true,status:200,json:async()=>[row]};},{seal,unseal});
  await store.saveOccurrence(owner,id,value);const replay=await store.saveOccurrence(owner,id,{...value,Hora:'09:01:00'});assert.equal(replay.Hora,'09:00:00');
- assert.notEqual(row.Nome,value.Nome);assert.notEqual(row.Ocorrencia,value.Ocorrencia);assert.equal(row.owner_id,owner);
+ assert.notEqual(row.Nome,value.Nome);assert.notEqual(row.Ocorrencia,value.Ocorrencia);assert.notEqual(row.EmailAutor,value.EmailAutor);assert.notEqual(row.NomeAutor,value.NomeAutor);assert.equal(row.owner_id,owner);
  await assert.rejects(store.saveOccurrence(owner,id,{...value,Ocorrencia:'Outro texto.'}),{message:'conflict'});
  assert.ok(calls.filter(c=>c.method==='POST').every(c=>JSON.parse(c.body).id===id));
 });
@@ -136,7 +137,7 @@ test('consulta de ocorrências usa proprietário, ordem temporal e paginação e
   return {id:rowId,cgm_key:student.id,Data:'2026-11-17',Hora:'09:00:00',Nome:seal(student.Nome,cfg.key,`occurrence.${owner}.${rowId}.Nome`),Ocorrencia:seal('Observação factual.',cfg.key,`occurrence.${owner}.${rowId}.Ocorrencia`),Alunos:Object.fromEntries(['Serie','Turma','Turno'].map(field=>[field,seal(student[field],cfg.key,`student.${owner}.${student.id}.${field}`)]))};
  });
  const store=makeStudentStore(cfg,async(url,opts)=>{calls.push({url,opts});return {ok:true,status:200,json:async()=>rows};},{seal,unseal});
- const first=await store.getOccurrences(owner);assert.equal(first.items.length,20);assert.equal(first.items[0].student,student.Nome);assert.equal(first.items[0].className,'8º Ano · A · Manhã');assert.ok(!('CGM' in first.items[0]));
+ const first=await store.getOccurrences(owner);assert.equal(first.items.length,20);assert.equal(first.items[0].student,student.Nome);assert.equal(first.items[0].className,'8º Ano · A · Manhã');assert.equal(first.items[0].authorName,null);assert.ok(!('CGM' in first.items[0]));
  const params=new URL(calls[0].url).searchParams;assert.equal(params.get('owner_id'),'eq.'+owner);assert.equal(params.get('order'),'Data.desc,Hora.desc,id.desc');assert.equal(params.get('limit'),'21');assert.equal(calls[0].opts.method,'GET');
  await store.getOccurrences(owner,first.nextPageToken);const second=new URL(calls[1].url).searchParams;
  assert.equal(second.get('owner_id'),'eq.'+owner);assert.ok(second.get('or').includes('id.lt.'+rows[19].id));assert.ok(second.get('or').includes('Hora.lt.09:00:00'));

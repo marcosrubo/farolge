@@ -83,6 +83,7 @@ function render(){
   window.FarolOverview?.unmount();
   window.FarolMaintenance?.unmount();
   window.FarolStudents?.unmount();
+  window.FarolAuthorizedUsers?.unmount();
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const selected=modules.find(item=>item.id===route)||modules[0];
   document.title='FAROL GE · '+selected.label;
@@ -90,7 +91,8 @@ function render(){
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&!['manutencao-sistema','configuracoes'].includes(item.id)?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
-  main.innerHTML=selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  main.innerHTML=selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  if(selected.id==='configuracoes')window.FarolAuthorizedUsers?.mount(document.querySelector('#authorized-users-board'));
   if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
   if(selected.id==='manutencao-sistema')window.FarolMaintenance?.mount(document.querySelector('#maintenance-board'));
   if(selected.id==='inicio')window.FarolOverview?.mount(document.querySelector('#overview-board'));
@@ -132,8 +134,8 @@ function setupEmailConnections(){
   }
   function clearConnection(type){
     activeEmails[type]=null;
-    if(type==='personal')window.FarolDemands?.connectionChanged(null);
-    else{window.FarolInstitutional?.connectionChanged(null);window.FarolMaintenance?.connectionChanged(null);window.FarolStudents?.connectionChanged(null);}
+    if(type==='personal'){window.FarolDemands?.connectionChanged(null);window.FarolStudents?.personalConnectionChanged(null);}
+    else{window.FarolInstitutional?.connectionChanged(null);window.FarolMaintenance?.connectionChanged(null);window.FarolStudents?.connectionChanged(null);window.FarolAuthorizedUsers?.connectionChanged(null);}
     window.FarolOverview?.connectionChanged(type,null);
     document.querySelector('#email-'+type+'-status').textContent='Acesso não autorizado ou não verificado';
     document.querySelector('#email-'+type+'-status').classList.toggle('is-connected',false);
@@ -174,6 +176,8 @@ function setupEmailConnections(){
       window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolMaintenance?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolStudents?.connectionChanged(configured?result.connections?.general||null:null);
+      window.FarolStudents?.personalConnectionChanged(configured?result.connections?.personal||null:null);
+      window.FarolAuthorizedUsers?.connectionChanged(configured?result.connections?.general||null:null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.connections?.[type]||null:null);
       for(const type of types){
         const connection=result.connections?.[type];
@@ -204,6 +208,8 @@ function setupEmailConnections(){
       window.FarolInstitutional?.connectionChanged(null);
       window.FarolMaintenance?.connectionChanged(null);
       window.FarolStudents?.connectionChanged(null);
+      window.FarolStudents?.personalConnectionChanged(null);
+      window.FarolAuthorizedUsers?.connectionChanged(null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,null);
       for(const type of types){
         const status=document.querySelector('#email-'+type+'-status');
@@ -268,6 +274,7 @@ function setupEmailConnections(){
     params.delete('mailbox');
     window.history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():'')+location.hash);
   }
+  window.FarolRefreshConnections=refresh;
   window.addEventListener('farol-connections-refresh',refresh);
   window.addEventListener('focus',refresh);
   refresh();

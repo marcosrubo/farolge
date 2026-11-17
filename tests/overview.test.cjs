@@ -120,3 +120,10 @@ test('atualização automática pausa em aba oculta, retoma visível e encerra a
  respondOccurrences(h,{mailbox:'school@example.com',items:occurrenceItems,nextPageToken:null});await settle();h.app.mount(h.root);assert.equal(h.get('#overview-auto-refresh').checked,true);assert.equal(h.timers.size,1);
  h.app.connectionChanged('general',null);const count=h.requests.length;h.tick();assert.equal(h.requests.length,count);assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');
 });
+
+test('última coluna mostra nome do autor escapado e sinaliza registros antigos sem autoria',async()=>{
+ const h=frontend();h.app.mount(h.root);h.app.connectionChanged('general',{email:'school@example.com',gmail:false});
+ respondOccurrences(h,{mailbox:'school@example.com',items:[{...occurrenceItems[0],authorName:'MONITOR <b>teste</b>'},occurrenceItems[1]],nextPageToken:null});await settle();
+ assert.ok(h.root.innerHTML.includes('<th scope="col">Registrado por</th>'));
+ const html=h.get('#overview-occurrences-rows').innerHTML;assert.ok(html.includes('MONITOR &lt;b&gt;teste&lt;/b&gt;</td></tr>'));assert.ok(html.includes('Não informado</td></tr>'));assert.ok(!html.includes('<b>'));
+});

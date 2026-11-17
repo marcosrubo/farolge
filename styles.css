@@ -174,3 +174,5 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .overview-auto{margin-top:18px}.overview-auto label{display:inline-flex;align-items:center;gap:8px;line-height:1.5;cursor:pointer}.overview-auto input{accent-color:var(--green);width:17px;height:17px}.overview-auto .overview-status{margin-top:6px}
 
 #access-denied-support{display:inline-flex;align-items:center;text-decoration:none}#access-denied-email{overflow-wrap:anywhere}
+
+.authorized-form{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin:18px 0}.authorized-form .field{margin:0;flex:1 1 180px}.authorized-form input{width:100%}.authorized-form button{margin-bottom:0}#authorized-delete-email{overflow-wrap:anywhere}.overview-occurrences table{min-width:660px}

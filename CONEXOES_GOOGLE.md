@@ -215,3 +215,12 @@ Negativa usa ticket cifrado temporário e cookie opaco, sem e-mail na URL. A int
 
 
 Exceção posterior solicitada por Marcos: `marcos.rubo@gmail.com` está liberado diretamente em `FIXED_AUTHORIZED_EMAIL`, no backend, após a validação Google. Funciona nas duas conexões, sem depender de EmailsAutorizados. Os demais endereços mantêm a verificação obrigatória. Não dispensa sessão, escopos ou isolamento; não exige novo SQL. Política revisão 19.
+
+
+## Administração de usuários e identificação de autoria — revisão 20
+
+Qualquer Geral autorizada administra EmailsAutorizados em Configurações, com consulta paginada, inclusão e exclusão confirmada. São operações do backend com service_role, sem políticas públicas de escrita e sem exigir Gmail/Drive. Escola permanece informação administrativa; a lista é global e não cria compartilhamento de alunos ou ocorrências entre contas.
+
+Para bancos existentes, executar database/access-management-authors.sql: concede SELECT/INSERT/DELETE em EmailsAutorizados e acrescenta EmailAutor/NomeAutor nullable em Ocorrencias. Não basta executar CREATE TABLE IF NOT EXISTS sobre tabelas existentes. Os SQLs de instalação inicial já incluem as permissões e colunas novas. Publicar a política revisão 20 junto do código; sem novo escopo/variável.
+
+Marcos confirmou autoria pela conexão Pessoal. O registro exige Geral e Pessoal autorizadas, valida o e-mail Pessoal no servidor e consulta Nome no cadastro; a exceção fixa pode usar Marcos Rubo. Autoria é copiada e cifrada na ocorrência pertencente à Geral. Remover o acesso ou desconectar a Pessoal preserva essa autoria. Histórico antigo continua sem autor informado; a Visão GERAL mostra Registrado por como última coluna. Nenhum SQL remoto ou alteração real de usuários foi executado nesta entrega.

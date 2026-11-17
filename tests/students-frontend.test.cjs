@@ -17,7 +17,7 @@ const student={id:'a'.repeat(64),Nome:'ALUNA <TESTE>',Escola:'ESCOLA FICTICIA',C
 const click=id=>({target:{closest:()=>({dataset:id})}});
 test('Inspetores mantém explicação sem conexão e mostra nome/turma com texto seguro',async()=>{
  const h=ui('students.js','FarolStudents');h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.root.innerHTML.includes('Inspetores/Monitores'));
- h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student]});await settle();
+ h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student]});await settle();
  assert.ok(h.get('#student-list').innerHTML.includes('ALUNA &lt;TESTE&gt;'));assert.ok(h.get('#student-list').innerHTML.includes('8º Ano · A · Manhã'));
  h.get('#student-list').listeners.click(click({student:student.id}));assert.equal(h.get('#student-dialog').open,true);assert.equal(h.get('#student-school').textContent,student.Escola);
  h.get('#student-occurrence').value='Observação factual.';
@@ -53,4 +53,13 @@ test('Carga identifica falha do leitor e do Supabase sem repetir POST ou apagar 
  assert.ok(h.get('#student-import-status').textContent.includes('leitor de PDF não iniciou'));assert.ok(h.get('#student-import-list').innerHTML.includes('alunos'));assert.equal(h.requests.length,2);
  h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));h.respond(2,{error:'storage_access_denied'},false);await settle();
  assert.ok(h.get('#student-import-status').textContent.includes('Supabase recusou'));assert.equal(h.requests.length,3);
+});
+
+test('ocorrência exige Pessoal com nome e fecha o formulário quando o autor muda',async()=>{
+ const h=ui('students.js','FarolStudents');h.app.mount(h.root);h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student]});await settle();
+ h.get('#student-list').listeners.click(click({student:student.id}));assert.equal(h.get('#student-save').disabled,true);assert.ok(h.get('#student-actor').textContent.includes('conta Pessoal'));
+ h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});assert.equal(h.get('#student-dialog').open,false);
+ h.get('#student-list').listeners.click(click({student:student.id}));assert.equal(h.get('#student-save').disabled,false);assert.ok(h.get('#student-actor').textContent.includes('Monitor Fictício'));
+ h.get('#student-occurrence').value='Registro.';h.get('#student-form').listeners.submit({preventDefault(){}});assert.equal(JSON.parse(h.requests[1].opts.body).authorMailbox,'monitor@example.com');
+ h.app.personalConnectionChanged({email:'new@example.com',name:'Outra pessoa'});h.respond(1,{mailbox:general.email,saved:true,date:'2026-11-17',time:'10:00:00'});await settle();assert.ok(!h.get('#student-status').textContent.includes('Ocorrência registrada'));
 });
