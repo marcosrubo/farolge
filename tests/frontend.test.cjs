@@ -154,3 +154,11 @@ test('módulo de alunos anterior em cache não bloqueia conexões Google',async(
   assert.ok(h.window.destination.startsWith('https://accounts.google.com/'));
  }
 });
+
+
+test('Radar abre análise de faltas mantendo menu Radar selecionado e propaga somente a Geral',async()=>{
+ const received=[],mounted=[];const app={unmount(){},mount(el){mounted.push(el);},connectionChanged(value){received.push(value);}};
+ const h=ui({configured:true,connections:{general:{email:'school@example.com'},personal:{email:'personal@example.com'}}},'',{FarolAttendanceAnalysis:app});await settle();
+ assert.ok(h.get('#main').innerHTML.includes('href="#analise-faltas"'));assert.equal(received.at(-1).email,'school@example.com');
+ h.context.location.hash='#analise-faltas';h.window.listeners.hashchange();assert.ok(h.get('#main').innerHTML.includes('attendance-analysis-board'));assert.equal(mounted.length,1);assert.equal(h.get('#breadcrumb-title').textContent,'Radar / Análise de faltas');
+});

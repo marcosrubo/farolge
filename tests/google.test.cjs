@@ -662,3 +662,14 @@ test('faltas usam somente Geral autorizada, exigem drive.readonly para POST e pr
  const p=harness(),personal=await p.login();
  assert.equal((await p.request('attendance-files',{cookie:personal.cookie,query:'?mailbox=admin%40gmail.com'})).status,401);
 });
+
+
+test('análise de faltas exige Geral autorizada sem depender de Gmail, Drive ou Pessoal',async()=>{
+ const h=harness(),g=await h.login(GENERAL_EMAIL,'','general'),id=h.userFor(GENERAL_EMAIL).id;
+ const connection=h.connections.get(id+'.general');connection.capabilities={};h.connections.set(id+'.general',connection);
+ h.store.getStudents=async o=>{assert.equal(o,id);return [];};h.store.getAttendanceRecords=async(o,start,end)=>{assert.equal(o,id);assert.equal(start,'2026-11-01');assert.equal(end,'2026-11-17');return [];};
+ const query='?'+new URLSearchParams({mailbox:GENERAL_EMAIL,start:'2026-11-01',end:'2026-11-17'});
+ const r=await h.request('attendance-analysis',{cookie:g.cookie,query});assert.equal(r.status,200);assert.deepEqual(r.json().items,[]);
+ assert.equal((await h.request('attendance-analysis',{query})).status,401);
+ h.store.isEmailAuthorized=async()=>false;const denied=await h.request('attendance-analysis',{cookie:g.cookie,query});assert.equal(denied.json().error,'access_denied');assert.equal(denied.json().type,'general');
+});

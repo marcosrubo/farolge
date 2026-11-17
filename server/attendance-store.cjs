@@ -1,6 +1,6 @@
 'use strict';
 const crypto=require('node:crypto');
-function makeAttendanceStore(config,fetcher,{seal}){
+function makeAttendanceStore(config,fetcher,{seal,unseal}){
   const fail=(code,status=503)=>{throw Object.assign(new Error(code),{status});};
   const key=(owner,type,value)=>crypto.createHmac('sha256',config.key).update(`attendance.${owner}.${type}.${value}`).digest('hex');
   async function call(path,method,query='',body){
@@ -14,6 +14,18 @@ function makeAttendanceStore(config,fetcher,{seal}){
     return response.json();
   }
   return {
+    async getAttendanceRecords(owner,start,end){
+      const all=[];
+      for(let offset=0;offset<=100000;offset+=500){
+        const query=new URLSearchParams({owner_id:`eq.${owner}`,select:'student_key,Escola,CGM,data,faltas',order:'student_key.asc,data.asc',limit:'500',offset:String(offset)});
+        query.append('data','gte.'+start);query.append('data','lte.'+end);
+        const rows=await call('FaltasDosAlunos','GET',query);
+        if(!Array.isArray(rows))fail('storage_unavailable');
+        all.push(...rows.map(row=>({data:row.data,faltas:row.faltas,...Object.fromEntries(['Escola','CGM'].map(field=>[field,unseal(row[field],config.key,`attendance.${owner}.${row.student_key}.${field}`)]))})));
+        if(all.length>100000)fail('analysis_limit',413);
+        if(rows.length<500)return all;
+      }
+    },
     async attendanceLoadedFiles(owner,names){
       if(!names.length)return new Set();
       const keys=[...new Set(names.map(name=>key(owner,'file',name)))];

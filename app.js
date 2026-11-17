@@ -57,7 +57,7 @@ function renderRadar(){
       <div class="radar-branch" aria-hidden="true"></div>
       <ul class="radar-outputs">
         <li class="radar-node"><strong>DOSSIÊ individual</strong></li>
-        <li class="radar-node"><strong>Relação diária de FALTAS</strong></li>
+        <li class="radar-node"><strong>Relação diária de FALTAS</strong><a class="button radar-attendance-analyze" href="#analise-faltas">Analisar</a></li>
       </ul>
     </div>
   </section>`;
@@ -84,14 +84,17 @@ function render(){
   window.FarolMaintenance?.unmount();
   window.FarolStudents?.unmount();
   window.FarolAuthorizedUsers?.unmount();
+  window.FarolAttendanceAnalysis?.unmount();
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
-  const selected=modules.find(item=>item.id===route)||modules[0];
-  document.title='FAROL GE · '+selected.label;
-  document.querySelector('#breadcrumb-title').textContent=selected.label;
+  const analysis=route==='analise-faltas';
+  const selected=modules.find(item=>item.id===(analysis?'radar':route))||modules[0];
+  document.title='FAROL GE · '+(analysis?'Análise de faltas':selected.label);
+  document.querySelector('#breadcrumb-title').textContent=analysis?'Radar / Análise de faltas':selected.label;
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&!['manutencao-sistema','configuracoes'].includes(item.id)?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
-  main.classList.toggle('radar-workspace',selected.id==='radar');
-  main.innerHTML=selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  main.classList.toggle('radar-workspace',selected.id==='radar'&&!analysis);
+  main.innerHTML=analysis?'<section id="attendance-analysis-board" class="demands-workspace"></section>':selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  if(analysis)window.FarolAttendanceAnalysis?.mount(document.querySelector('#attendance-analysis-board'));
   if(selected.id==='configuracoes')window.FarolAuthorizedUsers?.mount(document.querySelector('#authorized-users-board'));
   if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
   if(selected.id==='manutencao-sistema')window.FarolMaintenance?.mount(document.querySelector('#maintenance-board'));
@@ -135,7 +138,7 @@ function setupEmailConnections(){
   function clearConnection(type){
     activeEmails[type]=null;
     if(type==='personal'){window.FarolDemands?.connectionChanged(null);window.FarolStudents?.personalConnectionChanged?.(null);}
-    else{window.FarolInstitutional?.connectionChanged(null);window.FarolMaintenance?.connectionChanged(null);window.FarolStudents?.connectionChanged(null);window.FarolAuthorizedUsers?.connectionChanged(null);}
+    else{window.FarolInstitutional?.connectionChanged(null);window.FarolMaintenance?.connectionChanged(null);window.FarolStudents?.connectionChanged(null);window.FarolAuthorizedUsers?.connectionChanged(null);window.FarolAttendanceAnalysis?.connectionChanged(null);}
     window.FarolOverview?.connectionChanged(type,null);
     document.querySelector('#email-'+type+'-status').textContent='Acesso não autorizado ou não verificado';
     document.querySelector('#email-'+type+'-status').classList.toggle('is-connected',false);
@@ -178,6 +181,7 @@ function setupEmailConnections(){
       window.FarolStudents?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolStudents?.personalConnectionChanged?.(configured?result.connections?.personal||null:null);
       window.FarolAuthorizedUsers?.connectionChanged(configured?result.connections?.general||null:null);
+      window.FarolAttendanceAnalysis?.connectionChanged(configured?result.connections?.general||null:null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.connections?.[type]||null:null);
       for(const type of types){
         const connection=result.connections?.[type];
@@ -209,7 +213,7 @@ function setupEmailConnections(){
       window.FarolMaintenance?.connectionChanged(null);
       window.FarolStudents?.connectionChanged(null);
       window.FarolStudents?.personalConnectionChanged?.(null);
-      window.FarolAuthorizedUsers?.connectionChanged(null);
+      window.FarolAuthorizedUsers?.connectionChanged(null);window.FarolAttendanceAnalysis?.connectionChanged(null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,null);
       for(const type of types){
         const status=document.querySelector('#email-'+type+'-status');
