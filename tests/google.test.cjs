@@ -647,3 +647,18 @@ test('ocorrência grava autor Pessoal validado com nome do cadastro; requer Pess
  assert.equal((await h.request('occurrence',{method:'POST',cookie,body:{...body,authorMailbox:'other@example.com'}})).json().error,'author_changed');
  h.store.isEmailAuthorized=async email=>email!=='monitor@example.com';const denied=await h.request('occurrence',{method:'POST',cookie,body});assert.equal(denied.status,403);assert.equal(denied.json().type,'personal');
 });
+
+
+test('faltas usam somente Geral autorizada, exigem drive.readonly para POST e preservam CSRF',async()=>{
+ const h=harness(),g=await h.login(GENERAL_EMAIL,'','general');
+ h.store.attendanceLoadedFiles=async(o,names)=>{assert.equal(o,h.userFor(GENERAL_EMAIL).id);return new Set(names);};
+ const list=await h.request('attendance-files',{cookie:g.cookie,query:'?mailbox='+encodeURIComponent(GENERAL_EMAIL)});
+ assert.equal(list.status,200);assert.equal(list.json().files[0].loaded,true);
+ const forged=await h.request('attendance-import',{method:'POST',cookie:g.cookie,origin:'https://attacker.invalid',body:{type:'general'}});assert.equal(forged.status,403);
+ const general=h.connections.get(h.userFor(GENERAL_EMAIL).id+'.general');general.capabilities.driveRead=false;h.connections.set(h.userFor(GENERAL_EMAIL).id+'.general',general);
+ const blocked=await h.request('attendance-import',{method:'POST',cookie:g.cookie,body:{type:'general',mailbox:GENERAL_EMAIL}});assert.equal(blocked.status,403);assert.equal(blocked.json().error,'missing_scope');
+ h.store.isEmailAuthorized=async()=>false;
+ assert.equal((await h.request('attendance-files',{cookie:g.cookie,query:'?mailbox='+encodeURIComponent(GENERAL_EMAIL)})).json().error,'access_denied');
+ const p=harness(),personal=await p.login();
+ assert.equal((await p.request('attendance-files',{cookie:personal.cookie,query:'?mailbox=admin%40gmail.com'})).status,401);
+});

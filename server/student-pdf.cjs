@@ -88,4 +88,4 @@ async function readStudentPdf(bytes,{loadEngine=loadPdfEngine}={}){
   }
   finally{try{await task.destroy();}catch{}}
 }
-module.exports={readStudentPdf,parsePages,groupLines,pdfDate};
+module.exports={readStudentPdf,parsePages,groupLines,pdfDate,loadPdfEngine};

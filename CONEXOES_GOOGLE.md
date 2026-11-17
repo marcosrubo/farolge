@@ -224,3 +224,10 @@ Qualquer Geral autorizada administra EmailsAutorizados em Configurações, com c
 Para bancos existentes, executar database/access-management-authors.sql: concede SELECT/INSERT/DELETE em EmailsAutorizados e acrescenta EmailAutor/NomeAutor nullable em Ocorrencias. Não basta executar CREATE TABLE IF NOT EXISTS sobre tabelas existentes. Os SQLs de instalação inicial já incluem as permissões e colunas novas. Publicar a política revisão 20 junto do código; sem novo escopo/variável.
 
 Marcos confirmou autoria pela conexão Pessoal. O registro exige Geral e Pessoal autorizadas, valida o e-mail Pessoal no servidor e consulta Nome no cadastro; a exceção fixa pode usar Marcos Rubo. Autoria é copiada e cifrada na ocorrência pertencente à Geral. Remover o acesso ou desconectar a Pessoal preserva essa autoria. Histórico antigo continua sem autor informado; a Visão GERAL mostra Registrado por como última coluna. Nenhum SQL remoto ou alteração real de usuários foi executado nesta entrega.
+
+
+## Carga de faltas RCO — revisão 21
+
+A Geral usa drive.readonly já existente para ler o PDF escolhido em FarolGE/FaltasSemanais; nenhuma nova autorização é necessária se a leitura já estiver concedida. Falta dessa permissão exige Geral → Revisar autorização. Listagem pagina dez arquivos e consulta o histórico protegido no Supabase. Apenas Geral autorizada, com CSRF/método POST, pode carregar; Pessoal não é usada. Verifica pasta fixa, versão, download permitido e limites antes de gravar, sem alterações no Drive.
+
+Executar database/attendance.sql no projeto exclusivo FAROL GE: cria FaltasDosAlunos e ArquivosDeFaltasCarregados, com RPC transacional, RLS sem políticas públicas e grants apenas a service_role. Escola/CGM/Arquivo cifrados; datas e quantidades tipadas. Substitui por aluno/data depois de somar linhas repetidas dentro do arquivo (confirmado por Marcos); recarga não acumula a base. Arquivos já carregados continuam podendo ser carregados. Sem novo escopo/variável/biblioteca. Publicar código com política revisão 21. Não foi executado SQL remoto nem feita carga real. Detalhes e validação na seção correspondente do README.

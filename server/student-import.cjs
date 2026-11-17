@@ -61,4 +61,4 @@ async function handleStudentImport({action,url,body,client,store,owner,email,rea
   const count=await step('storage',()=>store.loadStudents(owner,result.students));
   return {mailbox:email,fileId:file.id,count,rows:result.totalRows,generatedAt:result.generatedAt};
 }
-module.exports={handleStudentImport};
+module.exports={handleStudentImport,collect};

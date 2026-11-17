@@ -1,5 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
+const {makeAttendanceStore}=require('./attendance-store.cjs');
+const {handleAttendanceImport}=require('./attendance-import.cjs');
 const {makeStudentStore}=require('./student-store.cjs');
 const {handleStudents}=require('./students.cjs');
 const {handleAuthorizedUsers}=require('./authorized-users.cjs');
@@ -84,6 +86,7 @@ function makeStore(config,fetcher=fetch) {
   const decode=row=>row && Date.parse(row.expires_at)>Date.now()?unseal(row.payload,config.key,row.id):null;
   return {
     ...makeStudentStore(config,fetcher,{seal,unseal}),
+    ...makeAttendanceStore(config,fetcher,{seal}),
     async isEmailAuthorized(email){
       try{
         const rows=await call('EmailsAutorizados','GET','email=eq.'+encodeURIComponent(emailOf(email))+'&select=email&limit=1',null,'return=representation');
@@ -221,8 +224,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','access-denied','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import','authorized-email'].includes(action)?'POST':'GET';
+    if(!['status','access-denied','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','authorized-emails','authorized-email'].includes(action))return reply(404,{error:'not_found'});
+    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import','attendance-import','authorized-email'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
@@ -291,14 +294,14 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         if(!denied||denied.expiresAt<=Date.now()||typeof denied.email!=='string')return reply(404,{error:'not_found'});
         return reply(200,{email:denied.email});
       }
-      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action)) {
+      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','authorized-emails','authorized-email'].includes(action)) {
         try {
-          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action))?'general':'personal';
+          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','authorized-emails','authorized-email'].includes(action))?'general':'personal';
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
           const current=await account(type);
           if(!current)return reply(401,{error:'login_required'});
           const connection=await store.getConnection(current.user.id,type);
-          if(!connection || connection.email!==current.user.email || !(['students','occurrences','occurrence','authorized-emails','authorized-email'].includes(action)?true:action==='student-import'?connection.capabilities.driveRead:['maintenance','student-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
+          if(!connection || connection.email!==current.user.email || !(['students','occurrences','occurrence','authorized-emails','authorized-email'].includes(action)?true:['student-import','attendance-import'].includes(action)?connection.capabilities.driveRead:['maintenance','student-files','attendance-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
           if(action==='institutional-labels'){
             if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox'].includes(key)))return reply(400,{error:'invalid_institutional'});
@@ -317,7 +320,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             if(!name)return reply(409,{error:'author_profile_required'});
             actor={email:personal.user.email,name};
           }
-          const result=['authorized-emails','authorized-email'].includes(action)?await handleAuthorizedUsers({action,url,body,store,email:current.user.email}):['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrences','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email,actor}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
+          const result=['attendance-files','attendance-import'].includes(action)?await handleAttendanceImport({action,url,body,client,store,owner:current.user.id,email:current.user.email}):['authorized-emails','authorized-email'].includes(action)?await handleAuthorizedUsers({action,url,body,store,email:current.user.email}):['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrences','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email,actor}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
             ?await handleInstitutional({action,url,body,client,store,owner:current.user.id,email:current.user.email,canModify:connection.capabilities.manageInstitutional===true})
             :await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
           // Credential caching must not turn an already committed demand into a false failure.
@@ -325,13 +328,13 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           try {await store.putConnection(current.user.id,type,{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
-          if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||(action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','authorized-emails','authorized-email'].includes(action))?'general':'personal')});
+          if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||(action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','authorized-emails','authorized-email'].includes(action))?'general':'personal')});
           if(['access_setup_required','access_unavailable'].includes(error.message))return reply(503,{error:error.message});
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied'];
           if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
-          if(['maintenance','student-files','student-import'].includes(action)){
+          if(['maintenance','student-files','student-import','attendance-files','attendance-import'].includes(action)){
             const reasons=(error.response?.data?.error?.errors||[]).map(item=>item.reason);
             if(reasons.includes('insufficientPermissions'))return reply(403,{error:'missing_scope'});
             if(reasons.includes('domainPolicy'))return reply(403,{error:'drive_policy'});

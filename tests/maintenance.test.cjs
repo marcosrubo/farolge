@@ -64,7 +64,7 @@ function frontend(){
   const nodes=new Map(),requests=[],window={};
   const get=id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',textContent:'',listeners:{},addEventListener(name,fn){this.listeners[name]=fn;}});return nodes.get(id);};
   const root={innerHTML:'',querySelector:get};
-  vm.runInNewContext(fs.readFileSync('maintenance.js','utf8'),{window,URLSearchParams,fetch:(url)=>new Promise(resolve=>requests.push({url,resolve}))});
+  vm.runInNewContext(fs.readFileSync('maintenance.js','utf8'),{window,URLSearchParams,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
   const respond=(index,body,ok=true)=>requests[index].resolve({ok,json:async()=>body});
   return {app:window.FarolMaintenance,root,get,requests,respond};
 }
@@ -96,7 +96,7 @@ test('quadro RCO aparece após os arquivos e mantém as quatro orientações sem
   for(const text of ['Orientações:','por período (manhã e tarde) e por semana','AAAA_MM_DDMM_DDMM_Periodo.PDF','Manha/Tarde','Copie os arquivos','Execute o processo de captura'])assert.ok(h.root.innerHTML.includes(text));
   assert.equal(h.requests.length,0);assert.equal(h.get('#rco-files').innerHTML,'');
   assert.ok(h.get('#rco-status').textContent.includes('Conecte a conta GERAL'));
-  assert.ok(h.root.innerHTML.includes('será disponibilizada em uma próxima etapa'));
+  assert.ok(h.root.innerHTML.includes('Campos diários vazios valem zero'));
 });
 test('RCO lista somente PDFs carregados, pagina, preserva falha e limpa na desconexão',async()=>{
   const h=frontend();h.app.connectionChanged(connection);h.app.mount(h.root);
@@ -114,4 +114,32 @@ test('RCO lista somente PDFs carregados, pagina, preserva falha e limpa na desco
   h.get('#rco-refresh').listeners.click();h.respond(3,{...result,files:[],nextPageToken:null});await settle();
   assert.ok(h.get('#rco-status').textContent.includes('Nenhum arquivo PDF disponível'));
   h.app.connectionChanged(null);assert.equal(h.get('#rco-files').innerHTML,'');assert.ok(h.get('#rco-status').textContent.includes('Conecte'));
+});
+
+
+test('RCO carrega por ação explícita, impede POST duplicado e permite recarregar arquivo já carregado',async()=>{
+ const h=frontend();h.app.connectionChanged({...connection,driveRead:true});h.app.mount(h.root);
+ const file={id:'pdf',name:'2026_11_0811_1411_Manha.pdf',mimeType:'application/pdf',version:'7',loaded:true};
+ h.respond(0,{...result,files:[file],nextPageToken:null});await settle();
+ assert.ok(h.requests[0].url.includes('/attendance-files?'));
+ assert.ok(h.get('#rco-files').innerHTML.includes('Já carregado'));
+ assert.ok(!h.get('#rco-files').innerHTML.includes('disabled'));
+ const event={target:{closest:()=>({dataset:{loadAttendance:'pdf'}})}};
+ h.get('#rco-files').listeners.click(event);h.get('#maintenance-files').listeners.click(event);
+ assert.equal(h.requests.length,2);assert.equal(h.requests[1].opts.method,'POST');
+ assert.equal(h.requests[1].opts.headers['X-Farol-Request'],'1');
+ assert.deepEqual(JSON.parse(h.requests[1].opts.body),{type:'general',mailbox:connection.email,fileId:'pdf',version:'7',folder:'folder-weekly'});
+ h.respond(1,{mailbox:connection.email,fileId:'pdf',count:10,loaded:true});await settle();
+ assert.ok(h.get('#rco-feedback').textContent.includes('10 registros'));
+ h.get('#rco-files').listeners.click(event);assert.equal(h.requests.length,3);
+ h.app.connectionChanged(null);h.respond(2,{mailbox:connection.email,fileId:'pdf',count:10,loaded:true});await settle();
+ assert.equal(h.get('#rco-files').innerHTML,'');assert.equal(h.get('#rco-feedback').textContent,'');
+});
+test('RCO exige leitura de PDFs e mostra SQL ausente sem simular histórico vazio',async()=>{
+ const h=frontend();h.app.connectionChanged(connection);h.app.mount(h.root);
+ h.respond(0,{...result,files:[{id:'pdf',name:'2026_11_0811_1411_Manha.pdf',mimeType:'application/pdf',version:'7',loaded:false}],nextPageToken:null});await settle();
+ assert.ok(h.get('#rco-files').innerHTML.includes('disabled'));assert.equal(h.get('#rco-scope').hidden,false);
+ h.get('#rco-refresh').listeners.click();h.respond(1,{error:'attendance_setup_required'},false);await settle();
+ assert.ok(h.get('#rco-status').textContent.includes('database/attendance.sql'));
+ assert.ok(h.get('#rco-files').innerHTML.includes('disabled'));
 });
