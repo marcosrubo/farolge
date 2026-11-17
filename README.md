@@ -381,3 +381,10 @@ Referências oficiais: [validação OpenID Connect Google](https://developers.go
 
 
 Marcos confirmou que ainda não executou o SQL nem enviou o controle de acesso pelo Git. O arquivo `database/authorized-emails.sql` está consolidado para a primeira criação da tabela, já incluindo Nome obrigatório; não é necessário executar um ALTER separado. Após executar o arquivo inteiro, preencher Escola, Nome e email para cada conta permitida antes de publicar.
+
+
+## Exceção fixa de acesso — marcos.rubo@gmail.com
+
+Por pedido explícito de Marcos, `server/google.cjs` mantém a constante `FIXED_AUTHORIZED_EMAIL` com `marcos.rubo@gmail.com`. Depois de validar a identidade Google, esse endereço é autorizado independentemente de estar em EmailsAutorizados ou de a consulta à lista estar disponível. A mesma regra vale no callback e nas sessões existentes, nas conexões Geral e Pessoal. Os demais endereços continuam sujeitos à lista e ao bloqueio em falhas.
+
+A exceção compara o e-mail completo normalizado em minúsculas; não aceita aliases com `+`, alteração de pontos, domínio semelhante ou endereço vindo do navegador. Não dispensa assinatura/nonce/identidade Google, sessão Supabase ou permissões de cada serviço; não concede acesso a dados de outras contas. Não cria uma linha na tabela. Sem novo SQL, variável ou escopo. Política revisão 19 informa a conta de manutenção liberada no código.

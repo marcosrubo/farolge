@@ -614,3 +614,16 @@ test('ticket de negativa expirado não expõe e-mail; revogação bloqueia escri
  assert.deepEqual((await h.request('status',{cookie:general.cookie})).json().errors,{general:'access_unavailable'});
  assert.deepEqual((await h.request('occurrences',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL})).json(),{error:'access_unavailable'});
 });
+
+for(const type of ['general','personal'])test('exceção fixa '+type+' autoriza Marcos com Google validado sem consultar a lista',async()=>{
+ const h=harness();let checks=0;h.store.isEmailAuthorized=async()=>{checks++;throw new Error('access_unavailable');};
+ const login=await h.login('marcos.rubo@gmail.com','',type);assert.ok(login.cookie);assert.equal(checks,0);
+ const status=(await h.request('status',{cookie:login.cookie})).json();assert.equal(status.connections[type].email,'marcos.rubo@gmail.com');assert.equal(checks,0);
+});
+test('exceção fixa não aceita aliases/endereço parecido nem dispensa identidade Google validada',async()=>{
+ const h=harness();h.store.isEmailAuthorized=async()=>false;
+ for(const email of ['marcos.rubo+teste@gmail.com','marcosrubo@gmail.com','marcos.rubo@gmail.com.example.org']){
+  const login=await h.login(email);assert.match(login.response.headers.location,/access_denied/);assert.equal(login.cookie,undefined);
+ }
+ h.setIdentity({email_verified:false});const invalid=await h.login('marcos.rubo@gmail.com');assert.match(invalid.response.headers.location,/wrong_account/);assert.equal(invalid.cookie,undefined);
+});

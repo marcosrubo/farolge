@@ -20,6 +20,8 @@ const DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.rea
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
 const ROUTES = new Set(['inicio','radar','institucionais','pessoais','bi-seed','inspetores-monitores','manutencao-sistema','configuracoes']);
 const TYPES = ['general','personal'];
+// Exceção fixa solicitada por Marcos; só após identidade Google verificada.
+const FIXED_AUTHORIZED_EMAIL = 'marcos.rubo@gmail.com';
 const TTL = 30 * 24 * 3600;
 const random = () => crypto.randomBytes(32).toString('base64url');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -206,6 +208,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(action!=='logout' && !TYPES.includes(body.type))return reply(400,{error:'invalid_type'});
     }
     async function authorizeEmail(email){
+      if(emailOf(email)===FIXED_AUTHORIZED_EMAIL)return;
       let allowed;
       try{allowed=await store.isEmailAuthorized(email);}catch(error){throw new Error(error.message==='access_setup_required'?'access_setup_required':'access_unavailable');}
       if(allowed!==true)throw Object.assign(new Error('access_denied'),{email});
