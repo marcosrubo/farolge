@@ -9,15 +9,15 @@ function backend(){
   const client={async request(options){
     calls.push(options);
     const url=new URL(options.url),q=url.searchParams.get('q');
-    return {data:q.includes("name = 'FarolGE'")?{files:state.folders,...state.folderExtra}:q.includes("name = 'FaltasSemanais'")?{files:state.subfolders,...state.subfolderExtra}:{files:state.files,...state.fileExtra}};
+    return {data:q.includes("name = 'FarolGE'")?{files:state.shared&&q.includes('owners')?[]:state.folders,...state.folderExtra}:q.includes("name = 'FaltasSemanais'")?{files:state.subfolders,...state.subfolderExtra}:{files:state.files,...state.fileExtra}};
   }};
   return {state,calls,run:(params={})=>handleMaintenance({url:new URL('https://farol.invalid/?'+new URLSearchParams({mailbox:'school@example.com',...params})),client,email:'school@example.com'})};
 }
-test('Drive resolve pasta própria exata e lista apenas metadados diretos, sem escrita',async()=>{
+test('Drive resolve pasta acessível exata e lista apenas metadados diretos, sem escrita',async()=>{
   const h=backend();h.state.fileExtra={nextPageToken:'page-2'};
   const result=await h.run();assert.equal(result.files[0].name,'Ata');assert.equal(result.nextPageToken,'page-2');
   const folderQuery=new URL(h.calls[0].url).searchParams.get('q');
-  assert.ok(folderQuery.includes("name = 'FarolGE'"));assert.ok(folderQuery.includes("'me' in owners"));
+  assert.ok(folderQuery.includes("name = 'FarolGE'"));assert.ok(!folderQuery.includes('owners'));assert.ok(!folderQuery.includes('sharedWithMe'));
   const subfolderQuery=new URL(h.calls[1].url).searchParams.get('q');
   assert.ok(subfolderQuery.includes("name = 'FaltasSemanais'"));assert.ok(subfolderQuery.includes("'folder-1' in parents"));
   const params=new URL(h.calls[2].url).searchParams;
@@ -26,6 +26,19 @@ test('Drive resolve pasta própria exata e lista apenas metadados diretos, sem e
   assert.ok(h.calls.every(call=>call.method==='GET'&&!call.data));
   await h.run({pageToken:'page-2',folder:'folder-weekly'});
   assert.equal(new URL(h.calls.at(-1).url).searchParams.get('pageToken'),'page-2');
+});
+test('Drive lista FarolGE compartilhada com a Geral sem exigir propriedade ou localização no Meu Drive',async()=>{
+  const h=backend();h.state.shared=true;
+  h.state.folders=[{id:'shared-farol',name:'FarolGE'}];
+  h.state.subfolders=[{id:'shared-weekly',name:'FaltasSemanais'}];
+  h.state.files=[{id:'shared-file',name:'Teste'}];
+  const result=await h.run();assert.deepEqual(result.files,[{id:'shared-file',name:'Teste'}]);
+  assert.equal(result.folder.id,'shared-weekly');
+  const queries=h.calls.map(call=>new URL(call.url).searchParams.get('q'));
+  assert.ok(queries.every(q=>!q.includes('owners')&&!q.includes("'root' in parents")));
+  assert.ok(queries[1].includes("'shared-farol' in parents"));
+  assert.ok(queries[2].includes("'shared-weekly' in parents"));
+  assert.ok(h.calls.every(call=>new URL(call.url).searchParams.get('corpora')==='user'));
 });
 test('Drive distingue ausência, duplicidade, pasta vazia e pesquisa incompleta',async()=>{
   const h=backend();h.state.folders=[];await assert.rejects(h.run(),{message:'folder_missing'});

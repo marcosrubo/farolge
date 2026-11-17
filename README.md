@@ -262,7 +262,7 @@ Referência oficial: [tratamento de erros Gmail](https://developers.google.com/w
 
 ## Manutenção do Sistema — arquivos do Drive GERAL (16/11/2026)
 
-A tela consulta exclusivamente a conexão **GERAL** da escola, localiza uma pasta própria com nome exato `FarolGE` (inclusive se estiver dentro de outra pasta), resolve sua subpasta direta de nome exato `FaltasSemanais` e mostra os nomes dos arquivos diretamente em `FaltasSemanais`, em ordem alfabética. Exclui lixeira e subpastas, não abre conteúdo, segue atalhos ou modifica arquivos. Lista em páginas de 100 com **Carregar mais** e **Atualizar lista**. Se houver mais de uma pasta própria FarolGE ou mais de uma FaltasSemanais diretamente nela, informa a duplicidade sem escolher silenciosamente. Pasta ausente, pasta vazia e falha são estados distintos.
+A tela consulta exclusivamente a conexão **GERAL** da escola, localiza uma pasta acessível com nome exato `FarolGE` (própria ou em Compartilhados comigo, inclusive se estiver dentro de outra pasta), resolve sua subpasta direta de nome exato `FaltasSemanais` e mostra os nomes dos arquivos diretamente em `FaltasSemanais`, em ordem alfabética. Exclui lixeira e subpastas, não abre conteúdo, segue atalhos ou modifica arquivos. Lista em páginas de 100 com **Carregar mais** e **Atualizar lista**. Se houver mais de uma pasta acessível FarolGE ou mais de uma FaltasSemanais diretamente nela, informa a duplicidade sem escolher silenciosamente. Pasta ausente, pasta vazia e falha são estados distintos.
 
 GET `/api/google/maintenance?mailbox=...` exige sessão Geral verificada, identidade proprietária, conta esperada e capacidade `driveMetadata`. O servidor resolve as duas pastas fixas a cada chamada; não aceita pasta arbitrária. Paginação fica vinculada à pasta resolvida. Troca/desconexão da Geral, saída da tela e perda de autorização invalidam respostas pendentes e limpam a lista. Uma falha transitória de atualização preserva a lista anterior com aviso. A Pessoal não autoriza a consulta. Nomes são escapados antes de mostrar na tela. Os metadados ficam somente em memória, sem banco, armazenamento local ou logs de nomes/conteúdo.
 
@@ -273,3 +273,12 @@ Validar na Vercel: conta Geral distinta da Pessoal, pasta FarolGE com arquivos r
 Referências oficiais: [escopos Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth) e [files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list).
 
 Arquivos desta implementação: `maintenance.js`, `server/maintenance.cjs`, `app.js`, `index.html`, `styles.css`, `server/google.cjs`, `privacidade.html`, `README.md`, `CONEXOES_GOOGLE.md`, `AGENTS.md`, `tests/maintenance.test.cjs`, `tests/google.test.cjs` e `tests/frontend.test.cjs`.
+
+
+### Pastas compartilhadas com a Geral — correção de 16/11/2026
+
+A consulta anterior exigia `'me' in owners`, excluindo FarolGE quando a pasta pertencia a outra conta e aparecia em **Compartilhados comigo**. Esse filtro foi removido. A pesquisa continua no conjunto acessível à sessão Geral (`corpora=user`), usando os nomes exatos FarolGE/FaltasSemanais e a relação de pasta pai; não exige adicionar atalho ao Meu Drive, transferir propriedade nem mover arquivos. Pastas próprias e compartilhadas acessíveis são aceitas; nomes duplicados continuam sendo sinalizados.
+
+Sem novo escopo, SQL ou variável. A captura mostra a consulta de nomes no Drive autorizada; depois de publicar a correção, clicar **Atualizar lista**. Não é necessário revisar a autorização apenas por essa correção. Testes fictícios cobrem pasta pertencente a outra conta, subpasta direta e arquivos compartilhados. Validar o arquivo real pela aplicação na Vercel; a captura não comprova por si só que as duas janelas usam a mesma Conta Google.
+
+Arquivos desta correção: `server/maintenance.cjs`, `maintenance.js`, `tests/maintenance.test.cjs`, `index.html`, `privacidade.html`, `README.md`, `CONEXOES_GOOGLE.md` e `AGENTS.md`. Referência: [pesquisa de arquivos no Drive](https://developers.google.com/workspace/drive/api/guides/search-files).

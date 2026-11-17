@@ -12,8 +12,9 @@ async function handleMaintenance({url,client,email}){
   if(url.searchParams.get('mailbox')!==email)fail('account_changed',409);
   const pageToken=url.searchParams.get('pageToken')||'';
   if(pageToken.length>4096)fail('invalid_page',400);
-  // Resolve the fixed folder on every request; never accept an arbitrary folder ID.
-  const folders=await list(client,{q:"trashed = false and mimeType = 'application/vnd.google-apps.folder' and name = 'FarolGE' and 'me' in owners"});
+  // Resolve the fixed path among folders accessible to this account, including shared folders.
+  // Never require ownership or accept an arbitrary folder ID.
+  const folders=await list(client,{q:"trashed = false and mimeType = 'application/vnd.google-apps.folder' and name = 'FarolGE'"});
   if(!folders.files.length&&!folders.nextPageToken)fail('folder_missing',404);
   if(folders.files.length!==1||folders.nextPageToken)fail('folder_ambiguous',409);
   const parent=folders.files[0];
