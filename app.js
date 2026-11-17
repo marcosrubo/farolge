@@ -12,11 +12,11 @@ const icons = {
 };
 const modules = [
   {id:'inicio',icon:'inicio',label:'Visão GERAL'},
+  {id:'inspetores-monitores',icon:'equipe',label:'Inspetores/Monitores'},
   {id:'radar',icon:'radar',label:'Radar'},
   {id:'institucionais',icon:'demandas',label:'Demandas INSTITUCIONAIS'},
   {id:'pessoais',icon:'demandas',label:'Demandas PESSOAIS'},
   {id:'bi-seed',icon:'indicadores',label:'BI SEED'},
-  {id:'inspetores-monitores',icon:'equipe',label:'Inspetores/Monitores'},
   {id:'manutencao-sistema',icon:'manutencao',label:'Manutenção do Sistema'},
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
@@ -82,6 +82,7 @@ function render(){
   window.FarolInstitutional?.unmount();
   window.FarolOverview?.unmount();
   window.FarolMaintenance?.unmount();
+  window.FarolStudents?.unmount();
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const selected=modules.find(item=>item.id===route)||modules[0];
   document.title='FAROL GE · '+selected.label;
@@ -89,7 +90,8 @@ function render(){
   document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&!['manutencao-sistema','configuracoes'].includes(item.id)?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
   const main=document.querySelector('#main');
   main.classList.toggle('radar-workspace',selected.id==='radar');
-  main.innerHTML=selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  main.innerHTML=selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
   if(selected.id==='manutencao-sistema')window.FarolMaintenance?.mount(document.querySelector('#maintenance-board'));
   if(selected.id==='inicio')window.FarolOverview?.mount(document.querySelector('#overview-board'));
   if(selected.id==='institucionais')window.FarolInstitutional?.mount(document.querySelector('#institutional-board'));
@@ -141,6 +143,7 @@ function setupEmailConnections(){
       window.FarolDemands?.connectionChanged(configured?result.connections?.personal||null:null);
       window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolMaintenance?.connectionChanged(configured?result.connections?.general||null:null);
+      window.FarolStudents?.connectionChanged(configured?result.connections?.general||null:null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.connections?.[type]||null:null);
       for(const type of types){
         const connection=result.connections?.[type];
@@ -148,7 +151,7 @@ function setupEmailConnections(){
         const connected=Boolean(configured && typeof email==='string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email));
         const status=document.querySelector('#email-'+type+'-status');
         status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
-        if(connected&&type==='general')status.textContent+=' · Nomes no Drive: '+(connection.driveMetadata?'autorizado':'revisar autorização');
+        if(connected&&type==='general')status.textContent+=' · Nomes no Drive: '+(connection.driveMetadata?'autorizado':'revisar autorização')+' · Leitura de PDFs: '+(connection.driveRead?'autorizada':'revisar autorização');
         if(connected) {
           const labelMessages={ready:type==='personal'?'labels prontas (4/4)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
           status.textContent+=' · '+(type==='general'&&connection.labels==='missing'&&connection.labelDetails?.missing?.length?'Faltam marcadores: '+connection.labelDetails.missing.join(', '):(labelMessages[connection.labels]||labelMessages.permission_required));
@@ -168,6 +171,7 @@ function setupEmailConnections(){
       window.FarolDemands?.connectionChanged(null);
       window.FarolInstitutional?.connectionChanged(null);
       window.FarolMaintenance?.connectionChanged(null);
+      window.FarolStudents?.connectionChanged(null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,null);
       for(const type of types){
         const status=document.querySelector('#email-'+type+'-status');

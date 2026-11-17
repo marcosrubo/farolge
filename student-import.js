@@ -1,0 +1,62 @@
+'use strict';
+window.FarolStudentImport=(()=>{
+  const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const messages={folder_missing:'Não foi encontrado FarolGE/ListaAlunos acessível à conta GERAL.',folder_ambiguous:'Há pastas duplicadas em FarolGE/ListaAlunos. Confira o caminho.',missing_scope:'Use Geral → Revisar autorização para permitir a leitura dos PDFs.',setup_required:'Execute database/students.sql no Supabase exclusivo FAROL GE.',login_required:'Conecte novamente a conta GERAL.',file_changed:'O arquivo mudou. Atualize a lista antes de carregar.',account_changed:'A conta ou pasta mudou. Atualize a lista.',pdf_layout:'O PDF não corresponde ao modelo Relação de Alunos por Turma, tem dados incompletos ou não contém texto legível. Nenhum aluno deste arquivo foi gravado.',file_outside_folder:'O arquivo não está mais em FarolGE/ListaAlunos.',unsupported_file:'Selecione um relatório PDF.',file_too_large:'O relatório excede o limite de 10 MB, 100 páginas ou 10.000 linhas.',drive_policy:'A política da organização impediu a consulta.',unavailable:'Não foi possível concluir. Tente atualizar a lista.'};
+  const time=value=>{if(!value||Number.isNaN(Date.parse(value)))return 'não informada';return new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'medium',timeZone:'America/Sao_Paulo'}).format(new Date(value))+' (Brasília)';};
+  let root=null,connection=null,files=[],folder=null,next=null,version=0,busy=false,loadingId=null,error='',feedback='',loaded=false,generated=new Map();
+  function clear(){version++;files=[];folder=null;next=null;busy=false;loadingId=null;error='';feedback='';loaded=false;generated=new Map();}
+  function draw(){
+    if(!root)return;
+    root.querySelector('#student-import-status').textContent=busy?(loadingId?'Lendo o PDF e carregando os alunos…':'Consultando arquivos…'):!connection?'Conecte a conta GERAL da escola.':!connection.driveMetadata?messages.missing_scope:error?(messages[error]||messages.unavailable)+(loaded?' A lista anterior foi mantida.':''):feedback||(loaded&&!files.length?'A pasta ListaAlunos está vazia.':'');
+    root.querySelector('#student-import-list').innerHTML=files.map(file=>{
+      const pdf=file.mimeType==='application/pdf'&&/\.pdf$/i.test(file.name);
+      const date=generated.has(file.id)?time(generated.get(file.id)):file.generatedAt?time(file.generatedAt):file.generationStatus==='permission_required'?'autorize a leitura de PDFs':file.generationStatus==='unavailable'?'não foi possível consultar':'não identificada nos metadados disponíveis';
+      return `<li class="student-import-row"><div><strong>${escape(file.name)}</strong><small>Gerado em: ${escape(date)}</small><small>Criado no Drive: ${escape(time(file.createdTime))}</small>${!pdf?'<small>A carga aceita relatórios PDF no modelo Relação de Alunos por Turma.</small>':''}</div><button type="button" class="button" data-load-students="${escape(file.id)}" ${busy||error||!pdf||!connection?.driveRead||!file.version?'disabled':''}>${loadingId===file.id?'Carregando…':'Carregar'}</button></li>`;
+    }).join('');
+    root.querySelector('#student-import-scope').hidden=!connection||connection.driveRead;
+    root.querySelector('#student-import-refresh').disabled=busy||!connection?.driveMetadata;
+    root.querySelector('#student-import-more').hidden=!next;
+    root.querySelector('#student-import-more').disabled=busy||Boolean(error);
+  }
+  async function load(more=false){
+    if(!root||!connection?.driveMetadata||busy)return;
+    const ticket=++version,mailbox=connection.email;busy=true;error='';feedback='';draw();
+    try{
+      const params=new URLSearchParams({mailbox,...(more?{pageToken:next,folder:folder.id}:{})});
+      const response=await fetch('/api/google/student-files?'+params,{credentials:'same-origin',cache:'no-store'}),result=await response.json();
+      if(!response.ok)throw new Error(result.error||'unavailable');
+      if(ticket!==version||!root)return;
+      if(result.mailbox!==mailbox||!Array.isArray(result.files)||!result.folder?.id||(more&&result.folder.id!==folder.id))throw new Error('account_changed');
+      files=more?[...new Map([...files,...result.files].map(f=>[f.id,f])).values()]:result.files;
+      if(!more)generated=new Map();
+      folder=result.folder;next=result.nextPageToken;loaded=true;
+    }catch(e){if(ticket===version){error=e.message;if(['account_changed','login_required','missing_scope'].includes(error)){files=[];loaded=false;next=null;}}}
+    finally{if(ticket===version){busy=false;draw();}}
+  }
+  async function importFile(id){
+    if(!root||!connection?.driveRead||busy||error)return;
+    const file=files.find(f=>f.id===id);if(!file||!file.version||file.mimeType!=='application/pdf'||!/\.pdf$/i.test(file.name))return;
+    const ticket=version,mailbox=connection.email;busy=true;loadingId=id;feedback='';draw();
+    try{
+      const response=await fetch('/api/google/student-import',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify({type:'general',mailbox,fileId:id,version:file.version,folder:folder.id})});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');
+      if(ticket!==version||!root)return;
+      if(result.mailbox!==mailbox||result.fileId!==id||!Number.isSafeInteger(result.count)||result.count<1)throw new Error('account_changed');
+      generated.set(id,result.generatedAt);feedback=`Carga concluída: ${result.count} vínculos de alunos inseridos ou atualizados (${result.rows} linhas lidas).`;
+    }catch(e){if(ticket===version){feedback=messages[e.message]||messages.unavailable;if(['file_changed','account_changed','login_required'].includes(e.message))error=e.message;}}
+    finally{if(ticket===version){busy=false;loadingId=null;draw();}}
+  }
+  function connectionChanged(value){
+    const changed=connection?.email!==value?.email||connection?.driveMetadata!==value?.driveMetadata||connection?.driveRead!==value?.driveRead;connection=value;
+    if(changed){clear();draw();if(root&&connection?.driveMetadata)load();}
+  }
+  function mount(element){
+    root=element;clear();root.innerHTML='<h2 id="student-import-title">Carga de Alunos</h2><p class="demand-intro">Relatórios PDF de FarolGE/ListaAlunos acessíveis à conta GERAL, inclusive em Compartilhados comigo. Clique em Carregar para inserir ou atualizar os alunos no Supabase.</p><p class="demand-footnote">Modelo: Relação de Alunos por Turma do Sistema Escola. São carregados Escola, CGM, Nome, Série, Turma e Turno. Vínculos distintos são preservados; a carga não apaga alunos nem ocorrências.</p><p class="demand-footnote">A data de criação no Drive pode ser diferente da geração do relatório. A geração é consultada nos metadados do PDF; quando não puder ser identificada, será sinalizada.</p><p id="student-import-scope" class="overview-status" hidden>Use Geral → Revisar autorização e permita a leitura dos arquivos do Drive para habilitar Carregar.</p><p id="student-import-status" class="overview-status" role="status"></p><ul id="student-import-list" class="student-list"></ul><div class="button-row"><button type="button" class="button" id="student-import-refresh">Atualizar arquivos</button><button type="button" class="button" id="student-import-more" hidden>Carregar mais arquivos</button></div>';
+    root.querySelector('#student-import-refresh').addEventListener('click',()=>load());
+    root.querySelector('#student-import-more').addEventListener('click',()=>load(true));
+    root.querySelector('#student-import-list').addEventListener('click',event=>{const button=event.target.closest('[data-load-students]');if(button)importFile(button.dataset.loadStudents);});
+    draw();if(connection?.driveMetadata)load();
+  }
+  function unmount(){clear();root=null;}
+  return {mount,unmount,connectionChanged};
+})();

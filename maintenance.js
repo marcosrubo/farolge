@@ -43,6 +43,7 @@ window.FarolMaintenance=(()=>{
     }finally{if(ticket===version){busy=false;draw();}}
   }
   function connectionChanged(value){
+    window.FarolStudentImport?.connectionChanged(value);
     const changed=connection?.email!==value?.email||connection?.driveMetadata!==value?.driveMetadata;
     connection=value;
     if(changed){clear();draw();if(root&&connection?.driveMetadata)load();}
@@ -73,12 +74,14 @@ window.FarolMaintenance=(()=>{
       <div class="button-row"><button type="button" class="button" id="rco-refresh">Atualizar lista</button><button type="button" class="button" id="rco-more" hidden>Carregar mais</button></div>
       <p class="demand-footnote">A captura dos dados dos relatórios será disponibilizada em uma próxima etapa.</p>
     </section>`;
+    root.innerHTML+='<section id="student-import-board" class="panel" aria-labelledby="student-import-title"></section>';
+    window.FarolStudentImport?.mount(root.querySelector('#student-import-board'));
     root.querySelector('#rco-refresh').addEventListener('click',()=>load());
     root.querySelector('#rco-more').addEventListener('click',()=>load(true));
     root.querySelector('#maintenance-refresh').addEventListener('click',()=>load());
     root.querySelector('#maintenance-more').addEventListener('click',()=>load(true));
     draw();if(connection?.driveMetadata)load();
   }
-  function unmount(){clear();root=null;}
+  function unmount(){window.FarolStudentImport?.unmount();clear();root=null;}
   return {mount,unmount,connectionChanged};
 })();

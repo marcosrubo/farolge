@@ -162,3 +162,7 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .maintenance-files{padding-left:22px;line-height:1.7}.maintenance-files li{padding:8px 0;overflow-wrap:anywhere}
 
 .rco-instructions{padding-left:24px;line-height:1.8}.rco-instructions>li{padding:5px 0}.rco-instructions code{overflow-wrap:anywhere}.rco-filename-guide{margin:8px 0}.rco-filename-guide>div{display:flex;gap:8px}.rco-filename-guide dt{min-width:62px;font-weight:600}.rco-filename-guide dd{margin:0}.rco-filename-guide dd::before{content:"— ";}
+
+.student-list{list-style:none;padding:0;margin:16px 0}.student-row{display:flex;justify-content:space-between;align-items:center;gap:16px;width:100%;padding:13px 8px;text-align:left;color:var(--green);border:0;border-bottom:1px solid var(--border);background:transparent}.student-row:hover{background:#eef3e7}.student-class{flex-shrink:0;color:#617258}.student-search-label{display:block;margin:14px 0 6px}#student-occurrence{display:block;width:100%;resize:vertical}#student-feedback{overflow-wrap:anywhere}.student-import-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}.student-import-row>div{min-width:0;overflow-wrap:anywhere}.student-import-row time,.student-import-row small{display:block;margin-top:5px;color:#617258}.student-import-row button{flex-shrink:0}
+
+.student-row>span:first-child{min-width:0;overflow-wrap:anywhere}.student-class{max-width:48%;text-align:right}textarea{font:inherit}

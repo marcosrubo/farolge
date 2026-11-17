@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,DRIVE_METADATA_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS,GENERAL_LABELS}=require('../server/google.cjs');
+const {makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS,GENERAL_LABELS}=require('../server/google.cjs');
 const env={FAROL_GOOGLE_ENABLED:'true',FAROL_ORIGIN:'https://farol.example',GOOGLE_CLIENT_ID:'test-client',GOOGLE_CLIENT_SECRET:'test-secret',FAROL_TOKEN_KEY:Buffer.alloc(32,7).toString('base64'),FAROL_SUPABASE_URL:'https://test.supabase.co',FAROL_SUPABASE_SERVICE_ROLE_KEY:'test-service',FAROL_SUPABASE_ANON_KEY:'test-anon'};
 const GENERAL_EMAIL='escola@escola.pr.gov.br';
 const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -46,7 +46,7 @@ function harness(overrides={}){
  }
  async function callback(flow,cookie=flow.cookie){return request('callback',{cookie,query:'?state='+flow.state+'&code='+encodeURIComponent(flow.state)});}
  async function login(value='admin@gmail.com',cookie='',type='personal'){email=value;const flow=await start(type,cookie);const response=await callback(flow,flow.cookie+'; '+cookie);return {response,cookie:sessionCookie(response,type)};}
- return {labels,labelRequests,failLabels:(status,method,name)=>labelFailure=status?{status,method,name}:null,raceLabels:()=>labelRace=true,rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503,reason=null)=>{failedEmail=value;failedStatus=status;failedReason=reason;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
+ return {store,labels,labelRequests,failLabels:(status,method,name)=>labelFailure=status?{status,method,name}:null,raceLabels:()=>labelRace=true,rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503,reason=null)=>{failedEmail=value;failedStatus=status;failedReason=reason;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
 }
 test('conexões não exigem domínio nem endereço Geral fixo',()=>{
  assert.ok(configuration(env));
@@ -72,8 +72,8 @@ test('CSRF e métodos inválidos são bloqueados; login inclui Gmail readonly e 
  assert.equal((await h.request('start')).status,405);
  const flow=await h.start();
  assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]);
- assert.deepEqual((await h.start('general')).options.scope,[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE]);
- assert.ok(!flow.options.scope.includes(DRIVE_METADATA_SCOPE));
+ assert.deepEqual((await h.start('general')).options.scope,[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE]);
+ assert.ok(!flow.options.scope.includes(DRIVE_METADATA_SCOPE));assert.ok(!flow.options.scope.includes(DRIVE_READ_SCOPE));
  assert.ok(flow.options.scope.includes(READ_SCOPE));assert.ok(flow.options.scope.includes(DRIVE_SCOPE));
  assert.ok(!flow.options.scope.includes('https://www.googleapis.com/auth/drive'));
  assert.equal(flow.options.hd,undefined);assert.equal(flow.options.code_challenge_method,'S256');
@@ -526,4 +526,20 @@ test('Manutenção usa somente Geral e não exige Gmail, sem aceitar a sessão P
  h.setScopes([...SCOPES,MODIFY_SCOPE].join(' '));
  const old=await h.login(GENERAL_EMAIL,general.cookie,'general');
  assert.equal((await h.request('maintenance',{cookie:old.cookie,query:'?mailbox='+GENERAL_EMAIL})).status,403);
+});
+
+test('Alunos e ocorrências exigem Geral própria; gravação exige CSRF e rejeita identidade forjada',async()=>{
+ const h=harness();h.store.getStudents=async()=>[];
+ assert.equal((await h.request('students',{query:'?mailbox='+GENERAL_EMAIL})).status,401);
+ const personal=await h.login('person@example.com');
+ assert.equal((await h.request('students',{cookie:personal.cookie,query:'?mailbox=person@example.com'})).status,401);
+ h.setScopes('openid email profile');const general=await h.login(GENERAL_EMAIL,personal.cookie,'general');
+ const list=await h.request('students',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(list.status,200);assert.deepEqual(list.json().students,[]);
+ assert.equal((await h.request('students',{cookie:general.cookie,query:'?mailbox=other@example.com'})).status,409);
+ const body={type:'general',mailbox:GENERAL_EMAIL,studentId:'a'.repeat(64),id:'12345678-1234-4234-8234-123456789abc',ocorrencia:'Fato registrado.'};
+ assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie,body,origin:'https://elsewhere.invalid'})).status,403);
+ assert.equal((await h.request('occurrence',{method:'GET',cookie:general.cookie})).status,405);
+ assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie,body:{...body,Nome:'forged'}})).status,400);
+ assert.equal((await h.request('student-import',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:GENERAL_EMAIL}})).status,403);
+ assert.equal((await h.request('student-import',{method:'GET',cookie:general.cookie})).status,405);
 });

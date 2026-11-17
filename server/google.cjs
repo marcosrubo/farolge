@@ -1,5 +1,8 @@
 'use strict';
 const crypto = require('node:crypto');
+const {makeStudentStore}=require('./student-store.cjs');
+const {handleStudents}=require('./students.cjs');
+const {handleStudentImport}=require('./student-import.cjs');
 const {handleDemands}=require('./demands.cjs');
 const {handleMaintenance}=require('./maintenance.cjs');
 const {handleOverview}=require('./overview.cjs');
@@ -12,6 +15,7 @@ const LABEL_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
 const {PERSONAL_LABELS,GENERAL_LABELS}=require('./mailbox-labels.cjs');
 const LABEL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/labels';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly';
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
 const ROUTES = new Set(['inicio','radar','institucionais','pessoais','bi-seed','inspetores-monitores','manutencao-sistema','configuracoes']);
@@ -70,6 +74,7 @@ function makeStore(config,fetcher=fetch) {
   const query=(owner,type)=>`owner_id=eq.${encodeURIComponent(owner)}&type=eq.${type}`;
   const decode=row=>row && Date.parse(row.expires_at)>Date.now()?unseal(row.payload,config.key,row.id):null;
   return {
+    ...makeStudentStore(config,fetcher,{seal,unseal}),
     async get(id) {const rows=await sessions('GET',`id=eq.${id}&select=id,payload,expires_at`,null,'return=representation');return decode(rows[0]);},
     async take(id) {const rows=await sessions('DELETE',`id=eq.${id}`,null,'return=representation');return decode(rows[0]);},
     async put(id,value,expiresAt) {await sessions('POST','on_conflict=id',{id,payload:seal(value,config.key,id),expires_at:new Date(expiresAt).toISOString()},'resolution=merge-duplicates,return=minimal');},
@@ -178,8 +183,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance'].includes(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels'].includes(action)?'POST':'GET';
+    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrence','student-files','student-import'].includes(action))return reply(404,{error:'not_found'});
+    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
@@ -228,14 +233,14 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
-      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance'].includes(action)) {
+      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrence','student-files','student-import'].includes(action)) {
         try {
-          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||action==='maintenance')?'general':'personal';
+          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrence','student-files','student-import'].includes(action))?'general':'personal';
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
           const current=await account(type);
           if(!current)return reply(401,{error:'login_required'});
           const connection=await store.getConnection(current.user.id,type);
-          if(!connection || connection.email!==current.user.email || !(action==='maintenance'?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
+          if(!connection || connection.email!==current.user.email || !(['students','occurrence'].includes(action)?true:action==='student-import'?connection.capabilities.driveRead:['maintenance','student-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
           if(action==='institutional-labels'){
             if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox'].includes(key)))return reply(400,{error:'invalid_institutional'});
@@ -245,7 +250,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             try {await store.putConnection(current.user.id,type,{...connection,labelsAllowed:true,credentials:credentialsOf(client)});}catch{}
             return reply(200,{mailbox:current.user.email,labels:labelDetails.status,labelDetails});
           }
-          const result=action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
+          const result=['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
             ?await handleInstitutional({action,url,body,client,store,owner:current.user.id,email:current.user.email,canModify:connection.capabilities.manageInstitutional===true})
             :await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
           // Credential caching must not turn an already committed demand into a false failure.
@@ -253,11 +258,11 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           try {await store.putConnection(current.user.id,type,{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout'];
           if(known.includes(error.message))return reply(error.status,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
-          if(action==='maintenance'){
+          if(['maintenance','student-files','student-import'].includes(action)){
             const reasons=(error.response?.data?.error?.errors||[]).map(item=>item.reason);
             if(reasons.includes('insufficientPermissions'))return reply(403,{error:'missing_scope'});
             if(reasons.includes('domainPolicy'))return reply(403,{error:'drive_policy'});
@@ -278,7 +283,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
         await store.put(hash(state),{version:3,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),previous},Date.now()+600000);
         setCookie(res,cookieName('flow',type),binding,600);
-        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]:[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE],access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
+        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]:[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE],access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
           code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
         return reply(200,{url:authUrl});
       }
@@ -299,7 +304,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           if(!tokens.access_token || !tokens.id_token)throw new Error('failed');
           const ticket=await client.verifyIdToken({idToken:tokens.id_token,audience:config.clientId}),identity=ticket.getPayload();
           const email=validateAccount(identity,{emailAddress:identity?.email},hash(flow.nonce));
-          const scopes=String(tokens.scope||'').split(' '),capabilities={gmail:scopes.includes(READ_SCOPE)||scopes.includes(MODIFY_SCOPE),drive:scopes.includes(DRIVE_SCOPE),...(type==='personal'?{classify:scopes.includes(MODIFY_SCOPE)}:{manageInstitutional:scopes.includes(MODIFY_SCOPE),driveMetadata:scopes.includes(DRIVE_METADATA_SCOPE)})};
+          const scopes=String(tokens.scope||'').split(' '),capabilities={gmail:scopes.includes(READ_SCOPE)||scopes.includes(MODIFY_SCOPE),drive:scopes.includes(DRIVE_SCOPE),...(type==='personal'?{classify:scopes.includes(MODIFY_SCOPE)}:{manageInstitutional:scopes.includes(MODIFY_SCOPE),driveMetadata:scopes.includes(DRIVE_METADATA_SCOPE)||scopes.includes(DRIVE_READ_SCOPE),driveRead:scopes.includes(DRIVE_READ_SCOPE)})};
           client.setCredentials(tokens);
           // Confirm each granted service, without preventing basic login when a permission is declined.
           if(capabilities.gmail) {
@@ -316,7 +321,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
               const {data}=await client.request({url:'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',timeout:10000});
               if(emailOf(data.user?.emailAddress)!==email)throw new Error('wrong_account');
             } catch(error) {
-              if([400,403].includes(error.response?.status)){capabilities.drive=false;if(type==='general')capabilities.driveMetadata=false;}
+              if([400,403].includes(error.response?.status)){capabilities.drive=false;if(type==='general'){capabilities.driveMetadata=false;capabilities.driveRead=false;}}
               else throw error;
             }
           }
@@ -333,7 +338,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           // Invalidate browser-only cookies from the prototype; never adopt unowned legacy connections.
           for(const oldType of TYPES)setCookie(res,cookieName('session',oldType),'',0);
           setCookie(res,'__Host-farol-portal','',0);
-          return finish(flow.route,type,capabilities.gmail && capabilities.drive && (labels==='ready' && (type==='personal'?capabilities.classify:(capabilities.manageInstitutional&&capabilities.driveMetadata)))?'connected':'partial');
+          return finish(flow.route,type,capabilities.gmail && capabilities.drive && (labels==='ready' && (type==='personal'?capabilities.classify:(capabilities.manageInstitutional&&capabilities.driveMetadata&&capabilities.driveRead)))?'connected':'partial');
         } catch(error) {
           return finish(flow.route,type,['wrong_account','login_required','invalid_state'].includes(error.message)?error.message:'failed');
         }
@@ -388,4 +393,4 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     }
   };
 }
-module.exports={GENERAL_LABELS,makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,DRIVE_METADATA_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS};
+module.exports={GENERAL_LABELS,makeHandler,configuration,seal,unseal,validateAccount,makeStore,makeAuth,SCOPES,READ_SCOPE,DRIVE_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE,LABEL_SCOPE,MODIFY_SCOPE,PERSONAL_LABELS};

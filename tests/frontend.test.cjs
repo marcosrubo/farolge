@@ -119,3 +119,10 @@ test('Manutenção recebe somente a conexão Geral e informa seu escopo no diál
  h.connect[0].listeners.click();assert.equal(h.get('#email-drive-metadata').hidden,false);
  h.connect[1].listeners.click();assert.equal(h.get('#email-drive-metadata').hidden,true);
 });
+
+test('menu posiciona Inspetores antes de Radar e monta módulo de alunos',async()=>{
+ const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
+ const nav=h.get('#navigation').innerHTML;assert.ok(nav.indexOf('href="#inspetores-monitores"')<nav.indexOf('href="#radar"'));
+ let mounted=false;h.window.FarolStudents={unmount(){},mount(){mounted=true;}};
+ h.context.location.hash='#inspetores-monitores';h.window.listeners.hashchange();assert.equal(mounted,true);assert.ok(h.get('#main').innerHTML.includes('students-board'));
+});
