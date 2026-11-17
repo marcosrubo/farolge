@@ -29,7 +29,7 @@ window.FarolMaintenance=(()=>{
     try{
       const params=new URLSearchParams({mailbox,...(more?{pageToken:next,folder:folder.id}:{})});
       const response=await fetch('/api/google/maintenance?'+params,{credentials:'same-origin',cache:'no-store'});
-      const result=await response.json();
+      const result=await response.json();window.FarolAccessDenied?.(result);
       if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==version||!root)return;
       if(result.mailbox!==mailbox||!Array.isArray(result.files)||!result.folder?.id||(more&&result.folder.id!==folder.id))throw new Error('account_changed');

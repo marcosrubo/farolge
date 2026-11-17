@@ -14,7 +14,7 @@ window.FarolStudents=(()=>{
     const ticket=++version,mailbox=connection.email;busy=true;
     root.querySelector('#student-refresh').disabled=true;root.querySelector('#student-status').textContent='Consultando alunos…';
     try{
-      const response=await fetch('/api/google/students?'+new URLSearchParams({mailbox}),{credentials:'same-origin',cache:'no-store'}),result=await response.json();
+      const response=await fetch('/api/google/students?'+new URLSearchParams({mailbox}),{credentials:'same-origin',cache:'no-store'}),result=await response.json();window.FarolAccessDenied?.(result);
       if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==version||!root)return;
       if(result.mailbox!==mailbox||!Array.isArray(result.students))throw new Error('account_changed');
@@ -40,7 +40,7 @@ window.FarolStudents=(()=>{
     root.querySelector('#student-feedback').textContent='Salvando ocorrência…';
     try{
       const response=await fetch('/api/google/occurrence',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify({type:'general',mailbox,id:submission,studentId:selected.id,ocorrencia:root.querySelector('#student-occurrence').value})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');
+      const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==version||!root)return;
       if(result.mailbox!==mailbox||!result.saved)throw new Error('account_changed');
       const date=result.date.split('-').reverse().join('/');close();root.querySelector('#student-status').textContent=`Ocorrência registrada em ${date} às ${result.time} (Brasília).`;

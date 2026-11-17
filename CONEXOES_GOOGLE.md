@@ -205,3 +205,10 @@ O endpoint GET `/api/google/maintenance` verifica sessão Geral, identidade e co
 Geral solicita também `https://www.googleapis.com/auth/drive.readonly` para ler os PDFs de FarolGE/ListaAlunos. Cadastrar no Data Access Google, publicar política revisão 16 e revisar autorização Geral. O escopo permite leitura em todo o Drive acessível à conta, inclusive compartilhados; o código limita o uso ao caminho fixo. Uma leitura parcial dos metadados identifica a geração para a lista; só o POST explícito importa os campos do relatório. Pessoal preservada. Sem variável nova.
 
 Executar `database/students.sql` no Supabase exclusivo FAROL. Alunos e Ocorrencias têm RLS, sem acesso direto do navegador. Campos pessoais cifrados com a chave existente; conta Geral separa conjuntos. RPC atômica para a carga, HMAC por vínculo escolar e UUID por envio de ocorrência. Detalhes do formato, limites, retenção e roteiro de validação no README. Não foi executado SQL remoto nesta entrega.
+
+
+## Lista obrigatória de acesso — substitui entrada aberta (17/11/2026)
+
+Executar `database/authorized-emails.sql` e cadastrar os e-mails permitidos em EmailsAutorizados (Escola/Nome/email) **antes da publicação**. A tabela inicia vazia e não adota automaticamente usuários/conexões anteriores. Depois de verificar o ID token Google, o callback exige e-mail na lista antes de criar identidade Supabase, consultar serviços ou preparar marcadores. Requisições autenticadas também verificam a lista; retirar o e-mail bloqueia acessos futuros sem apagar registros. Geral e Pessoal são verificadas independentemente. Tabela ausente/falha de consulta bloqueia, sem liberar por padrão.
+
+Negativa usa ticket cifrado temporário e cookie opaco, sem e-mail na URL. A interface oferece WhatsApp +55 (43) 99952-5060 com pedido preenchido e Cancelar; só há envio ao suporte se a pessoa concluir no WhatsApp. Escola é informação administrativa, sem nova permissão de acesso aos dados de outras contas. Sem novo escopo/variável; política revisão 18. Roteiro completo no README. Não houve cadastro real de e-mails ou SQL remoto nesta entrega.

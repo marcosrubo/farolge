@@ -11,7 +11,7 @@ function harness(overrides={}){
  const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[];
  let labelFailure=null,labelRace=false;
  const labelError=status=>Object.assign(new Error('label_error'),{response:{status}});
- const store={async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
+ const store={async isEmailAuthorized(){return true;},async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
  let email='admin@gmail.com',identityOverride={},scopes=null,options,issuedOptions,flowOptions=new Map(),calls=0,authUnavailable=false,nowLogout=[],gmailDenied=false,failedEmail=null,failedStatus=503,failedReason=null,revokedAuthEmail=null;
  const userFor=value=>{if(!users.has(value))users.set(value,{id:'user-'+digest(value).slice(0,16),email:value,identities:[{provider:'google',identity_data:{sub:'sub-'+value}}]});return users.get(value);};
  const auth={async signIn(token,access,nonce){assert.equal(digest(nonce),issuedOptions.nonce);assert.equal(token,'id:'+email);const user=userFor(email);return {user,access_token:'auth:'+email,refresh_token:'refresh:'+email,expires_in:3600};},async user(token){if(authUnavailable || token.slice(5)===revokedAuthEmail)throw new Error('login_required');return userFor(token.slice(5));},async refresh(token){const value=token.slice(8);return {access_token:'auth:'+value,refresh_token:token,expires_in:3600};},async logout(token){nowLogout.push(token);}};
@@ -560,4 +560,57 @@ test('ocorrências da Visão GERAL exigem sessão Geral, sem herdar Pessoal ou e
  const result=await h.request('occurrences',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(result.status,200);assert.deepEqual(result.json().items,[]);
  assert.equal((await h.request('occurrences',{cookie:general.cookie,query:'?mailbox=other@example.com'})).status,409);
  assert.equal((await h.request('occurrences',{method:'POST',cookie:general.cookie,body:{type:'general'}})).status,405);
+});
+
+for(const type of ['general','personal'])test('lista bloqueia '+type+' após identidade Google, antes de Auth, marcadores e sessão',async()=>{
+ const h=harness(),attempt='denied@example.com';h.setEmail(attempt);const checked=[];
+ h.store.isEmailAuthorized=async email=>{checked.push(email);return false;};
+ const flow=await h.start(type),result=await h.callback(flow);
+ assert.match(result.headers.location,/connection=access_denied/);assert.ok(!result.headers.location.includes(attempt));assert.equal(checked[0],attempt);
+ assert.equal(h.users.size,0);assert.equal(h.connections.size,0);assert.equal(h.labelRequests.length,0);assert.equal(sessionCookie(result,type),undefined);
+ const deniedCookie=result.headers['set-cookie'].find(c=>c.startsWith('__Host-farol-access-denied=')).split(';')[0];
+ const claim=await h.request('access-denied',{cookie:deniedCookie});assert.equal(claim.status,200);assert.deepEqual(claim.json(),{email:attempt});
+ assert.equal((await h.request('access-denied',{cookie:deniedCookie})).status,404);
+ assert.equal((await h.request('access-denied',{query:'?email=forged@example.com'})).status,404);
+});
+test('identidade inválida não consulta a lista, e tabela ausente/falha nunca libera',async()=>{
+ const h=harness();let checks=0;h.store.isEmailAuthorized=async()=>{checks++;return true;};h.setIdentity({email_verified:false});
+ const invalid=await h.callback(await h.start());assert.match(invalid.headers.location,/wrong_account/);assert.equal(checks,0);
+ h.setIdentity({});
+ for(const code of ['access_setup_required','unexpected private backend failure']){
+  h.store.isEmailAuthorized=async()=>{throw new Error(code);};const result=await h.callback(await h.start());
+  assert.match(result.headers.location,new RegExp(code==='access_setup_required'?'access_setup_required':'access_unavailable'));assert.equal(h.users.size,0);assert.equal(h.labelRequests.length,0);assert.ok(!result.headers.location.includes('private'));
+ }
+});
+test('tentativa negada preserva conexões anteriores e retirada da lista bloqueia sessões existentes',async()=>{
+ const h=harness(),general=await h.login(GENERAL_EMAIL,'','general'),personal=await h.login('personal@example.com',general.cookie,'personal');
+ h.store.isEmailAuthorized=async email=>email!==GENERAL_EMAIL&&email!=='denied@example.com';
+ const cookie=general.cookie+'; '+personal.cookie;
+ const blocked=await h.request('occurrences',{cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(blocked.status,403);assert.deepEqual(blocked.json(),{error:'access_denied',email:GENERAL_EMAIL,type:'general'});
+ const status=(await h.request('status',{cookie})).json();assert.equal(status.connections.general,null);assert.equal(status.connections.personal.email,'personal@example.com');assert.equal(status.denied.general,GENERAL_EMAIL);
+ const replacement=await h.login('denied@example.com',cookie,'personal');assert.match(replacement.response.headers.location,/access_denied/);
+ assert.equal((await h.request('status',{cookie})).json().connections.personal.email,'personal@example.com');
+ assert.equal((await h.request('disconnect',{method:'POST',cookie,body:{type:'general'}})).status,200);
+});
+test('consulta real da lista é exata, normalizada e falha fechada sem expor dados do provedor',async()=>{
+ const calls=[],config=configuration(env);
+ let mode='allowed';
+ const store=makeStore(config,async(url,opts)=>{calls.push({url,opts});return mode==='allowed'?{ok:true,status:200,json:async()=>[{email:'allowed@example.com'}]}:mode==='empty'?{ok:true,status:200,json:async()=>[]}:{ok:false,status:500,json:async()=>({code:mode==='missing'?'42P01':'XX000',message:'PRIVATE secret backend error'})};});
+ assert.equal(await store.isEmailAuthorized(' Allowed@Example.com '),true);assert.ok(calls[0].url.includes('EmailsAutorizados?email=eq.allowed%40example.com'));assert.equal(calls[0].opts.method,'GET');assert.ok(calls[0].url.includes('select=email&limit=1'));
+ mode='empty';assert.equal(await store.isEmailAuthorized('allowed@example.com'),false);
+ mode='missing';await assert.rejects(store.isEmailAuthorized('allowed@example.com'),{message:'access_setup_required'});
+ mode='error';await assert.rejects(store.isEmailAuthorized('allowed@example.com'),{message:'access_unavailable'});
+});
+
+test('ticket de negativa expirado não expõe e-mail; revogação bloqueia escrita antes dos marcadores',async()=>{
+ const h=harness();h.store.isEmailAuthorized=async()=>false;h.setEmail('denied@example.com');const result=await h.callback(await h.start());
+ const cookie=result.headers['set-cookie'].find(c=>c.startsWith('__Host-farol-access-denied=')).split(';')[0];
+ for(const [key,value] of h.rows)if(key.startsWith('denied.'))h.rows.set(key,{...value,expiresAt:Date.now()-1});
+ assert.equal((await h.request('access-denied',{cookie})).status,404);
+ h.store.isEmailAuthorized=async()=>true;const general=await h.login(GENERAL_EMAIL,'','general');const before=h.labelRequests.length;
+ h.store.isEmailAuthorized=async()=>false;
+ assert.equal((await h.request('institutional-labels',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:GENERAL_EMAIL}})).status,403);assert.equal(h.labelRequests.length,before);
+ h.store.isEmailAuthorized=async()=>{throw new Error('access_unavailable');};
+ assert.deepEqual((await h.request('status',{cookie:general.cookie})).json().errors,{general:'access_unavailable'});
+ assert.deepEqual((await h.request('occurrences',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL})).json(),{error:'access_unavailable'});
 });

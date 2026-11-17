@@ -98,6 +98,9 @@ function render(){
   if(selected.id==='pessoais')window.FarolDemands?.mount(document.querySelector('#demands-board'));
 }
 const connectionMessages={
+  access_denied:'E-mail não autorizado a acessar o aplicativo FarolGE.',
+  access_setup_required:'O controle de acesso precisa ser preparado no Supabase do FAROL GE.',
+  access_unavailable:'Não foi possível verificar a autorização de acesso. Tente novamente mais tarde.',
   connected:'Conexão e permissões confirmadas pelo Google.',
   partial:'Conta conectada. Algumas permissões ou a preparação das labels precisam de atenção. Confira a situação da conexão e revise a autorização para tentar novamente.',
   login_required:'Conecte novamente esta conta Google para continuar.',
@@ -118,6 +121,32 @@ function setupEmailConnections(){
   let selectedType='personal';
   let statusVersion=0;
   const types=['general','personal'];
+  const deniedDialog=document.querySelector('#access-denied-dialog'),seenDenied=new Set(),activeEmails={general:null,personal:null};
+  function showDenied(email){
+    if(typeof email!=='string'||!(/^[^@\s]+@[^@\s]+\.[^@\s]+$/).test(email)||seenDenied.has(email))return;
+    seenDenied.add(email);
+    document.querySelector('#access-denied-email').textContent=email;
+    document.querySelector('#access-denied-support').href='https://wa.me/5543999525060?text='+encodeURIComponent('Gostaria de solicitar acesso ao FarolGE para o E-mail '+email);
+    if(dialog.open)dialog.close();
+    if(!deniedDialog.open)deniedDialog.showModal();
+  }
+  function clearConnection(type){
+    activeEmails[type]=null;
+    if(type==='personal')window.FarolDemands?.connectionChanged(null);
+    else{window.FarolInstitutional?.connectionChanged(null);window.FarolMaintenance?.connectionChanged(null);window.FarolStudents?.connectionChanged(null);}
+    window.FarolOverview?.connectionChanged(type,null);
+    document.querySelector('#email-'+type+'-status').textContent='Acesso não autorizado ou não verificado';
+    document.querySelector('#email-'+type+'-status').classList.toggle('is-connected',false);
+    document.querySelector('[data-disconnect-email="'+type+'"]').hidden=true;
+    document.querySelector('[data-connect-email="'+type+'"]').textContent='Conectar';
+  }
+  window.FarolAccessDenied=result=>{
+    if(result?.error==='access_denied'&&types.includes(result.type)&&activeEmails[result.type]===result.email){
+      ++statusVersion;clearConnection(result.type);showDenied(result.email);
+    }else if(['access_setup_required','access_unavailable'].includes(result?.error)){
+      ++statusVersion;for(const type of types)clearConnection(type);feedback.textContent=connectionMessages[result.error];
+    }
+  };
   async function api(action,body){
     const response=await fetch('/api/google/'+action,{
       method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',
@@ -140,6 +169,7 @@ function setupEmailConnections(){
       const result=await api('status');
       if(version!==statusVersion)return;
       configured=result.configured===true;
+      for(const type of types)activeEmails[type]=configured?result.connections?.[type]?.email||null:null;
       window.FarolDemands?.connectionChanged(configured?result.connections?.personal||null:null);
       window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolMaintenance?.connectionChanged(configured?result.connections?.general||null:null);
@@ -150,7 +180,7 @@ function setupEmailConnections(){
         const email=connection?.email;
         const connected=Boolean(configured && typeof email==='string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email));
         const status=document.querySelector('#email-'+type+'-status');
-        status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='unavailable'?'Conexão não verificada':'NÃO conectado');
+        status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='access_denied'?'Acesso não autorizado':['unavailable','access_unavailable','access_setup_required'].includes(result.errors?.[type])?'Conexão não verificada':'NÃO conectado');
         if(connected&&type==='general')status.textContent+=' · Nomes no Drive: '+(connection.driveMetadata?'autorizado':'revisar autorização')+' · Leitura de PDFs: '+(connection.driveRead?'autorizada':'revisar autorização');
         if(connected) {
           const labelMessages={ready:type==='personal'?'labels prontas (4/4)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
@@ -164,6 +194,8 @@ function setupEmailConnections(){
         button.disabled=!configured;
         document.querySelector('[data-disconnect-email="'+type+'"]').hidden=!connected;
       }
+      for(const email of Object.values(result.denied||{}))showDenied(email);
+      for(const type of types)if(['access_setup_required','access_unavailable'].includes(result.errors?.[type]))feedback.textContent=connectionMessages[result.errors[type]];
       showAvailability();
     } catch {
       if(version!==statusVersion)return;
@@ -231,6 +263,7 @@ function setupEmailConnections(){
   const result=params.get('connection');
   if(result){
     feedback.textContent=connectionMessages[result]||connectionMessages.failed;
+    if(result==='access_denied')api('access-denied').then(denied=>showDenied(denied.email)).catch(()=>{feedback.textContent=connectionMessages.access_denied;});
     params.delete('connection');
     params.delete('mailbox');
     window.history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():'')+location.hash);

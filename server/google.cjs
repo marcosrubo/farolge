@@ -65,6 +65,7 @@ function makeStore(config,fetcher=fetch) {
     });
     if(!response.ok){
       let code;try {code=(await response.json()).code;}catch{}
+      if(table==='EmailsAutorizados')throw new Error(['42P01','42703','PGRST204','PGRST205'].includes(code)?'access_setup_required':'access_unavailable');
       throw new Error(['farol_personal_demands','farol_institutional_demands'].includes(table) && ['42P01','PGRST205'].includes(code)?'setup_required':'storage_unavailable');
     }
     return response.status===204 || !prefer?.includes('representation')?null:response.json();
@@ -75,6 +76,13 @@ function makeStore(config,fetcher=fetch) {
   const decode=row=>row && Date.parse(row.expires_at)>Date.now()?unseal(row.payload,config.key,row.id):null;
   return {
     ...makeStudentStore(config,fetcher,{seal,unseal}),
+    async isEmailAuthorized(email){
+      try{
+        const rows=await call('EmailsAutorizados','GET','email=eq.'+encodeURIComponent(emailOf(email))+'&select=email&limit=1',null,'return=representation');
+        if(!Array.isArray(rows))throw new Error('access_unavailable');
+        return rows.some(row=>row.email===emailOf(email));
+      }catch(error){if(error.message==='access_setup_required')throw error;throw new Error('access_unavailable');}
+    },
     async get(id) {const rows=await sessions('GET',`id=eq.${id}&select=id,payload,expires_at`,null,'return=representation');return decode(rows[0]);},
     async take(id) {const rows=await sessions('DELETE',`id=eq.${id}`,null,'return=representation');return decode(rows[0]);},
     async put(id,value,expiresAt) {await sessions('POST','on_conflict=id',{id,payload:seal(value,config.key,id),expires_at:new Date(expiresAt).toISOString()},'resolution=merge-duplicates,return=minimal');},
@@ -183,7 +191,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))return reply(404,{error:'not_found'});
+    if(!['status','access-denied','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))return reply(404,{error:'not_found'});
     const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
@@ -197,7 +205,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(!body || typeof body!=='object' || Array.isArray(body))return reply(400,{error:'invalid_body'});
       if(action!=='logout' && !TYPES.includes(body.type))return reply(400,{error:'invalid_type'});
     }
-    async function account(type) {
+    async function authorizeEmail(email){
+      let allowed;
+      try{allowed=await store.isEmailAuthorized(email);}catch(error){throw new Error(error.message==='access_setup_required'?'access_setup_required':'access_unavailable');}
+      if(allowed!==true)throw Object.assign(new Error('access_denied'),{email});
+    }
+    async function account(type,checkAccess=true) {
       const name=accountCookie(type),id=jar[name];
       if(!validId(id))return null;
       const key=accountKey(type,id),session=await store.get(key);
@@ -211,6 +224,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const user=await auth.user(session.auth.accessToken);
         if(user.id!==session.user.id || emailOf(user.email)!==session.user.email)throw new Error('login_required');
         session.user={id:user.id,email:emailOf(user.email)};
+        if(checkAccess)await authorizeEmail(session.user.email);
         return {id,key,type,session,user:session.user};
       } catch(error) {
         if(error.message!=='login_required')throw error;
@@ -233,6 +247,14 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
+      if(action==='access-denied'){
+        const ticket=jar['__Host-farol-access-denied'];
+        setCookie(res,'__Host-farol-access-denied','',0);
+        if(!validId(ticket))return reply(404,{error:'not_found'});
+        const denied=await store.take('denied.'+hash(ticket));
+        if(!denied||denied.expiresAt<=Date.now()||typeof denied.email!=='string')return reply(404,{error:'not_found'});
+        return reply(200,{email:denied.email});
+      }
       if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action)) {
         try {
           const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))?'general':'personal';
@@ -258,6 +280,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           try {await store.putConnection(current.user.id,type,{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
+          if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))?'general':'personal'});
+          if(['access_setup_required','access_unavailable'].includes(error.message))return reply(503,{error:error.message});
           const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed'];
           if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
@@ -302,12 +326,19 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         try {
           const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
           if(previous!==flow.previous)throw new Error('invalid_state');
-          const current=await account(type);
+          const current=await account(type,false);
           const code=url.searchParams.get('code');if(!code)throw new Error('failed');
           const client=clientFactory(config),{tokens}=await client.getToken({code,codeVerifier:flow.codeVerifier});
           if(!tokens.access_token || !tokens.id_token)throw new Error('failed');
           const ticket=await client.verifyIdToken({idToken:tokens.id_token,audience:config.clientId}),identity=ticket.getPayload();
           const email=validateAccount(identity,{emailAddress:identity?.email},hash(flow.nonce));
+          try{await authorizeEmail(email);}catch(error){
+            if(error.message!=='access_denied')throw error;
+            const deniedTicket=random(),expiresAt=Date.now()+600000;
+            await store.put('denied.'+hash(deniedTicket),{email,expiresAt},expiresAt);
+            setCookie(res,'__Host-farol-access-denied',deniedTicket,600);
+            return finish(flow.route,type,'access_denied');
+          }
           const scopes=String(tokens.scope||'').split(' '),capabilities={gmail:scopes.includes(READ_SCOPE)||scopes.includes(MODIFY_SCOPE),drive:scopes.includes(DRIVE_SCOPE),...(type==='personal'?{classify:scopes.includes(MODIFY_SCOPE)}:{manageInstitutional:scopes.includes(MODIFY_SCOPE),driveMetadata:scopes.includes(DRIVE_METADATA_SCOPE)||scopes.includes(DRIVE_READ_SCOPE),driveRead:scopes.includes(DRIVE_READ_SCOPE)})};
           client.setCredentials(tokens);
           // Confirm each granted service, without preventing basic login when a permission is declined.
@@ -344,21 +375,21 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           setCookie(res,'__Host-farol-portal','',0);
           return finish(flow.route,type,capabilities.gmail && capabilities.drive && (labels==='ready' && (type==='personal'?capabilities.classify:(capabilities.manageInstitutional&&capabilities.driveMetadata&&capabilities.driveRead)))?'connected':'partial');
         } catch(error) {
-          return finish(flow.route,type,['wrong_account','login_required','invalid_state'].includes(error.message)?error.message:'failed');
+          return finish(flow.route,type,['wrong_account','login_required','invalid_state','access_setup_required','access_unavailable'].includes(error.message)?error.message:'failed');
         }
       }
       if(action==='logout'){
-        for(const type of TYPES)await discardAccount(type,await account(type));
+        for(const type of TYPES)await discardAccount(type,await account(type,false));
         return reply(200,{signedOut:true});
       }
       if(action==='disconnect') {
-        const current=await account(body.type);
+        const current=await account(body.type,false);
         if(!current)return reply(401,{error:'login_required'});
         await store.removeConnection(current.user.id,body.type);
         await discardAccount(body.type,current);
         return reply(200,{disconnected:true});
       }
-      const connections={general:null,personal:null},errors={};
+      const connections={general:null,personal:null},errors={},denied={};
       for(const type of TYPES) {
         let current;
         try {
@@ -381,6 +412,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           await store.putConnection(current.user.id,type,connection);
           connections[type]={email:connection.email,...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};
         } catch(error) {
+          if(error.message==='access_denied'){errors[type]='access_denied';denied[type]=error.email;continue;}
+          if(['access_setup_required','access_unavailable'].includes(error.message)){errors[type]=error.message;continue;}
           const googleError=error.response?.data?.error;
           if(error.response?.status===401 || googleError==='invalid_grant' || error.message==='wrong_account') {
             if(current){await store.removeConnection(current.user.id,type);await discardAccount(type,current);}
@@ -389,7 +422,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         }
       }
       const mode=connections.general?(connections.personal?'both':'general'):(connections.personal?'personal':'none');
-      return reply(200,{configured:true,mode,connections,errors});
+      return reply(200,{configured:true,mode,connections,errors,...(Object.keys(denied).length?{denied}:{})});
     } catch {
       // Do not log OAuth exceptions; they may contain credentials, codes or tokens.
       if(action==='callback')return finish('inicio','personal','unavailable');

@@ -2,15 +2,15 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
-function ui(status={configured:false,connections:{general:null,personal:null}}){
+function ui(status={configured:false,connections:{general:null,personal:null}},search=''){
  const nodes=new Map();
- const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;}});
+ const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;},close(){this.open=false;}});
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,make());return nodes.get(selector);};
  const connect=['general','personal'].map(type=>Object.assign(get(`[data-connect-email="${type}"]`),{dataset:{connectEmail:type}}));
  const disconnect=['general','personal'].map(type=>Object.assign(get(`[data-disconnect-email="${type}"]`),{dataset:{disconnectEmail:type}}));
  const requests=[];
  const window={FAROL_CONFIG:{schoolName:'Escola',schoolInitials:'E'},listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},location:{assign(url){window.destination=url;}},history:{replaceState(){}},scrollTo(){}};
- const context=vm.createContext({window,document:{querySelector:get,querySelectorAll:s=>s==='[data-connect-email]'?connect:s==='[data-disconnect-email]'?disconnect:[]},location:{hash:'#radar',search:'',pathname:'/'},URL,URLSearchParams,fetch:async(url,opts)=>{requests.push({url,opts});return {ok:true,json:async()=>url.endsWith('/start')?{url:'https://accounts.google.com/o/oauth2/v2/auth?state=fake'}:status};}});
+ const context=vm.createContext({window,document:{querySelector:get,querySelectorAll:s=>s==='[data-connect-email]'?connect:s==='[data-disconnect-email]'?disconnect:[]},location:{hash:'#radar',search,pathname:'/'},URL,URLSearchParams,fetch:async(url,opts)=>{requests.push({url,opts});return {ok:true,json:async()=>url.endsWith('/start')?{url:'https://accounts.google.com/o/oauth2/v2/auth?state=fake'}:url.endsWith('/access-denied')?{email:status.claimEmail}:status};}});
  vm.runInContext(fs.readFileSync('app.js','utf8'),context);
  return {get,connect,disconnect,requests,window,context};
 }
@@ -125,4 +125,19 @@ test('menu posiciona Inspetores antes de Radar e monta módulo de alunos',async(
  const nav=h.get('#navigation').innerHTML;assert.ok(nav.indexOf('href="#inspetores-monitores"')<nav.indexOf('href="#radar"'));
  let mounted=false;h.window.FarolStudents={unmount(){},mount(){mounted=true;}};
  h.context.location.hash='#inspetores-monitores';h.window.listeners.hashchange();assert.equal(mounted,true);assert.ok(h.get('#main').innerHTML.includes('students-board'));
+});
+
+test('conta negada mostra mensagem e WhatsApp com e-mail verificado, sem abrir conversa automaticamente',async()=>{
+ const denied='denied+test@example.com';const h=ui({configured:true,connections:{general:null,personal:null},claimEmail:denied},'?connection=access_denied&email=forged@example.com');await settle();
+ assert.equal(h.get('#access-denied-dialog').open,true);assert.equal(h.get('#access-denied-email').textContent,denied);
+ const link=new URL(h.get('#access-denied-support').href);assert.equal(link.origin,'https://wa.me');assert.equal(link.pathname,'/5543999525060');assert.equal(link.searchParams.get('text'),'Gostaria de solicitar acesso ao FarolGE para o E-mail '+denied);assert.equal(h.window.destination,undefined);
+ assert.ok(fs.readFileSync('index.html','utf8').includes('Desculpe mas, esse E-mail não está autorizado a acessar o aplicativo FarolGE.'));
+ assert.ok(fs.readFileSync('index.html','utf8').includes('id="access-denied-cancel"'));assert.ok(!h.requests.some(r=>r.url.includes('wa.me')));
+ h.get('#access-denied-dialog').close();const count=h.requests.length;assert.equal(h.get('#access-denied-dialog').open,false);assert.equal(h.requests.length,count);
+});
+test('retirada de permissão limpa somente a conexão negada e ignora respostas de uma conta anterior',async()=>{
+ const status={configured:true,connections:{general:{email:'school@example.com',gmail:true},personal:{email:'personal@example.com',gmail:true}}};
+ const h=ui(status);await settle();const cleared=[];h.window.FarolOverview={connectionChanged:(type,value)=>cleared.push({type,value})};
+ h.window.FarolAccessDenied({error:'access_denied',type:'general',email:'old@example.com'});assert.equal(h.get('#access-denied-dialog').open,undefined);
+ h.window.FarolAccessDenied({error:'access_denied',type:'general',email:'school@example.com'});assert.equal(h.get('#access-denied-dialog').open,true);assert.deepEqual(cleared,[{type:'general',value:null}]);assert.ok(h.get('#email-personal-status').textContent.includes('personal@example.com'));
 });

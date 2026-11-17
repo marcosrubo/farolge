@@ -23,7 +23,7 @@ window.FarolStudentImport=(()=>{
     const ticket=++version,mailbox=connection.email;busy=true;error='';feedback='';draw();
     try{
       const params=new URLSearchParams({mailbox,...(more?{pageToken:next,folder:folder.id}:{})});
-      const response=await fetch('/api/google/student-files?'+params,{credentials:'same-origin',cache:'no-store'}),result=await response.json();
+      const response=await fetch('/api/google/student-files?'+params,{credentials:'same-origin',cache:'no-store'}),result=await response.json();window.FarolAccessDenied?.(result);
       if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==version||!root)return;
       if(result.mailbox!==mailbox||!Array.isArray(result.files)||!result.folder?.id||(more&&result.folder.id!==folder.id))throw new Error('account_changed');
@@ -40,7 +40,7 @@ window.FarolStudentImport=(()=>{
     try{
       const response=await fetch('/api/google/student-import',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify({type:'general',mailbox,fileId:id,version:file.version,folder:folder.id})});
       let result;
-      try{result=await response.json();}catch{throw new Error([502,504].includes(response.status)?'import_timeout':'import_server_unavailable');}
+      try{result=await response.json();window.FarolAccessDenied?.(result);}catch{throw new Error([502,504].includes(response.status)?'import_timeout':'import_server_unavailable');}
       if(!response.ok)throw new Error(result.error||([502,504].includes(response.status)?'import_timeout':'import_server_unavailable'));
       if(ticket!==version||!root)return;
       if(result.mailbox!==mailbox||result.fileId!==id||!Number.isSafeInteger(result.count)||result.count<1)throw new Error('account_changed');

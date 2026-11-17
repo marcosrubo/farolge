@@ -23,7 +23,7 @@ window.FarolDemands=(()=>{
   function reset(){++epoch;busy=false;inbox={items:[],loaded:false,busy:false};classified={items:[],loaded:false,busy:false};columns=titles.map(()=>({items:[],loaded:false,nextPage:null,error:null}));clearDetails();}
   async function api(action,params,body){
     const response=await fetch('/api/google/'+action+(params?'?'+new URLSearchParams(params):''),{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json','X-Farol-Request':'1'}:{},...(body?{body:JSON.stringify(body)}:{})});
-    const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');return result;
+    const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');return result;
   }
   function project(demand,column){
     return {...(demand||{}),responsible:column===1?connection.email:(demand?.responsibles?.[column]??demand?.responsible??'')};

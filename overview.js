@@ -34,7 +34,7 @@ window.FarolOverview=(()=>{
     try{
       const params=new URLSearchParams({type,mailbox});
       const response=await fetch('/api/google/overview?'+params,{credentials:'same-origin',cache:'no-store'});
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');
+      const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==s.version||!root)return;
       if(result.mailbox!==mailbox||result.type!==type||!Array.isArray(result.items))throw new Error('account_changed');
       s.items=result.items;
@@ -59,7 +59,7 @@ window.FarolOverview=(()=>{
     const ticket=++s.version,mailbox=s.connection.email;s.busy=true;s.error='';drawOccurrences();
     try{
       const params=new URLSearchParams({mailbox,...(more?{pageToken:s.next}:{})});
-      const response=await fetch('/api/google/occurrences?'+params,{credentials:'same-origin',cache:'no-store'}),result=await response.json();
+      const response=await fetch('/api/google/occurrences?'+params,{credentials:'same-origin',cache:'no-store'}),result=await response.json();window.FarolAccessDenied?.(result);
       if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==s.version||!root)return;
       if(result.mailbox!==mailbox||!Array.isArray(result.items))throw new Error('account_changed');

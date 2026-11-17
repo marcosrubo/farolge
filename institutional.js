@@ -46,7 +46,7 @@ window.FarolInstitutional=(()=>{
     try{
       const params=new URLSearchParams({mailbox,column:index});if(append&&state.nextPage)params.set('page',state.nextPage);
       const response=await fetch('/api/google/institutional?'+params,{credentials:'same-origin',cache:'no-store'});
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');
+      const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==epoch)return;if(result.mailbox!==mailbox||result.column!==index)throw new Error('account_changed');
       state.items=[...new Map([...(append?state.items:[]),...result.items].map(item=>[item.id,item])).values()];
       state.nextPage=result.nextPage;state.loaded=true;state.missingLabels=result.missingLabels;
@@ -61,7 +61,7 @@ window.FarolInstitutional=(()=>{
     const ticket=epoch,mailbox=connection.email;moving=true;feedback='Verificando e preparando Classificadas e Arquivadas…';draw();
     try{
       const response=await fetch('/api/google/institutional-labels',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify({type:'general',mailbox})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');
+      const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==epoch)return;if(result.mailbox!==mailbox)throw new Error('account_changed');
       if(result.labels!=='ready'){
         const reasons={permission_denied:'O Google recusou a criação. Revise a autorização da GERAL.',name_rejected:'O Google recusou um nome de marcador. Confira no Gmail os nomes GE_Classificadas e GE_Arquivadas.',provider_unavailable:'Não foi possível confirmar os marcadores no Google. Tente novamente.'};
@@ -87,7 +87,7 @@ window.FarolInstitutional=(()=>{
     try{
       const body={type:'general',mailbox,messageId:id,operation,...(operation==='classify'?{dueDate,version:message.version}:{})};
       const response=await fetch('/api/google/institutional-move',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify(body)});
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'unavailable');
+      const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==epoch)return;if(result.mailbox!==mailbox||result.messageId!==id||result.operation!==operation)throw new Error('account_changed');
       feedback=operation==='classify'?'Data limite salva. E-mail movido para Classificadas.':'E-mail movido para Arquivadas.';drafts.delete(id);
       // Clear source rows immediately after confirmed success, even if refresh fails.
