@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
-function ui(status={configured:false,connections:{general:null,personal:null}},search=''){
+function ui(status={configured:false,connections:{general:null,personal:null}},search='',modules={}){
  const nodes=new Map();
  const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;},close(){this.open=false;}});
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,make());return nodes.get(selector);};
@@ -10,6 +10,7 @@ function ui(status={configured:false,connections:{general:null,personal:null}},s
  const disconnect=['general','personal'].map(type=>Object.assign(get(`[data-disconnect-email="${type}"]`),{dataset:{disconnectEmail:type}}));
  const requests=[];
  const window={FAROL_CONFIG:{schoolName:'Escola',schoolInitials:'E'},listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},location:{assign(url){window.destination=url;}},history:{replaceState(){}},scrollTo(){}};
+ Object.assign(window,modules);
  const context=vm.createContext({window,document:{querySelector:get,querySelectorAll:s=>s==='[data-connect-email]'?connect:s==='[data-disconnect-email]'?disconnect:[]},location:{hash:'#radar',search,pathname:'/'},URL,URLSearchParams,fetch:async(url,opts)=>{requests.push({url,opts});return {ok:true,json:async()=>url.endsWith('/start')?{url:'https://accounts.google.com/o/oauth2/v2/auth?state=fake'}:url.endsWith('/access-denied')?{email:status.claimEmail}:status};}});
  vm.runInContext(fs.readFileSync('app.js','utf8'),context);
  return {get,connect,disconnect,requests,window,context};
@@ -140,4 +141,16 @@ test('retirada de permissão limpa somente a conexão negada e ignora respostas 
  const h=ui(status);await settle();const cleared=[];h.window.FarolOverview={connectionChanged:(type,value)=>cleared.push({type,value})};
  h.window.FarolAccessDenied({error:'access_denied',type:'general',email:'old@example.com'});assert.equal(h.get('#access-denied-dialog').open,undefined);
  h.window.FarolAccessDenied({error:'access_denied',type:'general',email:'school@example.com'});assert.equal(h.get('#access-denied-dialog').open,true);assert.deepEqual(cleared,[{type:'general',value:null}]);assert.ok(h.get('#email-personal-status').textContent.includes('personal@example.com'));
+});
+
+
+test('módulo de alunos anterior em cache não bloqueia conexões Google',async()=>{
+ const h=ui({configured:true,connections:{general:null,personal:null}},'',{FarolStudents:{connectionChanged(){},unmount(){}}});
+ await settle();
+ for(const button of h.connect){
+  assert.equal(button.disabled,false);
+  button.listeners.click();
+  await h.get('#email-connection-continue').listeners.click();
+  assert.ok(h.window.destination.startsWith('https://accounts.google.com/'));
+ }
 });

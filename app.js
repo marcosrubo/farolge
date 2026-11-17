@@ -134,7 +134,7 @@ function setupEmailConnections(){
   }
   function clearConnection(type){
     activeEmails[type]=null;
-    if(type==='personal'){window.FarolDemands?.connectionChanged(null);window.FarolStudents?.personalConnectionChanged(null);}
+    if(type==='personal'){window.FarolDemands?.connectionChanged(null);window.FarolStudents?.personalConnectionChanged?.(null);}
     else{window.FarolInstitutional?.connectionChanged(null);window.FarolMaintenance?.connectionChanged(null);window.FarolStudents?.connectionChanged(null);window.FarolAuthorizedUsers?.connectionChanged(null);}
     window.FarolOverview?.connectionChanged(type,null);
     document.querySelector('#email-'+type+'-status').textContent='Acesso não autorizado ou não verificado';
@@ -176,7 +176,7 @@ function setupEmailConnections(){
       window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolMaintenance?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolStudents?.connectionChanged(configured?result.connections?.general||null:null);
-      window.FarolStudents?.personalConnectionChanged(configured?result.connections?.personal||null:null);
+      window.FarolStudents?.personalConnectionChanged?.(configured?result.connections?.personal||null:null);
       window.FarolAuthorizedUsers?.connectionChanged(configured?result.connections?.general||null:null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.connections?.[type]||null:null);
       for(const type of types){
@@ -208,7 +208,7 @@ function setupEmailConnections(){
       window.FarolInstitutional?.connectionChanged(null);
       window.FarolMaintenance?.connectionChanged(null);
       window.FarolStudents?.connectionChanged(null);
-      window.FarolStudents?.personalConnectionChanged(null);
+      window.FarolStudents?.personalConnectionChanged?.(null);
       window.FarolAuthorizedUsers?.connectionChanged(null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,null);
       for(const type of types){
