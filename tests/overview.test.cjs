@@ -37,13 +37,14 @@ test('valida identidade e tipo antes de consultar; revogação não produz suces
 });
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function frontend(){
- const nodes=new Map(),requests=[];
+ const nodes=new Map(),requests=[],timers=new Map();let nextTimer=0;
+ const document={hidden:false,listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},removeEventListener(name){delete this.listeners[name];}};
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,{textContent:'',innerHTML:'',listeners:{},addEventListener(name,fn){this.listeners[name]=fn;}});return nodes.get(selector);};
  const root={innerHTML:'',querySelector:get},window={};
- const context=vm.createContext({window,Intl,URLSearchParams,fetch:(url)=>new Promise(resolve=>requests.push({url,resolve}))});
+ const context=vm.createContext({window,document,Intl,URLSearchParams,setInterval:(fn,ms)=>{const id=++nextTimer;timers.set(id,{fn,ms});return id;},clearInterval:id=>timers.delete(id),fetch:(url)=>new Promise(resolve=>requests.push({url,resolve}))});
  vm.runInContext(fs.readFileSync('overview.js','utf8'),context);
  const respond=(type,mailbox,items,ok=true)=>{const req=requests.find(r=>!r.done&&new URL('https://farol.invalid'+r.url).searchParams.get('type')===type);assert.ok(req);req.done=true;req.resolve({ok,json:async()=>ok?{type,mailbox,items}:{error:'unavailable'}});};
- return {app:window.FarolOverview,root,get,requests,respond};
+ return {app:window.FarolOverview,root,get,requests,respond,timers,document,tick:()=>{for(const timer of timers.values())timer.fn();}};
 }
 const generalItems=[{name:'INBOX',total:1234,status:'ready'},{name:'GE_Classificadas',total:0,status:'ready'},{name:'GE_Arquivadas',total:null,status:'missing'}];
 const personalItems=['GE_ME DEVEM','GE_MINHAS','GE_DEVO','INBOX','GE_Despachadas'].map(name=>({name,total:12,status:'ready'}));
@@ -97,4 +98,25 @@ test('ocorrências descartam respostas da Geral anterior e separam ausência de 
  respondOccurrences(h,{error:'storage_unavailable'},false);await settle();assert.ok(h.get('#overview-occurrences-status').textContent.includes('Não foi possível'));assert.ok(!h.get('#overview-occurrences-status').textContent.includes('Nenhuma ocorrência'));
  h.get('#overview-occurrences-refresh').listeners.click();respondOccurrences(h,{mailbox:'new@example.com',items:[],nextPageToken:null});await settle();assert.equal(h.get('#overview-occurrences-status').textContent,'Nenhuma ocorrência registrada.');
  h.app.connectionChanged('general',null);assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');assert.ok(h.get('#overview-occurrences-status').textContent.includes('Conecte a conta GERAL'));
+});
+
+test('atualização automática é opcional, usa 60 segundos e não sobrepõe consultas pendentes',async()=>{
+ const h=frontend();h.app.mount(h.root);assert.equal(h.timers.size,0);
+ h.app.connectionChanged('general',{email:'school@example.com',gmail:true});h.app.connectionChanged('personal',{email:'person@example.com',gmail:true});assert.equal(h.requests.length,3);
+ h.get('#overview-auto-refresh').checked=true;h.get('#overview-auto-refresh').listeners.change();assert.equal(h.timers.size,1);assert.equal([...h.timers.values()][0].ms,60000);
+ h.tick();assert.equal(h.requests.length,3);
+ h.respond('general','school@example.com',generalItems);h.respond('personal','person@example.com',personalItems);respondOccurrences(h,{mailbox:'school@example.com',items:occurrenceItems,nextPageToken:null});await settle();
+ h.tick();assert.equal(h.requests.length,6);assert.ok(h.get('#overview-cards-general').innerHTML.includes('1.234'));assert.ok(h.get('#overview-occurrences-rows').innerHTML.includes('ALUNA'));
+ h.respond('general','school@example.com',[],false);h.respond('personal','person@example.com',personalItems);respondOccurrences(h,{error:'storage_unavailable'},false);await settle();
+ assert.ok(h.get('#overview-cards-general').innerHTML.includes('1.234'));assert.ok(h.get('#overview-status-general').textContent.includes('Dados anteriores mantidos'));assert.ok(h.get('#overview-occurrences-status').textContent.includes('lista anterior'));
+ h.get('#overview-auto-refresh').checked=false;h.get('#overview-auto-refresh').listeners.change();assert.equal(h.timers.size,0);h.tick();assert.equal(h.requests.length,6);
+});
+test('atualização automática pausa em aba oculta, retoma visível e encerra ao sair da Visão GERAL',async()=>{
+ const h=frontend();h.app.mount(h.root);h.app.connectionChanged('general',{email:'school@example.com',gmail:false});respondOccurrences(h,{mailbox:'school@example.com',items:[],nextPageToken:null});await settle();
+ h.get('#overview-auto-refresh').checked=true;h.get('#overview-auto-refresh').listeners.change();respondOccurrences(h,{mailbox:'school@example.com',items:[],nextPageToken:null});await settle();
+ const before=h.requests.length;h.document.hidden=true;h.document.listeners.visibilitychange();assert.equal(h.timers.size,0);h.tick();assert.equal(h.requests.length,before);assert.ok(h.get('#overview-auto-status').textContent.includes('pausada'));
+ h.document.hidden=false;h.document.listeners.visibilitychange();assert.equal(h.requests.length,before+1);assert.equal(h.timers.size,1);
+ h.app.unmount();assert.equal(h.timers.size,0);assert.equal(h.document.listeners.visibilitychange,undefined);
+ respondOccurrences(h,{mailbox:'school@example.com',items:occurrenceItems,nextPageToken:null});await settle();h.app.mount(h.root);assert.equal(h.get('#overview-auto-refresh').checked,true);assert.equal(h.timers.size,1);
+ h.app.connectionChanged('general',null);const count=h.requests.length;h.tick();assert.equal(h.requests.length,count);assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');
 });
