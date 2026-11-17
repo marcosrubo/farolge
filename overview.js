@@ -3,7 +3,7 @@ window.FarolOverview=(()=>{
   const groups={general:{title:'E-mails da ESCOLA',labels:[['INBOX','Caixa de Entrada'],['GE_Classificadas','Classificadas'],['GE_Arquivadas','Arquivadas']]},personal:{title:'E-mails PESSOAIS',labels:[['GE_ME DEVEM','ME DEVEM'],['GE_MINHAS','MINHAS'],['GE_DEVO','DEVO'],['INBOX','Caixa de Entrada'],['GE_Despachadas','Despachadas']]}};
   const types=Object.keys(groups),escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number=new Intl.NumberFormat('pt-BR');
-  let autoEnabled=false,autoTimer=null;
+  let autoEnabled=true,autoTimer=null;
   function stopAuto(){if(autoTimer!==null){clearInterval(autoTimer);autoTimer=null;}}
   function drawAuto(){if(root)root.querySelector('#overview-auto-status').textContent=!autoEnabled?'Atualização automática desativada.':document.hidden?'Atualização automática pausada enquanto a aba estiver oculta.':'Atualização automática ativada: totais e ocorrências mais recentes a cada minuto.';}
   function refreshAuto(){

@@ -100,8 +100,8 @@ test('ocorrências descartam respostas da Geral anterior e separam ausência de 
  h.app.connectionChanged('general',null);assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');assert.ok(h.get('#overview-occurrences-status').textContent.includes('Conecte a conta GERAL'));
 });
 
-test('atualização automática é opcional, usa 60 segundos e não sobrepõe consultas pendentes',async()=>{
- const h=frontend();h.app.mount(h.root);assert.equal(h.timers.size,0);
+test('atualização automática começa marcada, usa 60 segundos e não sobrepõe consultas pendentes',async()=>{
+ const h=frontend();h.app.mount(h.root);assert.equal(h.get('#overview-auto-refresh').checked,true);assert.equal(h.timers.size,1);
  h.app.connectionChanged('general',{email:'school@example.com',gmail:true});h.app.connectionChanged('personal',{email:'person@example.com',gmail:true});assert.equal(h.requests.length,3);
  h.get('#overview-auto-refresh').checked=true;h.get('#overview-auto-refresh').listeners.change();assert.equal(h.timers.size,1);assert.equal([...h.timers.values()][0].ms,60000);
  h.tick();assert.equal(h.requests.length,3);
