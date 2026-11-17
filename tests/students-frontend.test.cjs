@@ -46,3 +46,11 @@ test('Carga preserva lista em falha, exige nova permissão para importar e ignor
  h.get('#student-import-refresh').listeners.click();h.respond(1,{error:'unavailable'},false);await settle();assert.ok(h.get('#student-import-list').innerHTML.includes('alunos'));assert.ok(h.get('#student-import-status').textContent.includes('lista anterior'));
  h.app.connectionChanged(general);h.app.connectionChanged(null);h.respond(2,{mailbox:general.email,folder:{id:'lista'},files:[file],nextPageToken:null});await settle();assert.equal(h.get('#student-import-list').innerHTML,'');
 });
+
+test('Carga identifica falha do leitor e do Supabase sem repetir POST ou apagar a lista',async()=>{
+ const h=ui('student-import.js','FarolStudentImport');h.app.mount(h.root);h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,folder:{id:'lista'},files:[file],nextPageToken:null});await settle();
+ h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));h.respond(1,{error:'pdf_runtime_unavailable'},false);await settle();
+ assert.ok(h.get('#student-import-status').textContent.includes('leitor de PDF não iniciou'));assert.ok(h.get('#student-import-list').innerHTML.includes('alunos'));assert.equal(h.requests.length,2);
+ h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));h.respond(2,{error:'storage_access_denied'},false);await settle();
+ assert.ok(h.get('#student-import-status').textContent.includes('Supabase recusou'));assert.equal(h.requests.length,3);
+});

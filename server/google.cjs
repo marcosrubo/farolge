@@ -258,14 +258,18 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           try {await store.putConnection(current.user.id,type,{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout'];
-          if(known.includes(error.message))return reply(error.status,{error:error.message});
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed'];
+          if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
           if(['maintenance','student-files','student-import'].includes(action)){
             const reasons=(error.response?.data?.error?.errors||[]).map(item=>item.reason);
             if(reasons.includes('insufficientPermissions'))return reply(403,{error:'missing_scope'});
             if(reasons.includes('domainPolicy'))return reply(403,{error:'drive_policy'});
+            if(action==='student-import'){
+              const stages={folder:'import_folder_failed',metadata:'import_metadata_failed',download:'import_download_failed',pdf:'pdf_runtime_unavailable',storage:'storage_unavailable'};
+              return reply(503,{error:stages[error.studentImportStage]||'import_server_unavailable'});
+            }
             return reply(503,{error:'unavailable'});
           }
           const failure=action.startsWith('institutional')?gmailFailure(error):null;

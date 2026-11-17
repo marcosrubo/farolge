@@ -543,3 +543,12 @@ test('Alunos e ocorrências exigem Geral própria; gravação exige CSRF e rejei
  assert.equal((await h.request('student-import',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:GENERAL_EMAIL}})).status,403);
  assert.equal((await h.request('student-import',{method:'GET',cookie:general.cookie})).status,405);
 });
+
+test('carga devolve etapa segura de erro Google; cadastro devolve falha específica de armazenamento',async()=>{
+ const h=harness(),general=await h.login(GENERAL_EMAIL,'','general');
+ h.failAccount(GENERAL_EMAIL,503);
+ const result=await h.request('student-import',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:GENERAL_EMAIL,fileId:'pdf-1',version:'1',folder:'lista'}});
+ assert.equal(result.status,503);assert.deepEqual(result.json(),{error:'import_folder_failed'});assert.ok(!result.body.includes('provider_error'));
+ h.failAccount(null);h.store.getStudents=async()=>{throw Object.assign(new Error('storage_access_denied'),{status:403});};
+ const list=await h.request('students',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(list.status,403);assert.deepEqual(list.json(),{error:'storage_access_denied'});
+});

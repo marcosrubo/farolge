@@ -110,3 +110,21 @@ test('reenvio de ocorrência após resposta perdida reutiliza o registro; confli
  await assert.rejects(store.saveOccurrence(owner,id,{...value,Ocorrencia:'Outro texto.'}),{message:'conflict'});
  assert.ok(calls.filter(c=>c.method==='POST').every(c=>JSON.parse(c.body).id===id));
 });
+
+test('leitor distingue inicialização e worker ausentes de um PDF inválido, sem expor exceções',async()=>{
+ const bytes=fixturePdf();
+ await assert.rejects(readStudentPdf(bytes,{loadEngine:async()=>({getDocument(){throw new ReferenceError('DOMMatrix missing: private-path');}})}),{message:'pdf_runtime_unavailable',status:503});
+ await assert.rejects(readStudentPdf(bytes,{loadEngine:async()=>({getDocument:()=>({promise:Promise.reject(new Error('Setting up fake worker failed: private-path')),destroy:async()=>{}})})}),{message:'pdf_runtime_unavailable',status:503});
+ await assert.rejects(readStudentPdf(bytes,{loadEngine:async()=>({getDocument:()=>({promise:Promise.reject(new Error('Invalid PDF structure: private-data')),destroy:async()=>{}})})}),{message:'pdf_layout',status:422});
+});
+test('armazenamento devolve códigos seguros para SQL incompleto, permissão, estrutura e indisponibilidade',async()=>{
+ const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,5)};
+ for(const [code,status,message] of [['PGRST202',404,'setup_required'],['42703',400,'setup_required'],['42501',403,'storage_access_denied'],['23502',400,'student_schema_invalid'],['XX000',500,'storage_unavailable']]){
+  const store=makeStudentStore(cfg,async()=>({ok:false,status,json:async()=>({code,message:'PRIVATE raw provider error',details:'private student information'})}),{seal,unseal});
+  await assert.rejects(store.loadStudents(owner,[student]),error=>error.message===message&&!JSON.stringify(error).includes('PRIVATE'));
+ }
+});
+test('carga identifica a etapa que falhou e não grava após falha do leitor',async()=>{
+ const h=importHarness();await assert.rejects(h.run({readPdf:async()=>{throw new Error('unexpected private runtime error');}}),error=>error.studentImportStage==='pdf');assert.equal(h.loads.length,0);
+ const h2=importHarness();await assert.rejects(h2.run({store:{loadStudents:async()=>{throw new Error('storage_unavailable');}}}),error=>error.studentImportStage==='storage');
+});

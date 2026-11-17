@@ -1,10 +1,15 @@
 'use strict';
 const crypto=require('node:crypto');
+const storageError=(code,status=503)=>Object.assign(new Error(code),{status});
 function makeStudentStore(config,fetcher,{seal,unseal}){
   async function call(path,method,query='',body){
-    const response=await fetcher(`${config.storage}/rest/v1/${path}?${query}`,{method,headers:{apikey:config.serviceKey,Authorization:`Bearer ${config.serviceKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'resolution=ignore-duplicates,return=representation':'return=representation'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
+    let response;
+    try{response=await fetcher(`${config.storage}/rest/v1/${path}?${query}`,{method,headers:{apikey:config.serviceKey,Authorization:`Bearer ${config.serviceKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'resolution=ignore-duplicates,return=representation':'return=representation'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});}catch{throw storageError('storage_unavailable');}
     if(!response.ok){let code;try{code=(await response.json()).code;}catch{}
-      throw new Error(['42P01','42883','PGRST202','PGRST205'].includes(code)?'setup_required':'storage_unavailable');
+      if(['42P01','42703','42883','PGRST202','PGRST204','PGRST205'].includes(code))throw storageError('setup_required');
+      if(['42501','PGRST301'].includes(code)||[401,403].includes(response.status))throw storageError('storage_access_denied',403);
+      if(['23502','23503','23505','21000','22023','22P02'].includes(code))throw storageError('student_schema_invalid');
+      throw storageError('storage_unavailable');
     }
     return response.status===204?null:response.json();
   }
@@ -30,7 +35,7 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
     async loadStudents(owner,students){
       const rows=students.map(student=>{const id=key(owner,JSON.stringify([student.Escola,student.CGM,student.Serie,student.Turma,student.Turno]));return {cgm_key:id,...Object.fromEntries(fields.map(field=>[field,seal(student[field],config.key,`student.${owner}.${id}.${field}`)]))};});
       const count=await call('rpc/farol_load_students','POST','',{p_owner:owner,p_rows:rows});
-      if(count!==students.length)throw new Error('storage_unavailable');
+      if(count!==students.length)throw storageError('import_unconfirmed',502);
       return count;
     },
     async saveOccurrence(owner,id,value){

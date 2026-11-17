@@ -1,5 +1,15 @@
 'use strict';
 const path=require('node:path');
+const {pathToFileURL}=require('node:url');
+async function loadPdfEngine(){
+  try{
+    const canvas=require('@napi-rs/canvas');
+    for(const name of ['DOMMatrix','ImageData','Path2D'])if(!globalThis[name])globalThis[name]=canvas[name];
+    const engine=await import('pdfjs-dist/legacy/build/pdf.mjs');
+    engine.GlobalWorkerOptions.workerSrc=pathToFileURL(require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')).href;
+    return engine;
+  }catch{throw Object.assign(new Error('pdf_runtime_unavailable'),{status:503});}
+}
 const fail=message=>{throw Object.assign(new Error(message),{status:422});};
 const clean=value=>String(value||'').replace(/\s+/gu,' ').trim();
 function pdfDate(value){
@@ -53,11 +63,12 @@ function parsePages(pages){
   if(!students.size)fail('pdf_layout');
   return {students:[...students.values()],totalRows};
 }
-async function readStudentPdf(bytes){
+async function readStudentPdf(bytes,{loadEngine=loadPdfEngine}={}){
   if(bytes.length>10*1024*1024)fail('file_too_large');
   if(Buffer.from(bytes).subarray(0,5).toString()!=='%PDF-')fail('unsupported_file');
-  const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const task=getDocument({data:new Uint8Array(bytes),isEvalSupported:false,verbosity:0,useSystemFonts:true,disableFontFace:true,standardFontDataUrl:path.join(path.dirname(require.resolve('pdfjs-dist/package.json')),'standard_fonts')+path.sep});
+  const {getDocument}=await loadEngine();
+  let task;
+  try{task=getDocument({data:new Uint8Array(bytes),isEvalSupported:false,verbosity:0,useSystemFonts:true,disableFontFace:true,standardFontDataUrl:path.join(path.dirname(require.resolve('pdfjs-dist/package.json')),'standard_fonts')+path.sep});}catch{throw Object.assign(new Error('pdf_runtime_unavailable'),{status:503});}
   try{
     const pdf=await task.promise;
     if(pdf.numPages>100)fail('file_too_large');
@@ -69,7 +80,12 @@ async function readStudentPdf(bytes){
     }
     const info=(await pdf.getMetadata()).info;
     return {...parsePages(pages),generatedAt:pdfDate(info?.CreationDate)};
-  }catch(error){if(error.status)throw error;fail('pdf_layout');}
-  finally{await task.destroy();}
+  }catch(error){
+    if(error.status)throw error;
+    // Inspect runtime signatures only; never return/log raw PDF.js errors.
+    if(/worker|module|DOMMatrix|native binding/i.test(String(error.message||'')))throw Object.assign(new Error('pdf_runtime_unavailable'),{status:503});
+    fail('pdf_layout');
+  }
+  finally{try{await task.destroy();}catch{}}
 }
 module.exports={readStudentPdf,parsePages,groupLines,pdfDate};
