@@ -39,13 +39,13 @@ function frontend(){
  return {app:window.FarolAttendanceAnalysis,root,get,requests,respond,response};
 }
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
-test('matriz distingue zero e sem registro, escapa nomes, filtra e pagina sem repetir consulta',async()=>{
+test('matriz mostra todos os alunos em uma página, distingue zero e sem registro e filtra sem repetir consulta',async()=>{
  const h=frontend();h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.get('#attendance-status').textContent.includes('Conecte'));
  h.get('#attendance-start').value='2026-11-01';h.get('#attendance-end').value='2026-11-03';h.app.connectionChanged({email});
  const items=Array.from({length:51},(_,i)=>({school:'Escola',name:i===0?'<b>Aluno</b>':'ALUNO '+i,cgm:String(i),classes:[i===0?'B':'A'],counts:{'2026-11-01':2,'2026-11-02':0},total:2}));
  h.respond(0,h.response(0,items));await settle();
- const html=h.get('#attendance-rows').innerHTML;assert.ok(html.includes('&lt;b&gt;'));assert.ok(!html.includes('<b>'));assert.ok(html.includes('attendance-zero'));assert.ok(html.includes('attendance-missing'));assert.equal((html.match(/<tr>/g)||[]).length,50);
- h.get('#attendance-next').listeners.click();assert.equal((h.get('#attendance-rows').innerHTML.match(/<tr>/g)||[]).length,1);
+ const html=h.get('#attendance-rows').innerHTML;assert.ok(html.includes('&lt;b&gt;'));assert.ok(!html.includes('<b>'));assert.ok(html.includes('attendance-zero'));assert.ok(html.includes('attendance-missing'));assert.equal((html.match(/<tr>/g)||[]).length,51);
+ assert.ok(html.includes('ALUNO 50'));assert.ok(!h.root.innerHTML.includes('attendance-next'));assert.ok(!h.root.innerHTML.includes('attendance-prev'));
  h.get('#attendance-class').value='B';h.get('#attendance-class').listeners.change();assert.equal((h.get('#attendance-rows').innerHTML.match(/<tr>/g)||[]).length,1);
  h.get('#attendance-class').value='';h.get('#attendance-search').value='ALUNO 50';h.get('#attendance-search').listeners.input();assert.ok(h.get('#attendance-rows').innerHTML.includes('ALUNO 50'));assert.equal(h.requests.length,1);
 });
