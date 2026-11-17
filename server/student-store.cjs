@@ -38,6 +38,25 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
       if(count!==students.length)throw storageError('import_unconfirmed',502);
       return count;
     },
+    async getOccurrences(owner,pageToken=''){
+      let after='';
+      if(pageToken){
+        let cursor;try{if(pageToken.length>1024)throw new Error();cursor=JSON.parse(Buffer.from(pageToken,'base64url').toString('utf8'));}catch{throw storageError('invalid_page',400);}
+        const date=cursor?.date,time=cursor?.time,id=cursor?.id;
+        if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||typeof time!=='string'||!/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?$/.test(time)||typeof id!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id))throw storageError('invalid_page',400);
+        after='&or='+encodeURIComponent(`(Data.lt.${date},and(Data.eq.${date},Hora.lt.${time}),and(Data.eq.${date},Hora.eq.${time},id.lt.${id}))`);
+      }
+      const rows=await call('Ocorrencias','GET',`${ownerQuery(owner)}&select=id,cgm_key,Nome,Data,Hora,Ocorrencia,Alunos(Serie,Turma,Turno)&order=Data.desc,Hora.desc,id.desc&limit=21${after}`);
+      if(!Array.isArray(rows))throw storageError('storage_unavailable');
+      const page=rows.slice(0,20),last=page.at(-1);
+      const items=page.map(row=>{
+        const student=row.Alunos;
+        const turma=student?['Serie','Turma','Turno'].map(field=>unseal(student[field],config.key,`student.${owner}.${row.cgm_key}.${field}`)).join(' · '):'—';
+        return {id:row.id,date:row.Data,time:row.Hora,student:unseal(row.Nome,config.key,`occurrence.${owner}.${row.id}.Nome`),className:turma,text:unseal(row.Ocorrencia,config.key,`occurrence.${owner}.${row.id}.Ocorrencia`)};
+      });
+      const nextPageToken=rows.length>20?Buffer.from(JSON.stringify({date:last.Data,time:last.Hora,id:last.id})).toString('base64url'):null;
+      return {items,nextPageToken};
+    },
     async saveOccurrence(owner,id,value){
       const protectedFields=['Escola','CGM','Nome','Ocorrencia'];
       const encode=()=>Object.fromEntries(protectedFields.map(field=>[field,seal(value[field],config.key,`occurrence.${owner}.${id}.${field}`)]));

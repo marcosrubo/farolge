@@ -128,3 +128,23 @@ test('carga identifica a etapa que falhou e não grava após falha do leitor',as
  const h=importHarness();await assert.rejects(h.run({readPdf:async()=>{throw new Error('unexpected private runtime error');}}),error=>error.studentImportStage==='pdf');assert.equal(h.loads.length,0);
  const h2=importHarness();await assert.rejects(h2.run({store:{loadStudents:async()=>{throw new Error('storage_unavailable');}}}),error=>error.studentImportStage==='storage');
 });
+
+test('consulta de ocorrências usa proprietário, ordem temporal e paginação estável, decifrando somente campos exibidos',async()=>{
+ const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,6)},calls=[];
+ const rows=Array.from({length:21},(_,i)=>{
+  const rowId='12345678-1234-4234-8234-'+String(99-i).padStart(12,'0');
+  return {id:rowId,cgm_key:student.id,Data:'2026-11-17',Hora:'09:00:00',Nome:seal(student.Nome,cfg.key,`occurrence.${owner}.${rowId}.Nome`),Ocorrencia:seal('Observação factual.',cfg.key,`occurrence.${owner}.${rowId}.Ocorrencia`),Alunos:Object.fromEntries(['Serie','Turma','Turno'].map(field=>[field,seal(student[field],cfg.key,`student.${owner}.${student.id}.${field}`)]))};
+ });
+ const store=makeStudentStore(cfg,async(url,opts)=>{calls.push({url,opts});return {ok:true,status:200,json:async()=>rows};},{seal,unseal});
+ const first=await store.getOccurrences(owner);assert.equal(first.items.length,20);assert.equal(first.items[0].student,student.Nome);assert.equal(first.items[0].className,'8º Ano · A · Manhã');assert.ok(!('CGM' in first.items[0]));
+ const params=new URL(calls[0].url).searchParams;assert.equal(params.get('owner_id'),'eq.'+owner);assert.equal(params.get('order'),'Data.desc,Hora.desc,id.desc');assert.equal(params.get('limit'),'21');assert.equal(calls[0].opts.method,'GET');
+ await store.getOccurrences(owner,first.nextPageToken);const second=new URL(calls[1].url).searchParams;
+ assert.equal(second.get('owner_id'),'eq.'+owner);assert.ok(second.get('or').includes('id.lt.'+rows[19].id));assert.ok(second.get('or').includes('Hora.lt.09:00:00'));
+ const count=calls.length;await assert.rejects(store.getOccurrences(owner,Buffer.from(JSON.stringify({date:'2026-11-17',time:'09:00:00',id:'x),owner_id.neq.a'})).toString('base64url')),{message:'invalid_page'});assert.equal(calls.length,count);
+ await assert.rejects(store.getOccurrences('other-owner'));
+});
+test('endpoint de ocorrências valida caixa antes de consultar e não depende do Gmail',async()=>{
+ let calls=0;const store={getOccurrences:async(o,token)=>{calls++;assert.equal(o,owner);assert.equal(token,'next');return {items:[],nextPageToken:null};}};
+ const result=await handleStudents({action:'occurrences',url:new URL('https://farol.invalid/?mailbox='+email+'&pageToken=next'),store,owner,email});assert.deepEqual(result,{mailbox:email,items:[],nextPageToken:null});
+ await assert.rejects(handleStudents({action:'occurrences',url:new URL('https://farol.invalid/?mailbox=other'),store,owner,email}),{message:'account_changed'});assert.equal(calls,1);
+});

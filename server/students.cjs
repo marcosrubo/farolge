@@ -1,7 +1,8 @@
 'use strict';
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
 async function handleStudents({action,url,body,store,owner,email,now=new Date()}){
-  if((action==='students'?url.searchParams.get('mailbox'):body.mailbox)!==email)fail('account_changed',409);
+  if((['students','occurrences'].includes(action)?url.searchParams.get('mailbox'):body.mailbox)!==email)fail('account_changed',409);
+  if(action==='occurrences')return {mailbox:email,...await store.getOccurrences(owner,url.searchParams.get('pageToken')||'')};
   if(action==='students'){
     const students=await store.getStudents(owner);
     students.sort((a,b)=>a.Nome.localeCompare(b.Nome,'pt-BR',{sensitivity:'base'})||a.Turma.localeCompare(b.Turma,'pt-BR')||a.CGM.localeCompare(b.CGM));

@@ -552,3 +552,12 @@ test('carga devolve etapa segura de erro Google; cadastro devolve falha específ
  h.failAccount(null);h.store.getStudents=async()=>{throw Object.assign(new Error('storage_access_denied'),{status:403});};
  const list=await h.request('students',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(list.status,403);assert.deepEqual(list.json(),{error:'storage_access_denied'});
 });
+
+test('ocorrências da Visão GERAL exigem sessão Geral, sem herdar Pessoal ou exigir Google Gmail/Drive',async()=>{
+ const h=harness();h.store.getOccurrences=async()=>({items:[],nextPageToken:null});
+ const personal=await h.login('person@example.com');assert.equal((await h.request('occurrences',{cookie:personal.cookie,query:'?mailbox=person@example.com'})).status,401);
+ h.setScopes('openid email profile');const general=await h.login(GENERAL_EMAIL,personal.cookie,'general');
+ const result=await h.request('occurrences',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(result.status,200);assert.deepEqual(result.json().items,[]);
+ assert.equal((await h.request('occurrences',{cookie:general.cookie,query:'?mailbox=other@example.com'})).status,409);
+ assert.equal((await h.request('occurrences',{method:'POST',cookie:general.cookie,body:{type:'general'}})).status,405);
+});

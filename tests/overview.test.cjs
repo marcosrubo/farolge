@@ -70,3 +70,31 @@ test('títulos da Visão GERAL não expõem GE_ nem os números antigos',()=>{
  assert.ok(!html.includes('GE_'));assert.ok(!html.includes('1-ME'));assert.ok(!html.includes('4-DESPACH'));
  for(const title of ['ME DEVEM','MINHAS','DEVO','Despachadas','Classificadas','Arquivadas'])assert.ok(html.includes(title));
 });
+
+const occurrenceItems=[
+ {id:'b',date:'2026-11-17',time:'10:30:00',student:'ALUNA <TESTE>',className:'8º Ano · A · Manhã',text:'Primeira linha\n<script>texto</script>'},
+ {id:'a',date:'2026-11-16',time:'15:00:00',student:'OUTRA ALUNA',className:'7º Ano · B · Tarde',text:'Registro anterior.'}
+];
+function respondOccurrences(h,body,ok=true){const req=h.requests.find(r=>!r.done&&r.url.startsWith('/api/google/occurrences?'));assert.ok(req);req.done=true;req.resolve({ok,json:async()=>body});}
+test('ocorrências ficam após o quadro pessoal com os cinco campos e não usam conexão Pessoal',async()=>{
+ const h=frontend();h.app.mount(h.root);
+ assert.ok(h.root.innerHTML.indexOf('id="overview-occurrences-title"')>h.root.innerHTML.indexOf('id="overview-title-personal"'));
+ for(const title of ['Data','Hora','Aluno','Turma','Ocorrência'])assert.ok(h.root.innerHTML.includes('>'+title+'</th>'));
+ h.app.connectionChanged('personal',{email:'person@example.com',gmail:true});assert.ok(!h.requests.some(r=>r.url.startsWith('/api/google/occurrences?')));
+ h.app.connectionChanged('general',{email:'school@example.com',gmail:false});respondOccurrences(h,{mailbox:'school@example.com',items:[...occurrenceItems].reverse(),nextPageToken:'next'});await settle();
+ const html=h.get('#overview-occurrences-rows').innerHTML;assert.ok(html.includes('17/11/2026'));assert.ok(html.includes('10:30:00'));assert.ok(html.indexOf('ALUNA &lt;TESTE&gt;')<html.indexOf('OUTRA ALUNA'));assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;'));
+});
+test('ocorrências paginam sem duplicar e mantêm os registros quando a atualização falha',async()=>{
+ const h=frontend();h.app.mount(h.root);h.app.connectionChanged('general',{email:'school@example.com',gmail:false});
+ respondOccurrences(h,{mailbox:'school@example.com',items:[occurrenceItems[0]],nextPageToken:'next'});await settle();h.get('#overview-occurrences-more').listeners.click();
+ assert.ok(h.requests.at(-1).url.includes('pageToken=next'));
+ respondOccurrences(h,{mailbox:'school@example.com',items:occurrenceItems,nextPageToken:null});await settle();assert.equal((h.get('#overview-occurrences-rows').innerHTML.match(/<tr>/g)||[]).length,2);
+ h.get('#overview-occurrences-refresh').listeners.click();respondOccurrences(h,{error:'storage_unavailable'},false);await settle();assert.ok(h.get('#overview-occurrences-rows').innerHTML.includes('OUTRA ALUNA'));assert.ok(h.get('#overview-occurrences-status').textContent.includes('lista anterior'));
+});
+test('ocorrências descartam respostas da Geral anterior e separam ausência de falha',async()=>{
+ const h=frontend();h.app.mount(h.root);h.app.connectionChanged('general',{email:'old@example.com',gmail:false});h.app.connectionChanged('general',{email:'new@example.com',gmail:false});
+ respondOccurrences(h,{mailbox:'old@example.com',items:occurrenceItems});await settle();assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');
+ respondOccurrences(h,{error:'storage_unavailable'},false);await settle();assert.ok(h.get('#overview-occurrences-status').textContent.includes('Não foi possível'));assert.ok(!h.get('#overview-occurrences-status').textContent.includes('Nenhuma ocorrência'));
+ h.get('#overview-occurrences-refresh').listeners.click();respondOccurrences(h,{mailbox:'new@example.com',items:[],nextPageToken:null});await settle();assert.equal(h.get('#overview-occurrences-status').textContent,'Nenhuma ocorrência registrada.');
+ h.app.connectionChanged('general',null);assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');assert.ok(h.get('#overview-occurrences-status').textContent.includes('Conecte a conta GERAL'));
+});

@@ -183,7 +183,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrence','student-files','student-import'].includes(action))return reply(404,{error:'not_found'});
+    if(!['status','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))return reply(404,{error:'not_found'});
     const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
@@ -233,14 +233,14 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       setCookie(res,accountCookie(type),'',0);
     }
     try {
-      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrence','student-files','student-import'].includes(action)) {
+      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action)) {
         try {
-          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrence','student-files','student-import'].includes(action))?'general':'personal';
+          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import'].includes(action))?'general':'personal';
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
           const current=await account(type);
           if(!current)return reply(401,{error:'login_required'});
           const connection=await store.getConnection(current.user.id,type);
-          if(!connection || connection.email!==current.user.email || !(['students','occurrence'].includes(action)?true:action==='student-import'?connection.capabilities.driveRead:['maintenance','student-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
+          if(!connection || connection.email!==current.user.email || !(['students','occurrences','occurrence'].includes(action)?true:action==='student-import'?connection.capabilities.driveRead:['maintenance','student-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
           if(action==='institutional-labels'){
             if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox'].includes(key)))return reply(400,{error:'invalid_institutional'});
@@ -250,7 +250,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             try {await store.putConnection(current.user.id,type,{...connection,labelsAllowed:true,credentials:credentialsOf(client)});}catch{}
             return reply(200,{mailbox:current.user.email,labels:labelDetails.status,labelDetails});
           }
-          const result=['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
+          const result=['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrences','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
             ?await handleInstitutional({action,url,body,client,store,owner:current.user.id,email:current.user.email,canModify:connection.capabilities.manageInstitutional===true})
             :await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
           // Credential caching must not turn an already committed demand into a false failure.
