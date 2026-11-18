@@ -6,7 +6,7 @@ window.FarolTemporaryAccess=(()=>{
     temporary_confirmation_required:'Peça a Marcos para confirmar seu primeiro acesso presencialmente em Configurações.',
     temporary_invalid_credentials:'Não foi possível confirmar o acesso. Confira a senha e tente novamente.',
     temporary_rate_limit:'Muitas tentativas. Aguarde 15 minutos antes de tentar novamente.',
-    temporary_password_length:'Use uma senha com pelo menos 15 caracteres.',
+    temporary_password_length:'Use uma senha com pelo menos 6 caracteres.',
     temporary_password_confirmation:'As duas senhas precisam ser iguais.',
     login_required:'A conexão temporária terminou. Identifique-se novamente.',
     invalid_temporary_user:'Usuário indisponível. Atualize a lista em Voltar e selecione novamente.',
@@ -61,10 +61,10 @@ window.FarolTemporaryAccess=(()=>{
     get('confirmation').required=create||change;
     get('password-label').textContent=change?'Nova senha':'Senha';
     get('password').autocomplete=create||change?'new-password':'current-password';
-    get('password').minLength=create||change?15:1;
+    get('password').minLength=create||change?6:1;
     get('submit').textContent=create?'Criar senha':change?'Salvar senha':'Entrar';
     get('back').hidden=change;
-    message(create?(confirmed?'Primeiro acesso confirmado. Escolha uma senha com pelo menos 15 caracteres.':'Para criar sua senha, Marcos precisa confirmar seu primeiro acesso presencialmente.'):change?'Use pelo menos 15 caracteres na nova senha.':'');
+    message(create?(confirmed?'Primeiro acesso confirmado. Escolha uma senha com pelo menos 6 caracteres.':'Para criar sua senha, Marcos precisa confirmar seu primeiro acesso presencialmente.'):change?'Use pelo menos 6 caracteres na nova senha.':'');
     if(!dialog.open)dialog.showModal();
     (change?get('current'):get('password')).focus();
   }

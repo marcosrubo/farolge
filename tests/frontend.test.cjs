@@ -202,6 +202,7 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  get('users').value=profile.id;
  await get('choose').listeners.click();
  assert.equal(get('title').textContent,'Criar senha');
+ assert.equal(get('password').minLength,6);
  assert.equal(get('confirm-field').hidden,false);
  assert.match(get('feedback').textContent,/presencialmente/);
  window.FarolTemporaryAccess.enroll(profile);
@@ -230,6 +231,7 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  window.FarolTemporaryAccess.update(profile,true);
  get('change').listeners.click();
  assert.equal(get('current-field').hidden,false);
+ assert.equal(get('password').minLength,6);
  assert.equal(get('current').type,'password');
  togglePassword(true);
  assert.equal(get('current').type,'text');

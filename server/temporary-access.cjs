@@ -55,7 +55,7 @@ async function verifyPassword(password,stored){
 }
 function newPassword(body){
   const {password,confirmation}=body;
-  if(!acceptablePassword(password)||[...password].length<15||!password.trim())fail('temporary_password_length',400);
+  if(!acceptablePassword(password)||[...password].length<6)fail('temporary_password_length',400);
   if(password!==confirmation)fail('temporary_password_confirmation',400);
   return password;
 }

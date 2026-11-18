@@ -566,7 +566,7 @@ test('primeiro acesso presencial encerra somente as sessões locais e autoriza a
   profile.password_hash=password;return true;
  };
  const post=(action,body,cookie='',origin)=>h.request(action,{method:'POST',body,cookie,origin});
- const password='uma senha longa de teste';
+ const password='397421';
  const signUp={id,password,confirmation:password};
  const confirm={type:'general',id};
  assert.equal((await post('temporary-confirm',confirm,admin.general.cookie)).json().error,'admin_required');
@@ -585,6 +585,7 @@ test('primeiro acesso presencial encerra somente as sessões locais e autoriza a
  assert.equal((await post('temporary-activate',signUp,enrollment)).status,403);
  profiles.get(id).activation_expires_at=expires;
  assert.equal((await post('temporary-activate',{...signUp,confirmation:'outra senha'},enrollment)).json().error,'temporary_password_confirmation');
+ assert.equal((await post('temporary-activate',{id,password:'39742',confirmation:'39742'},enrollment)).json().error,'temporary_password_length');
  const activated=await post('temporary-activate',signUp,enrollment);
  const firstSession=extractCookie(activated,'__Host-farol-temporary');
  assert.ok(firstSession);
@@ -592,7 +593,7 @@ test('primeiro acesso presencial encerra somente as sessões locais e autoriza a
  assert.deepEqual(selected.json(),{id,name:'Adriana',hasPassword:true});
  assert.equal(activated.body.includes(password),false);
  assert.match(profiles.get(id).password_hash,/^scrypt-v1:/);
- assert.equal(profiles.get(id).password_hash.includes(password),false);
+ assert.notEqual(profiles.get(id).password_hash,password);
  assert.equal((await post('temporary-activate',signUp,enrollment)).status,403);
  const info=(await h.request('status',{cookie:firstSession})).json();
  assert.deepEqual(info.modules,['inspetores-monitores','bi-seed','inicio','radar']);
@@ -602,7 +603,7 @@ test('primeiro acesso presencial encerra somente as sessões locais e autoriza a
  const secondLogin=await post('temporary-login',{id,password});
  const secondSession=extractCookie(secondLogin,'__Host-farol-temporary');
  assert.ok(secondSession);
- const newPassword='outra senha longa de teste';
+ const newPassword='á🙂!  x';
  const changed=await post('temporary-password',{currentPassword:password,password:newPassword,confirmation:newPassword},secondSession);
  const session=extractCookie(changed,'__Host-farol-temporary');
  assert.ok(session);
