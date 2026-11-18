@@ -80,6 +80,10 @@ async function confirmEnrollment(store,id){
     fail('temporary_activation_unavailable',409);
   return token;
 }
+function canEnroll(profile,enrollment){
+  return profile.password_hash===null&&typeof enrollment==='string'&&SECRET_PATTERN.test(enrollment)
+    &&matches(digest(enrollment),profile.activation_hash)&&Date.parse(profile.activation_expires_at)>Date.now();
+}
 async function authenticateTemporary({action,store,body,current,request,key,enrollment}){
   if(action==='temporary-password'&&!current)fail('login_required',401);
   const id=current?.profile.id;
@@ -93,11 +97,14 @@ async function authenticateTemporary({action,store,body,current,request,key,enro
   if(!profile)fail('temporary_invalid_credentials',401);
 
   if(action==='temporary-activate'){
-    if(profile.password_hash||typeof enrollment!=='string'||!SECRET_PATTERN.test(enrollment)
-      ||!matches(digest(enrollment),profile.activation_hash)
-      ||!(Date.parse(profile.activation_expires_at)>Date.now()))fail('temporary_confirmation_required',403);
+    if(profile.password_hash)fail('temporary_password_already_set',409);
+    if(!canEnroll(profile,enrollment))fail('temporary_confirmation_required',403);
     const stored=await passwordHash(newPassword(body));
-    if(!await store.activateTemporaryUser(target,profile.activation_hash,stored))fail('temporary_invalid_credentials',401);
+    if(!await store.activateTemporaryUser(target,profile.activation_hash,stored)){
+      const latest=await store.getTemporaryUser(target);
+      if(latest?.password_hash)fail('temporary_password_already_set',409);
+      fail('temporary_confirmation_required',403);
+    }
     return {...profile,password_hash:stored};
   }
   const password=action==='temporary-password'?body.currentPassword:body.password;
@@ -111,5 +118,5 @@ async function authenticateTemporary({action,store,body,current,request,key,enro
 
 module.exports={
   ADMIN_EMAIL,SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,adminActions,temporaryActions,modulesFor,
-  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,authenticateTemporary
+  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,authenticateTemporary
 };

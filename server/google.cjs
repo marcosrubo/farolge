@@ -14,7 +14,7 @@ const {gmailFailure}=require('./gmail-errors.cjs');
 const {handleInstitutional}=require('./institutional.cjs');
 const {
   ADMIN_EMAIL:FIXED_AUTHORIZED_EMAIL,SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,adminActions,temporaryActions,modulesFor,
-  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,authenticateTemporary
+  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,authenticateTemporary
 }=require('./temporary-access.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
@@ -356,7 +356,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         if(!validUserId(id))return reply(400,{error:'invalid_temporary_user'});
         const profile=await store.getTemporaryUser(id);
         if(!profile)return reply(404,{error:'invalid_temporary_user'});
-        return reply(200,{id,name:profile.Nome,hasPassword:Boolean(profile.password_hash)});
+        if(profile.password_hash!==null&&!profile.password_hash)return reply(503,{error:'access_unavailable'});
+        return reply(200,{id,name:profile.Nome,hasPassword:profile.password_hash!==null,canCreatePassword:canEnroll(profile,jar[ENROLLMENT_COOKIE])});
       }
       if(action==='temporary-logout'){
         await clearTemporary();
@@ -591,7 +592,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     } catch(error) {
       // Do not log OAuth exceptions; they may contain credentials, codes or tokens.
       if(action==='callback')return finish('inicio','personal','unavailable');
-      if(['invalid_page','access_setup_required','access_unavailable','login_required','invalid_temporary_user','temporary_rate_limit','temporary_invalid_credentials','temporary_password_confirmation','temporary_password_length','temporary_confirmation_required'].includes(error.message))
+      if(['invalid_page','access_setup_required','access_unavailable','login_required','invalid_temporary_user','temporary_rate_limit','temporary_invalid_credentials','temporary_password_confirmation','temporary_password_length','temporary_confirmation_required','temporary_password_already_set'].includes(error.message))
         return reply(error.status||503,{error:error.message});
       return reply(503,{configured:true,error:'unavailable'});
     }

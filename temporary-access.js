@@ -3,7 +3,7 @@ window.FarolTemporaryAccess=(()=>{
   const get=name=>document.querySelector('#temporary-'+name);
   const dialog=get('dialog'),form=get('form');
   const errors={
-    temporary_confirmation_required:'Peça a Marcos para confirmar seu primeiro acesso presencialmente em Configurações.',
+    access_unavailable:'Não foi possível verificar se há uma senha cadastrada. Tente novamente.',
     temporary_invalid_credentials:'Não foi possível confirmar o acesso. Confira a senha e tente novamente.',
     temporary_rate_limit:'Muitas tentativas. Aguarde 15 minutos antes de tentar novamente.',
     temporary_password_length:'Use uma senha com pelo menos 6 caracteres.',
@@ -45,12 +45,12 @@ window.FarolTemporaryAccess=(()=>{
     get('exit').hidden=!user;
     get('identity').textContent=user?.name||'';
   }
-  function showForm(action,profile,confirmed=false){
+  function showForm(action,profile){
     selected=profile;
     mode=action;
     resetPasswordForm();
     const create=action==='activate',change=action==='password';
-    get('title').textContent=create?'Criar senha':change?'Alterar senha':'Confirmar identidade';
+    get('title').textContent=create?'Criar senha':change?'Alterar senha':'Entrar';
     get('person').textContent=profile.name;
     get('person').hidden=false;
     get('list-section').hidden=true;
@@ -60,11 +60,12 @@ window.FarolTemporaryAccess=(()=>{
     get('confirm-field').hidden=!create&&!change;
     get('confirmation').required=create||change;
     get('password-label').textContent=change?'Nova senha':'Senha';
+    get('confirmation-label').textContent=change?'Confirme a nova senha':'Confirme a senha';
     get('password').autocomplete=create||change?'new-password':'current-password';
     get('password').minLength=create||change?6:1;
     get('submit').textContent=create?'Criar senha':change?'Salvar senha':'Entrar';
     get('back').hidden=change;
-    message(create?(confirmed?'Primeiro acesso confirmado. Escolha uma senha com pelo menos 6 caracteres.':'Para criar sua senha, Marcos precisa confirmar seu primeiro acesso presencialmente.'):change?'Use pelo menos 6 caracteres na nova senha.':'');
+    message(create?'Primeiro acesso confirmado. Escolha uma senha com pelo menos 6 caracteres.':change?'Use pelo menos 6 caracteres na nova senha.':'');
     if(!dialog.open)dialog.showModal();
     (change?get('current'):get('password')).focus();
   }
@@ -100,11 +101,19 @@ window.FarolTemporaryAccess=(()=>{
     get('more').hidden=true;
     form.hidden=true;
     if(!dialog.open)dialog.showModal();
-    loadUsers();
+    return loadUsers();
   }
-  function enroll(profile){
-    showForm('activate',profile,true);
+  function firstAccessRequired(profile){
+    selected=null;mode='';
+    resetPasswordForm();
+    get('title').textContent='Primeiro acesso';
+    get('person').textContent=profile.name;
+    get('person').hidden=false;
+    get('list-section').hidden=false;
+    form.hidden=true;
+    message('O cadastro ainda está sem senha.');
   }
+  function enroll(profile){showForm('activate',profile);}
   get('open').addEventListener('click',showUsers);
   get('show-password').addEventListener('change',updatePasswordVisibility);
   get('back').addEventListener('click',showUsers);
@@ -117,11 +126,20 @@ window.FarolTemporaryAccess=(()=>{
     setBusy(true);message('Verificando cadastro…');
     try{
       const profile=await api('temporary-user?'+new URLSearchParams({id}));
-      if(ticket===requestId)showForm(profile.hasPassword?'login':'activate',profile);
+      if(ticket!==requestId)return;
+      if(profile.hasPassword===true)showForm('login',profile);
+      else if(profile.hasPassword!==false)message(errors.access_unavailable);
+      else if(profile.canCreatePassword===true)showForm('activate',profile);
+      else firstAccessRequired(profile);
     }catch(error){if(ticket===requestId)message(errors[error.message]||errors.unavailable);}
     finally{if(ticket===requestId)setBusy(false);}
   });
   get('change').addEventListener('click',()=>{if(user)showForm('password',user);});
+  for(const name of ['password','confirmation']){
+    get(name).addEventListener('input',()=>{
+      if(get('feedback').textContent===errors.temporary_password_confirmation)message('');
+    });
+  }
   get('exit').addEventListener('click',async()=>{
     get('exit').disabled=true;
     try{
@@ -136,16 +154,33 @@ window.FarolTemporaryAccess=(()=>{
     if(busy||!selected)return;
     const body={password:get('password').value};
     if(mode!=='password')body.id=selected.id;
-    if(mode!=='login')body.confirmation=get('confirmation').value;
+    if(mode!=='login'){
+      body.confirmation=get('confirmation').value;
+      if(body.password!==body.confirmation){
+        message(errors.temporary_password_confirmation);
+        get('confirmation').focus();
+        return;
+      }
+    }
     if(mode==='password')body.currentPassword=get('current').value;
     setBusy(true);message('Confirmando…');
     try{
-      await api('temporary-'+mode,body);
-      get('status').textContent=mode==='password'?'Senha atualizada.':'Conexão temporária ativa.';
+      const result=await api('temporary-'+mode,body);
+      if(result.signedIn!==true)throw new Error('unavailable');
+      get('status').textContent=mode==='password'?'Senha atualizada.':mode==='activate'?'Senha cadastrada. Conexão temporária ativa.':'Conexão temporária ativa.';
       dialog.close();
       await window.FarolRefreshConnections?.();
     }catch(error){
-      message(errors[error.message]||errors.unavailable);
+      if(mode==='activate'&&error.message==='temporary_password_already_set'){
+        showForm('login',selected);
+        message('A senha já está cadastrada. Digite-a para entrar.');
+      }else if(mode==='activate'&&error.message==='temporary_confirmation_required'){
+        const profile=selected;
+        await showUsers();
+        if(dialog.open)firstAccessRequired(profile);
+      }else{
+        message(errors[error.message]||errors.unavailable);
+      }
       if(error.message==='login_required')window.FarolRefreshConnections?.();
     }finally{setBusy(false);}
   });
