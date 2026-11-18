@@ -465,7 +465,8 @@ Geral e Pessoal aceitam somente a identidade Google verificada de `marcos.rubo@g
 | --- | --- |
 | Visão GERAL | Adriana e Vanusa |
 | Radar e análise de faltas | Adriana, Vanusa, Sandra, Jeisiani, Giovana e Luciani |
-| Inspetores/Monitores e BI SEED | Todos os usuários identificados |
+| Inspetores/Monitores | Todos os usuários com Conexão temporária ativa |
+| BI SEED | Acesso público, inclusive sem conexão |
 | Manutenção do Sistema, Configurações e Demandas INSTITUCIONAIS/PESSOAIS | Marcos, com Geral e Pessoal conectadas |
 
 A comparação usa o nome completo do cadastro, ignorando espaços nas extremidades e diferenças de maiúsculas. A Conexão temporária lista os nomes na ordem cadastrada e verifica se existe senha ao selecionar uma pessoa. O servidor aplica as mesmas regras a cada requisição. O acesso de Adriana e Vanusa à Visão GERAL inclui ocorrências e os totais por marcador das conexões Google autorizadas de Marcos. O conteúdo das mensagens permanece restrito às telas de Demandas.
@@ -480,6 +481,6 @@ A senha tem pelo menos 15 caracteres e é armazenada como hash scrypt com salt a
 
 ### Ativação na Vercel
 
-Antes de publicar, executar `database/temporary-access.sql` no Supabase exclusivo FAROL GE, após a migração `database/authorized-emails.sql` já usada para os cadastros. O script acrescenta os campos de autenticação à tabela existente e mantém suas linhas. Publicar a política revisão 24 junto com o código. Nenhum novo escopo Google ou variável Vercel é necessário.
+Antes de publicar, executar `database/temporary-access.sql` no Supabase exclusivo FAROL GE, após a migração `database/authorized-emails.sql` já usada para os cadastros. O script acrescenta os campos de autenticação à tabela existente e mantém suas linhas. Publicar a política revisão 25 junto com o código. Nenhum novo escopo Google ou variável Vercel é necessário.
 
 A conexão temporária consulta alunos, faltas e ocorrências do proprietário verificado `marcos.rubo@gmail.com`. Dados carregados antes por outra conta Geral continuam vinculados àquele proprietário. Com a conta de Marcos, conferir o acervo que aparece nos módulos e a carga de alunos/faltas. Validar na Vercel o primeiro acesso presencial, entrada posterior, alteração de senha, permissões de cada módulo, bloqueio por URL e perda de acesso administrativo ao desconectar uma das duas contas. SQL remoto e validação visual ficam pendentes nesta entrega.

@@ -32,8 +32,7 @@ function modulesFor(profile,connections={}){
   }
   const general=connections.general?.email===ADMIN_EMAIL;
   const personal=connections.personal?.email===ADMIN_EMAIL;
-  if(!general&&!personal)return [];
-  return ['inspetores-monitores','bi-seed',...(general&&personal?adminModules:[])];
+  return ['bi-seed',...(general&&personal?adminModules:[])];
 }
 
 function matches(a,b){

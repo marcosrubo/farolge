@@ -21,8 +21,8 @@
   <script src="student-import.js?v=20261117-25" defer></script>
   <script src="maintenance.js?v=20261117-25" defer></script>
   <script src="attendance-analysis.js?v=20261118-access1" defer></script>
-  <script src="temporary-access.js?v=20261118-access1" defer></script>
-  <script src="app.js?v=20261118-access1" defer></script>
+  <script src="temporary-access.js?v=20261118-access3" defer></script>
+  <script src="app.js?v=20261118-access2" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Ir para o conteúdo</a>
@@ -67,9 +67,10 @@
       </div>
     </div>
     <form id="temporary-form" hidden>
-      <label class="field" id="temporary-current-field" hidden>Senha atual<input class="form-control" id="temporary-current" type="password" autocomplete="current-password" maxlength="512"></label>
-      <label class="field"><span id="temporary-password-label">Senha</span><input class="form-control" id="temporary-password" type="password" autocomplete="current-password" maxlength="512" required></label>
-      <label class="field" id="temporary-confirm-field" hidden>Confirme a senha<input class="form-control" id="temporary-confirmation" type="password" autocomplete="new-password" maxlength="512"></label>
+      <label class="field" id="temporary-current-field" hidden>Senha atual<input class="form-control" id="temporary-current" type="password" autocomplete="current-password" spellcheck="false" autocapitalize="off" maxlength="512"></label>
+      <label class="field"><span id="temporary-password-label">Senha</span><input class="form-control" id="temporary-password" type="password" autocomplete="current-password" spellcheck="false" autocapitalize="off" maxlength="512" required></label>
+      <label class="field" id="temporary-confirm-field" hidden>Confirme a senha<input class="form-control" id="temporary-confirmation" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" maxlength="512"></label>
+      <p><label><input id="temporary-show-password" type="checkbox" aria-controls="temporary-current temporary-password temporary-confirmation"> Mostrar senha</label></p>
       <div class="button-row"><button type="submit" id="temporary-submit" class="button primary">Entrar</button><button type="button" id="temporary-back" class="button">Voltar</button></div>
     </form>
     <p id="temporary-feedback" role="status"></p>

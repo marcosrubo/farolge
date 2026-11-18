@@ -11,7 +11,7 @@ function harness(overrides={}){
  const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[];
  let labelFailure=null,labelRace=false;
  const labelError=status=>Object.assign(new Error('label_error'),{response:{status}});
- const store={async getAuthorizedEmail(email){return {email,Nome:'Pessoa fictícia',Escola:'Escola fictícia'};},async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
+ const store={async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
  let email='marcos.rubo@gmail.com',identityOverride={},scopes=null,options,issuedOptions,flowOptions=new Map(),calls=0,authUnavailable=false,nowLogout=[],gmailDenied=false,failedEmail=null,failedStatus=503,failedReason=null,revokedAuthEmail=null;
  const userFor=value=>{if(!users.has(value))users.set(value,{id:'user-'+digest(value).slice(0,16),email:value,identities:[{provider:'google',identity_data:{sub:'sub-'+value}}]});return users.get(value);};
  const auth={async signIn(token,access,nonce){assert.equal(digest(nonce),issuedOptions.nonce);assert.equal(token,'id:'+email);const user=userFor(email);return {user,access_token:'auth:'+email,refresh_token:'refresh:'+email,expires_in:3600};},async user(token){if(authUnavailable || token.slice(5)===revokedAuthEmail)throw new Error('login_required');return userFor(token.slice(5));},async refresh(token){const value=token.slice(8);return {access_token:'auth:'+value,refresh_token:token,expires_in:3600};},async logout(token){nowLogout.push(token);}};
@@ -458,35 +458,33 @@ test('Manutenção usa somente Geral e não exige Gmail, exigindo também a sess
  assert.equal((await h.request('maintenance',{cookie:old.cookie,query:'?mailbox='+GENERAL_EMAIL})).status,403);
 });
 
-test('Alunos e ocorrências exigem Geral própria; gravação exige CSRF e rejeita identidade forjada',async()=>{
- const h=harness();h.store.getStudents=async()=>[];
- assert.equal((await h.request('students',{query:'?mailbox='+GENERAL_EMAIL})).status,401);
- const personal=await h.login('marcos.rubo@gmail.com');
- assert.equal((await h.request('students',{cookie:personal.cookie,query:'?mailbox=marcos.rubo@gmail.com'})).status,401);
- h.setScopes('openid email profile');const general=await h.login(GENERAL_EMAIL,personal.cookie,'general');
- const list=await h.request('students',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(list.status,200);assert.deepEqual(list.json().students,[]);
- assert.equal((await h.request('students',{cookie:general.cookie,query:'?mailbox=other@example.com'})).status,409);
+test('Inspetores exige conexão temporária mesmo com ambas as conexões Google de Marcos',async()=>{
+ const h=harness(),{general,personal,cookie}=await h.admin();
+ const query='?mailbox='+GENERAL_EMAIL;
  const body={type:'general',mailbox:GENERAL_EMAIL,studentId:'a'.repeat(64),id:'12345678-1234-4234-8234-123456789abc',ocorrencia:'Fato registrado.'};
- assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie,body,origin:'https://elsewhere.invalid'})).status,403);
- assert.equal((await h.request('occurrence',{method:'GET',cookie:general.cookie})).status,405);
- assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie+'; '+personal.cookie,body:{...body,Nome:'forged'}})).status,400);
- assert.equal((await h.request('student-import',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:GENERAL_EMAIL}})).status,403);
- assert.equal((await h.request('student-import',{method:'GET',cookie:general.cookie})).status,405);
+ h.store.getStudents=async()=>assert.fail('leitura sem conexão temporária');
+ h.store.saveOccurrence=async()=>assert.fail('gravação sem conexão temporária');
+ for(const credentials of ['',general.cookie,personal.cookie,cookie]){
+  const status=(await h.request('status',{cookie:credentials})).json();
+  assert.ok(status.modules.includes('bi-seed'));
+  assert.equal(status.modules.includes('inspetores-monitores'),false);
+  assert.equal((await h.request('students',{cookie:credentials,query})).json().error,'module_forbidden');
+  assert.equal((await h.request('occurrence',{cookie:credentials,method:'POST',body})).json().error,'module_forbidden');
+ }
+ assert.equal((await h.request('occurrence',{method:'POST',cookie,body,origin:'https://elsewhere.invalid'})).status,403);
+ assert.equal((await h.request('occurrence',{method:'GET',cookie})).status,405);
 });
 
-test('carga devolve etapa segura de erro Google; cadastro devolve falha específica de armazenamento',async()=>{
+test('carga devolve etapa segura de erro Google',async()=>{
  const h=harness(),general=await h.admin();
  h.failAccount(GENERAL_EMAIL,503);
  const result=await h.request('student-import',{method:'POST',cookie:general.cookie,body:{type:'general',mailbox:GENERAL_EMAIL,fileId:'pdf-1',version:'1',folder:'lista'}});
  assert.equal(result.status,503);assert.deepEqual(result.json(),{error:'import_folder_failed'});assert.ok(!result.body.includes('provider_error'));
- h.failAccount(null);h.store.getStudents=async()=>{throw Object.assign(new Error('storage_access_denied'),{status:403});};
- const list=await h.request('students',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL});assert.equal(list.status,403);assert.deepEqual(list.json(),{error:'storage_access_denied'});
 });
 
 
 for(const type of ['general','personal'])test('e-mail mesmo cadastrado é bloqueado em '+type+' após identidade Google, antes de Auth, marcadores e sessão',async()=>{
  const h=harness(),attempt='denied@example.com';h.setEmail(attempt);
- h.store.getAuthorizedEmail=async()=>({email:attempt,Nome:'Usuário cadastrado'});
  const flow=await h.start(type),result=await h.callback(flow);
  assert.match(result.headers.location,/connection=access_denied/);assert.ok(!result.headers.location.includes(attempt));
  assert.equal(h.users.size,0);assert.equal(h.connections.size,0);assert.equal(h.labelRequests.length,0);assert.equal(sessionCookie(result,type),undefined);
@@ -506,7 +504,7 @@ test('ticket de negativa expirado não expõe e-mail; falta da conexão Pessoal 
 });
 
 for(const type of ['general','personal'])test('exceção fixa '+type+' autoriza Marcos com Google validado sem consultar a lista',async()=>{
- const h=harness();h.store.getAuthorizedEmail=async()=>{throw new Error('access_unavailable');};
+ const h=harness();
  const login=await h.login('marcos.rubo@gmail.com','',type);assert.ok(login.cookie);
  const status=(await h.request('status',{cookie:login.cookie})).json();assert.equal(status.connections[type].email,'marcos.rubo@gmail.com');
 });
@@ -526,19 +524,6 @@ test('cadastro de e-mails exige as duas conexões e CSRF, sem precisar de Gmail'
  assert.equal((await h.request('authorized-email',{method:'POST',cookie,body,origin:'https://elsewhere.invalid'})).status,403);assert.equal(changes.length,0);
  assert.equal((await h.request('authorized-email',{method:'POST',cookie,body})).status,200);assert.equal(changes[0].Nome,'Pessoa');assert.equal(changes[0].email,null);
 });
-test('ocorrência grava autor Pessoal validado com nome do cadastro; requer Pessoal e rejeita autoria forjada',async()=>{
- const h=harness();const general=await h.login(GENERAL_EMAIL,'','general');const personal=await h.login('marcos.rubo@gmail.com',general.cookie,'personal');
- h.store.getStudent=async()=>({id:'a'.repeat(64),CGM:'000123',Nome:'Aluno fictício',Escola:'Escola'});let recorded;
- h.store.getAuthorizedEmail=async email=>({email,Nome:'Monitor cadastrado',Escola:'Escola'});h.store.saveOccurrence=async(o,id,v)=>{recorded=v;return v;};
- const body={type:'general',mailbox:GENERAL_EMAIL,authorMailbox:'marcos.rubo@gmail.com',studentId:'a'.repeat(64),id:'12345678-1234-4234-8234-123456789abc',ocorrencia:'Fato.'};
- assert.equal((await h.request('occurrence',{method:'POST',cookie:general.cookie,body})).json().error,'author_required');
- const cookie=general.cookie+'; '+personal.cookie;assert.equal((await h.request('occurrence',{method:'POST',cookie,body})).status,200);assert.equal(recorded.EmailAutor,'marcos.rubo@gmail.com');assert.equal(recorded.NomeAutor,'Monitor cadastrado');
- assert.equal((await h.request('occurrence',{method:'POST',cookie,body:{...body,NomeAutor:'Forjado'}})).status,400);
- assert.equal((await h.request('occurrence',{method:'POST',cookie,body:{...body,authorMailbox:'other@example.com'}})).json().error,'author_changed');
-
-});
-
-
 test('carga de faltas exige as duas conexões, exigem drive.readonly para POST e preservam CSRF',async()=>{
  const h=harness(),g=await h.admin();
  h.store.attendanceLoadedFiles=async(o,names)=>{assert.equal(o,h.userFor(GENERAL_EMAIL).id);return new Set(names);};
@@ -670,12 +655,15 @@ test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API
  h.store.getStudent=async o=>{assert.equal(o,owner);return {id:'a'.repeat(64),Escola:'Escola',CGM:'123',Nome:'Aluno'};};
  h.store.saveOccurrence=async(o,id,row)=>{assert.equal(o,owner);saved=row;return row;};
  const body={type:'general',mailbox:GENERAL_EMAIL,authorId:temporaryId,studentId:'a'.repeat(64),id:temporaryId,ocorrencia:'Registro fictício'};
+ assert.equal((await h.request('occurrence',{method:'POST',cookie,body:{...body,NomeAutor:'forjado'}})).status,400);
  assert.equal((await h.request('occurrence',{method:'POST',cookie,body:{...body,authorId:'forjado'}})).json().error,'author_changed');
  assert.equal((await h.request('occurrence',{method:'POST',cookie,body})).status,200);
  assert.equal(saved.NomeAutor,'Pessoa fictícia');
  assert.equal(saved.EmailAutor,null);
+ h.store.getStudents=async()=>{throw Object.assign(new Error('storage_access_denied'),{status:403});};
+ assert.deepEqual((await h.request('students',{cookie,query})).json(),{error:'storage_access_denied'});
  profile=null;
- assert.equal((await h.request('students',{cookie,query})).status,401);
+ assert.equal((await h.request('students',{cookie,query})).json().error,'module_forbidden');
 });
 
 test('listagem pública segue a ordem e expõe somente ID e nome',async()=>{

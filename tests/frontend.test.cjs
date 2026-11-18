@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const adminEmail='marcos.rubo@gmail.com';
-const adminModules=['inspetores-monitores','bi-seed','manutencao-sistema','configuracoes','institucionais','pessoais'];
+const adminModules=['bi-seed','manutencao-sistema','configuracoes','institucionais','pessoais'];
 function ui(status={configured:false,connections:{general:null,personal:null}},search='',modules={}){
  const nodes=new Map();
  const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;},close(){this.open=false;}});
@@ -36,9 +36,10 @@ for(const mode of ['general','personal','both'])test('conexões verificadas: '+m
   general:mode!=='personal'?{email:adminEmail,gmail:true,drive:true}:null,
   personal:mode!=='general'?{email:adminEmail,gmail:true,drive:false}:null
  };
- const h=ui({configured:true,mode,connections,modules:mode==='both'?adminModules:adminModules.slice(0,2)});await settle();
+ const h=ui({configured:true,mode,connections,modules:mode==='both'?adminModules:['bi-seed']});await settle();
  assert.equal(h.get('#main').hidden,false);
  assert.ok(h.get('#main').innerHTML.includes('Módulo indisponível'));
+ assert.ok(!h.get('#navigation').innerHTML.includes('#inspetores-monitores'));
  for(const type of ['general','personal']){
   assert.equal(h.get('#email-'+type+'-status').textContent.includes('NÃO conectado'),!connections[type]);
   assert.equal(h.get('[data-disconnect-email="'+type+'"]').hidden,!connections[type]);
@@ -62,13 +63,16 @@ test('Geral indica a conta exclusiva de Marcos',async()=>{
 test('configuração ausente mantém ambas indisponíveis sem simular conexão',async()=>{
  const h=ui();await settle();
  assert.ok(h.connect.every(button=>button.disabled));assert.equal(h.get('#main').hidden,false);
+ h.context.location.hash='#bi-seed';h.window.listeners.hashchange();
+ assert.ok(h.get('#main').innerHTML.includes('indicadores/resumos do BI'));
 });
 test('sem identificação, hashes diretos não abrem módulos restritos',async()=>{
  const h=ui({configured:true,connections:{general:null,personal:null},modules:[]});await settle();
- for(const route of ['inicio','radar','analise-faltas','institucionais','pessoais','bi-seed','configuracoes']){
+ for(const route of ['inicio','radar','analise-faltas','institucionais','pessoais','inspetores-monitores','configuracoes']){
   h.context.location.hash='#'+route;h.window.listeners.hashchange();
-  assert.ok(h.get('#main').innerHTML.includes('Conexão temporária'));
-  assert.equal(h.get('#navigation').innerHTML,'');
+  assert.ok(h.get('#main').innerHTML.includes('Módulo indisponível'));
+  assert.ok(h.get('#navigation').innerHTML.includes('href="#bi-seed"'));
+  assert.equal((h.get('#navigation').innerHTML.match(/<a /g)||[]).length,1);
  }
 });
 test('desconectar Geral preserva Pessoal e a explicação do módulo',async()=>{
@@ -174,7 +178,14 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
   return item;
  };
  const get=name=>{if(!nodes.has(name))nodes.set(name,node());return nodes.get(name);};
- get('form').reset=()=>{for(const name of ['password','confirmation','current'])get(name).value='';};
+ get('form').reset=()=>{
+  for(const name of ['password','confirmation','current'])get(name).value='';
+  get('show-password').checked=false;
+ };
+ const togglePassword=checked=>{
+  get('show-password').checked=checked;
+  get('show-password').listeners.change();
+ };
  const window={reloaded:0,FarolRefreshConnections(){this.reloaded++;}};
  const profile={id:'12345678-1234-4234-8234-123456789abc',name:'Adriana'};
  let hasPassword=false;
@@ -197,19 +208,33 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  assert.match(get('feedback').textContent,/confirmado/);
  get('password').value='uma senha longa de teste';
  get('confirmation').value=get('password').value;
+ assert.equal(get('password').type,'password');
+ togglePassword(true);
+ assert.equal(get('password').type,'text');
+ assert.equal(get('confirmation').type,'text');
+ assert.equal(get('password').value,'uma senha longa de teste');
  await get('form').listeners.submit({preventDefault(){}});
  assert.ok(requests.at(-1).url.endsWith('/temporary-activate'));
  assert.equal(JSON.parse(requests.at(-1).opts.body).id,profile.id);
  assert.equal(get('password').value,'');
+ assert.equal(get('password').type,'password');
+ assert.equal(get('show-password').checked,false);
  assert.equal(window.reloaded,1);
  hasPassword=true;
  get('open').listeners.click();await settle();get('users').value=profile.id;
  await get('choose').listeners.click();
  assert.equal(get('title').textContent,'Confirmar identidade');
  assert.equal(get('confirm-field').hidden,true);
+ togglePassword(true);
+ assert.equal(get('password').type,'text');
  window.FarolTemporaryAccess.update(profile,true);
  get('change').listeners.click();
  assert.equal(get('current-field').hidden,false);
+ assert.equal(get('current').type,'password');
+ togglePassword(true);
+ assert.equal(get('current').type,'text');
+ togglePassword(false);
+ assert.equal(get('current').type,'password');
  get('current').value='uma senha longa de teste';
  get('password').value='outra senha longa de teste';
  get('confirmation').value=get('password').value;

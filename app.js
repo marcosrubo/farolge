@@ -20,7 +20,7 @@ const modules = [
   {id:'manutencao-sistema',icon:'manutencao',label:'Manutenção do Sistema'},
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
-let allowedModules=new Set(),temporaryUser=null;
+let allowedModules=new Set(['bi-seed']),temporaryUser=null;
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 
 function updateSchool(){
@@ -98,7 +98,7 @@ function render(){
   const main=document.querySelector('#main');
   if(!selected){
     main.classList.toggle('radar-workspace',false);
-    main.innerHTML=available.length?'<h1>Módulo indisponível</h1><p>Escolha um módulo disponível no menu.</p>':'<h1>FAROL GE</h1><p>Use Conexão temporária para se identificar.</p>';
+    main.innerHTML='<h1>Módulo indisponível</h1><p>Escolha um módulo disponível no menu.</p>';
     return;
   }
   main.classList.toggle('radar-workspace',selected.id==='radar'&&!analysis);
@@ -156,8 +156,10 @@ function setupEmailConnections(){
     document.querySelector('[data-connect-email="'+type+'"]').textContent='Conectar';
   }
   function updateAccess(result){
-    const next=new Set(Array.isArray(result?.modules)?result.modules:[]);
     const user=result?.temporary||null;
+    const next=new Set(Array.isArray(result?.modules)?result.modules:[]);
+    next.add('bi-seed');
+    if(!user)next.delete('inspetores-monitores');
     const changed=next.size!==allowedModules.size||[...next].some(id=>!allowedModules.has(id))||user?.id!==temporaryUser?.id;
     allowedModules=next;temporaryUser=user;
     window.FarolTemporaryAccess?.update(user,configured);
@@ -205,13 +207,13 @@ function setupEmailConnections(){
       if(version!==statusVersion)return;
       configured=result.configured===true;
       updateAccess(result);
-      const school=result.temporary?result.school:result.connections?.general;
+      const school=result.temporary?result.school:null;
       for(const type of types)activeEmails[type]=configured?result.connections?.[type]?.email||null:null;
       window.FarolDemands?.connectionChanged(configured?result.connections?.personal||null:null);
       window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
       window.FarolMaintenance?.connectionChanged(configured&&allowedModules.has('manutencao-sistema')?result.connections?.general||null:null);
-      window.FarolStudents?.connectionChanged(configured?school||null:null);
-      window.FarolStudents?.personalConnectionChanged?.(configured?(result.temporary||result.connections?.personal)||null:null);
+      window.FarolStudents?.connectionChanged(configured&&allowedModules.has('inspetores-monitores')?school||null:null);
+      window.FarolStudents?.personalConnectionChanged?.(configured&&allowedModules.has('inspetores-monitores')?result.temporary||null:null);
       window.FarolAuthorizedUsers?.connectionChanged(configured&&allowedModules.has('configuracoes')?result.connections?.general||null:null);
       window.FarolAttendanceAnalysis?.connectionChanged(configured&&result.temporary&&allowedModules.has('radar')?school||null:null);
       for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.overview?.[type]||null:null,configured&&allowedModules.has('inicio')?school||null:null);

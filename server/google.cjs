@@ -31,12 +31,12 @@ const TYPES = ['general','personal'];
 const personalActions=new Set(['board','thread','demand','inbox','classified','classify']);
 const driveReadActions=new Set(['student-import','attendance-import']);
 const driveMetadataActions=new Set(['maintenance','student-files','attendance-files']);
-const databaseActions=new Set(['students','occurrence','authorized-emails','authorized-email','temporary-confirm']);
+const databaseActions=new Set(['authorized-emails','authorized-email','temporary-confirm']);
 const actionMailbox=action=>personalActions.has(action)?'personal':'general';
 const TTL = 30 * 24 * 3600;
 const random = () => crypto.randomBytes(32).toString('base64url');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
-const routeOf = value => ROUTES.has(value) ? value : 'inspetores-monitores';
+const routeOf = value => ROUTES.has(value) ? value : 'bi-seed';
 const cookieName = (kind,type) => `__Host-farol-${kind}-${type}`;
 const accountCookie = type => cookieName('account',type);
 const accountKey = (type,id) => hash(`account.${type}.${id}`);
@@ -95,10 +95,6 @@ function makeStore(config,fetcher=fetch) {
   return {
     ...makeStudentStore(config,fetcher,{seal,unseal}),
     ...makeAttendanceStore(config,fetcher,{seal,unseal}),
-    async getAuthorizedEmail(email){
-      const rows=await call('EmailsAutorizados','GET','email=eq.'+encodeURIComponent(emailOf(email))+'&select=email,Nome,Escola&limit=1',null,'return=representation');
-      return rows[0]||null;
-    },
     async listAuthorizedEmails(pageToken='',temporary=false){
       let after='';
       if(pageToken){
@@ -272,7 +268,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       &&!adminActions.has(action)&&!temporaryActions.has(action))return reply(404,{error:'not_found'});
     const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
-    if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
+    if(!config)return reply(action==='status'?200:503,{
+      configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured',
+      ...(action==='status'?{modules:modulesFor(null)}:{})
+    });
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
     const jar=cookies(req),store=storeFactory(config),auth=authFactory(config);
     const finish=(route,type,result)=>{res.statusCode=303;res.setHeader('Location',`${config.origin}/?connection=${result}&mailbox=${type}#${routeOf(route)}`);res.end();};
@@ -285,11 +284,6 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     }
     async function authorizeEmail(email){
       if(emailOf(email)!==FIXED_AUTHORIZED_EMAIL)throw Object.assign(new Error('access_denied'),{email});
-    }
-    async function authorizedName(email){
-      let profile;
-      try{profile=await store.getAuthorizedEmail(email);}catch(error){if(email!==FIXED_AUTHORIZED_EMAIL)throw error;}
-      return (typeof profile?.Nome==='string'?profile.Nome.trim():'')||(email===FIXED_AUTHORIZED_EMAIL?'Marcos Rubo':'');
     }
     async function account(type,checkAccess=true) {
       const name=accountCookie(type),id=jar[name];
@@ -416,13 +410,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             const actor={id:temporary.profile.id,name:temporary.profile.Nome,email:null};
             return reply(200,await handleStudents({action,url,body,store,owner,email,actor}));
           }
-          if(['overview','occurrences','attendance-analysis'].includes(action))return reply(403,{error:'module_forbidden'});
-          const type=actionMailbox(action),restricted=adminActions.has(action);
-          const admin=restricted?await verifyAdmin():null;
-          if(restricted&&!admin)return reply(403,{error:'admin_required'});
-          const current=admin?admin[type]:await account(type);
-          if(!current)return reply(401,{error:'login_required'});
-          const connection=admin?admin.connections[type]:await store.getConnection(current.user.id,type);
+          if(temporaryActions.has(action))return reply(403,{error:'module_forbidden'});
+          const type=actionMailbox(action),admin=await verifyAdmin();
+          if(!admin)return reply(403,{error:'admin_required'});
+          const current=admin[type],connection=admin.connections[type];
           const capability=driveReadActions.has(action)?'driveRead':driveMetadataActions.has(action)?'driveMetadata':'gmail';
           if(connection?.email!==current.user.email||(!databaseActions.has(action)&&!connection.capabilities[capability]))return reply(403,{error:'missing_scope'});
           if(action==='temporary-confirm'){
@@ -441,18 +432,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             try {await store.putConnection(current.user.id,type,{...connection,labelsAllowed:true,credentials:credentialsOf(client)});}catch{}
             return reply(200,{mailbox:current.user.email,labels:labelDetails.status,labelDetails});
           }
-          let actor;
-          if(action==='occurrence'){
-            let personal;
-            try{personal=await account('personal');}catch(error){error.type='personal';throw error;}
-            if(!personal)return reply(401,{error:'author_required'});
-            const name=await authorizedName(personal.user.email);
-            if(!name)return reply(409,{error:'author_profile_required'});
-            actor={email:personal.user.email,name};
-          }
           const context={action,url,body,store,client,owner:current.user.id,email:current.user.email};
           if(action.startsWith('authorized-'))return reply(200,await handleAuthorizedUsers(context));
-          if(['students','occurrence'].includes(action))return reply(200,await handleStudents({...context,actor}));
           const result=action.startsWith('attendance-')?await handleAttendanceImport(context)
             :action.startsWith('student-')?await handleStudentImport({...context,canRead:connection.capabilities.driveRead===true})
             :action==='maintenance'?await handleMaintenance(context)
@@ -594,7 +575,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const labels=type==='general'?labelDetails.status:await mailboxLabels(client,connection.labelsAllowed===true);
           connection.credentials=credentialsOf(client);
           await store.putConnection(current.user.id,type,connection);
-          connections[type]={email:connection.email,...(type==='personal'?{name:await authorizedName(connection.email)}:{}),...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};
+          connections[type]={email:connection.email,...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};
         } catch(error) {
           if(error.message==='access_denied'){errors[type]='access_denied';denied[type]=error.email;continue;}
           if(['access_setup_required','access_unavailable'].includes(error.message)){errors[type]=error.message;continue;}

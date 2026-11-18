@@ -29,6 +29,14 @@ window.FarolTemporaryAccess=(()=>{
     for(const name of ['submit','back','close','more','choose'])get(name).disabled=value;
   }
   function message(text){get('feedback').textContent=text;}
+  function updatePasswordVisibility(){
+    const type=get('show-password').checked?'text':'password';
+    for(const name of ['current','password','confirmation'])get(name).type=type;
+  }
+  function resetPasswordForm(){
+    form.reset();
+    updatePasswordVisibility();
+  }
   function update(value,configured){
     user=value;
     get('open').disabled=!configured;
@@ -40,7 +48,7 @@ window.FarolTemporaryAccess=(()=>{
   function showForm(action,profile,confirmed=false){
     selected=profile;
     mode=action;
-    form.reset();
+    resetPasswordForm();
     const create=action==='activate',change=action==='password';
     get('title').textContent=create?'Criar senha':change?'Alterar senha':'Confirmar identidade';
     get('person').textContent=profile.name;
@@ -84,7 +92,7 @@ window.FarolTemporaryAccess=(()=>{
     }
   }
   function showUsers(){
-    mode='';selected=null;next=null;form.reset();
+    mode='';selected=null;next=null;resetPasswordForm();
     get('title').textContent='Quem é você?';
     get('person').hidden=true;
     get('list-section').hidden=false;
@@ -98,6 +106,7 @@ window.FarolTemporaryAccess=(()=>{
     showForm('activate',profile,true);
   }
   get('open').addEventListener('click',showUsers);
+  get('show-password').addEventListener('change',updatePasswordVisibility);
   get('back').addEventListener('click',showUsers);
   get('more').addEventListener('click',()=>loadUsers(true));
   get('users').addEventListener('change',()=>{get('choose').disabled=busy||!get('users').value;});
@@ -142,6 +151,6 @@ window.FarolTemporaryAccess=(()=>{
   });
   get('close').addEventListener('click',()=>dialog.close());
   dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
-  dialog.addEventListener('close',()=>{requestId++;form.reset();setBusy(false);});
+  dialog.addEventListener('close',()=>{requestId++;resetPasswordForm();setBusy(false);});
   return {update,enroll};
 })();
