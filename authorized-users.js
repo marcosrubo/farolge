@@ -8,6 +8,8 @@ window.FarolAuthorizedUsers=(()=>{
     email_exists:'Este e-mail já está cadastrado.',
     invalid_authorized_email:'Preencha Escola, Nome e Função. Se informar e-mail e ordem, use um endereço válido e um número inteiro positivo.',
     not_found:'Este cadastro não foi encontrado. Atualize a lista.',
+    admin_required:'Conecte Geral e Pessoal com a conta de Marcos para administrar os cadastros.',
+    temporary_activation_unavailable:'O cadastro já tem senha ou foi removido. Atualize a lista.',
     login_required:'Conecte novamente a conta GERAL.',
     account_changed:'A conta GERAL mudou. Atualize o cadastro.',
     unavailable:'Não foi possível concluir. Atualize o cadastro para conferir o resultado.'
@@ -33,12 +35,13 @@ window.FarolAuthorizedUsers=(()=>{
     if(!root)return;
     const disabled=busy||!connection;
     field('identity').textContent=connection?.email||'Conta GERAL não conectada';
-    field('status').textContent=!connection?'Conecte uma conta GERAL autorizada para administrar os cadastros.':busy?'Processando cadastro…':error?(messages[error]||messages.unavailable):feedback||(!rows.length?'Nenhum usuário cadastrado.':'');
+    field('status').textContent=!connection?'Conecte Geral e Pessoal com a conta de Marcos para administrar os cadastros.':busy?'Processando cadastro…':error?(messages[error]||messages.unavailable):feedback||(!rows.length?'Nenhum usuário cadastrado.':'');
     field('rows').innerHTML=rows.map(row=>`<tr>
       <td>${escape(row.Escola)}</td><td>${escape(row.Nome)}</td><td>${escape(row.Funcao??'A preencher')}</td>
       <td>${escape(row.email??'—')}</td><td>${escape(row.Ordem??'—')}</td>
       <td><button type="button" class="button" data-authorized-action="edit" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>Editar</button>
-      <button type="button" class="button" data-authorized-action="exclude" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>EXCLUIR</button></td>
+      <button type="button" class="button" data-authorized-action="exclude" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>EXCLUIR</button>
+      ${row.Funcao&&!row.hasPassword?`<button type="button" class="button" data-authorized-action="enroll" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>Confirmar primeiro acesso</button>`:''}</td>
     </tr>`).join('');
     field('include').textContent=editing?'SALVAR':'INCLUIR';
     field('cancel-edit').hidden=!editing;
@@ -109,6 +112,24 @@ window.FarolAuthorizedUsers=(()=>{
       if(connection)load();
     }
   }
+  async function enroll(row){
+    if(!window.confirm('Confirma presencialmente que '+row.Nome+' vai criar a própria senha? As sessões do FAROL vinculadas ao Google serão encerradas neste navegador.'))return;
+    const ticket=version;
+    busy=true;error='';feedback='';draw();
+    try {
+      const response=await fetch('/api/google/temporary-confirm',{
+        method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json','X-Farol-Request':'1'},
+        body:JSON.stringify({type:'general',id:row.id})
+      });
+      const result=await response.json();
+      window.FarolAccessDenied?.(result);
+      if(!response.ok||result.confirmed!==true)throw new Error(result.error||'unavailable');
+      if(ticket===version)window.FarolTemporaryAccess?.enroll({id:row.id,name:row.Nome});
+      await window.FarolRefreshConnections?.();
+    }catch(e){if(ticket===version)error=e.message;}
+    finally{if(ticket===version){busy=false;draw();}}
+  }
   function mount(element){
     root=element;clear();
     root.innerHTML=`
@@ -149,15 +170,14 @@ window.FarolAuthorizedUsers=(()=>{
       if(!button||busy||!connection)return;
       const row=rows.find(row=>row.id===button.dataset.userId);
       if(!row)return;
+      if(button.dataset.authorizedAction==='enroll'){enroll(row);return;}
       if(button.dataset.authorizedAction==='edit'){
         fillForm(row);error='';feedback='';draw();field('school').focus();
         return;
       }
       selected=row;
       field('delete-email').textContent=row.email?`${row.Nome} (${row.email})`:row.Nome;
-      field('delete-note').textContent=row.email==='marcos.rubo@gmail.com'
-        ?'A liberação fixa deste e-mail continua ativa após excluir o cadastro.'
-        :row.email?'A exclusão retira a liberação de acesso deste e-mail e preserva os dados e ocorrências já registrados.':'A exclusão preserva os dados e ocorrências já registrados.';
+      field('delete-note').textContent='A exclusão encerra a conexão temporária deste cadastro e preserva as ocorrências já registradas.';
       field('delete-dialog').showModal();
     });
     field('delete-confirm').addEventListener('click',()=>{if(selected)mutate('exclude',selected.id);});

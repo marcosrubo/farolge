@@ -12,6 +12,10 @@ const {handleMaintenance}=require('./maintenance.cjs');
 const {handleOverview}=require('./overview.cjs');
 const {gmailFailure}=require('./gmail-errors.cjs');
 const {handleInstitutional}=require('./institutional.cjs');
+const {
+  ADMIN_EMAIL:FIXED_AUTHORIZED_EMAIL,SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,adminActions,temporaryActions,modulesFor,
+  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,authenticateTemporary
+}=require('./temporary-access.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
@@ -24,12 +28,15 @@ const DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.rea
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
 const ROUTES = new Set(['inicio','analise-faltas','radar','institucionais','pessoais','bi-seed','inspetores-monitores','manutencao-sistema','configuracoes']);
 const TYPES = ['general','personal'];
-// Exceção fixa solicitada por Marcos; só após identidade Google verificada.
-const FIXED_AUTHORIZED_EMAIL = 'marcos.rubo@gmail.com';
+const personalActions=new Set(['board','thread','demand','inbox','classified','classify']);
+const driveReadActions=new Set(['student-import','attendance-import']);
+const driveMetadataActions=new Set(['maintenance','student-files','attendance-files']);
+const databaseActions=new Set(['students','occurrence','authorized-emails','authorized-email','temporary-confirm']);
+const actionMailbox=action=>personalActions.has(action)?'personal':'general';
 const TTL = 30 * 24 * 3600;
 const random = () => crypto.randomBytes(32).toString('base64url');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
-const routeOf = value => ROUTES.has(value) ? value : 'inicio';
+const routeOf = value => ROUTES.has(value) ? value : 'inspetores-monitores';
 const cookieName = (kind,type) => `__Host-farol-${kind}-${type}`;
 const accountCookie = type => cookieName('account',type);
 const accountKey = (type,id) => hash(`account.${type}.${id}`);
@@ -88,18 +95,11 @@ function makeStore(config,fetcher=fetch) {
   return {
     ...makeStudentStore(config,fetcher,{seal,unseal}),
     ...makeAttendanceStore(config,fetcher,{seal,unseal}),
-    async isEmailAuthorized(email){
-      try{
-        const rows=await call('EmailsAutorizados','GET','email=eq.'+encodeURIComponent(emailOf(email))+'&select=email&limit=1',null,'return=representation');
-        if(!Array.isArray(rows))throw new Error('access_unavailable');
-        return rows.some(row=>row.email===emailOf(email));
-      }catch(error){if(error.message==='access_setup_required')throw error;throw new Error('access_unavailable');}
-    },
     async getAuthorizedEmail(email){
       const rows=await call('EmailsAutorizados','GET','email=eq.'+encodeURIComponent(emailOf(email))+'&select=email,Nome,Escola&limit=1',null,'return=representation');
       return rows[0]||null;
     },
-    async listAuthorizedEmails(pageToken=''){
+    async listAuthorizedEmails(pageToken='',temporary=false){
       let after='';
       if(pageToken){
         const invalidPage=()=>Object.assign(new Error('invalid_page'),{status:400});
@@ -113,10 +113,14 @@ function makeStore(config,fetcher=fetch) {
           ?'&Ordem=is.null&id=gt.'+id
           :'&or='+encodeURIComponent(`(Ordem.gt.${order},and(Ordem.eq.${order},id.gt.${id}),Ordem.is.null)`);
       }
-      const rows=await call('EmailsAutorizados','GET','select=id,Escola,Nome,Funcao,Ordem,email&order=Ordem.asc.nullslast,id.asc&limit=51'+after,null,'return=representation');
+      const select=temporary?'id,Nome,Ordem':'id,Escola,Nome,Funcao,Ordem,email,password_hash';
+      const rows=await call('EmailsAutorizados','GET','select='+select+'&order=Ordem.asc.nullslast,id.asc&limit=51'+after,null,'return=representation');
       if(!Array.isArray(rows))throw new Error('access_unavailable');
       const last=rows[49];
-      return {users:rows.slice(0,50),nextPageToken:rows.length>50?Buffer.from(JSON.stringify([last.Ordem,last.id])).toString('base64url'):null};
+      const users=rows.slice(0,50).map(({password_hash,...row})=>temporary
+        ?{id:row.id,name:row.Nome}
+        :{...row,hasPassword:Boolean(password_hash)});
+      return {users,nextPageToken:rows.length>50?Buffer.from(JSON.stringify([last.Ordem,last.id])).toString('base64url'):null};
     },
     async includeAuthorizedEmail(row){
       const rows=await call('EmailsAutorizados','POST','',row,'return=representation');
@@ -128,6 +132,32 @@ function makeStore(config,fetcher=fetch) {
     },
     async excludeAuthorizedEmail(id){
       await call('EmailsAutorizados','DELETE','id=eq.'+id,null,'return=representation');
+    },
+    async getTemporaryUser(id){
+      const rows=await call('EmailsAutorizados','GET','id=eq.'+id+'&select=id,Nome,password_hash,activation_hash,activation_expires_at&limit=1',null,'return=representation');
+      return rows[0]||null;
+    },
+    async issueTemporaryActivation(id,activationHash,expiresAt){
+      const rows=await call('EmailsAutorizados','PATCH','id=eq.'+id+'&password_hash=is.null&Funcao=not.is.null&select=id',
+        {activation_hash:activationHash,activation_expires_at:expiresAt},'return=representation');
+      return rows?.length===1;
+    },
+    async activateTemporaryUser(id,activationHash,passwordHash){
+      const rows=await call('EmailsAutorizados','PATCH','id=eq.'+id+'&password_hash=is.null&activation_hash=eq.'+activationHash+'&activation_expires_at=gt.now&select=id',
+        {password_hash:passwordHash,activation_hash:null,activation_expires_at:null},'return=representation');
+      return rows?.length===1;
+    },
+    async changeTemporaryPassword(id,previous,passwordHash){
+      const rows=await call('EmailsAutorizados','PATCH','id=eq.'+id+'&password_hash=eq.'+encodeURIComponent(previous)+'&select=id',
+        {password_hash:passwordHash},'return=representation');
+      return rows?.length===1;
+    },
+    async allowTemporaryAttempt(id,source){
+      return call('rpc/farol_temporary_attempt','POST','',{p_user:id,p_source:source},'return=representation');
+    },
+    async getTemporaryOwner(){
+      const id=await call('rpc/farol_temporary_owner','GET','',null,'return=representation');
+      return validUserId(id)?id:null;
     },
     async get(id) {const rows=await sessions('GET',`id=eq.${id}&select=id,payload,expires_at`,null,'return=representation');return decode(rows[0]);},
     async take(id) {const rows=await sessions('DELETE',`id=eq.${id}`,null,'return=representation');return decode(rows[0]);},
@@ -237,8 +267,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
     const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
-    if(!['status','access-denied','start','callback','disconnect','logout','board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','attendance-analysis','authorized-emails','authorized-email'].includes(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import','attendance-import','authorized-email'].includes(action)?'POST':'GET';
+    const temporaryPublic=['temporary-users','temporary-user','temporary-login','temporary-activate','temporary-password','temporary-logout'];
+    if(!['status','access-denied','start','callback','disconnect','logout',...temporaryPublic].includes(action)
+      &&!adminActions.has(action)&&!temporaryActions.has(action))return reply(404,{error:'not_found'});
+    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured'});
     if(expected==='POST' && (req.headers.origin!==config.origin || req.headers['x-farol-request']!=='1'))return reply(403,{error:'forbidden'});
@@ -249,13 +281,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(!String(req.headers['content-type']||'').startsWith('application/json'))return reply(415,{error:'invalid_body'});
       try {body=typeof req.body==='string'?JSON.parse(req.body):req.body||{};}catch{return reply(400,{error:'invalid_body'});}
       if(!body || typeof body!=='object' || Array.isArray(body))return reply(400,{error:'invalid_body'});
-      if(action!=='logout' && !TYPES.includes(body.type))return reply(400,{error:'invalid_type'});
+      if(action!=='logout'&&!temporaryPublic.includes(action)&&!TYPES.includes(body.type))return reply(400,{error:'invalid_type'});
     }
     async function authorizeEmail(email){
-      if(emailOf(email)===FIXED_AUTHORIZED_EMAIL)return;
-      let allowed;
-      try{allowed=await store.isEmailAuthorized(email);}catch(error){throw new Error(error.message==='access_setup_required'?'access_setup_required':'access_unavailable');}
-      if(allowed!==true)throw Object.assign(new Error('access_denied'),{email});
+      if(emailOf(email)!==FIXED_AUTHORIZED_EMAIL)throw Object.assign(new Error('access_denied'),{email});
     }
     async function authorizedName(email){
       let profile;
@@ -298,6 +327,26 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       }
       setCookie(res,accountCookie(type),'',0);
     }
+    async function clearLocalGoogle(){
+      for(const type of TYPES){
+        const id=jar[accountCookie(type)];
+        if(validId(id))await store.remove(accountKey(type,id));
+        setCookie(res,accountCookie(type),'',0);
+        setCookie(res,cookieName('flow',type),'',0);
+      }
+    }
+    async function clearTemporary(){
+      const token=jar[SESSION_COOKIE];
+      if(validId(token))await store.remove(temporarySessionKey(token));
+      setCookie(res,SESSION_COOKIE,'',0);
+    }
+    async function verifyAdmin(){
+      const accounts=await Promise.all(TYPES.map(type=>account(type)));
+      if(accounts.some(item=>!item)||accounts[0].user.id!==accounts[1].user.id)return null;
+      const [general,personal]=await Promise.all(TYPES.map(type=>store.getConnection(accounts[0].user.id,type)));
+      if([general,personal].some(connection=>connection?.email!==FIXED_AUTHORIZED_EMAIL))return null;
+      return {general:accounts[0],personal:accounts[1],connections:{general,personal}};
+    }
     try {
       if(action==='access-denied'){
         const ticket=jar['__Host-farol-access-denied'];
@@ -307,14 +356,82 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         if(!denied||denied.expiresAt<=Date.now()||typeof denied.email!=='string')return reply(404,{error:'not_found'});
         return reply(200,{email:denied.email});
       }
-      if(['board','thread','demand','inbox','classified','classify','institutional','institutional-move','institutional-labels','overview','maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','attendance-analysis','authorized-emails','authorized-email'].includes(action)) {
+      if(action==='temporary-users')return reply(200,await store.listAuthorizedEmails(url.searchParams.get('pageToken')||'',true));
+      if(action==='temporary-user'){
+        const id=url.searchParams.get('id');
+        if(!validUserId(id))return reply(400,{error:'invalid_temporary_user'});
+        const profile=await store.getTemporaryUser(id);
+        if(!profile)return reply(404,{error:'invalid_temporary_user'});
+        return reply(200,{id,name:profile.Nome,hasPassword:Boolean(profile.password_hash)});
+      }
+      if(action==='temporary-logout'){
+        await clearTemporary();
+        return reply(200,{signedOut:true});
+      }
+      const temporary=await readTemporarySession(store,jar[SESSION_COOKIE]);
+      if(['temporary-login','temporary-activate','temporary-password'].includes(action)){
+        const profile=await authenticateTemporary({action,store,body,current:temporary,request:req,key:config.key,enrollment:jar[ENROLLMENT_COOKIE]});
+        await clearLocalGoogle();
+        await clearTemporary();
+        setCookie(res,ENROLLMENT_COOKIE,'',0);
+        try{await store.cleanup();}catch{}
+        const token=await writeTemporarySession(store,profile);
+        setCookie(res,SESSION_COOKIE,token,SESSION_SECONDS);
+        return reply(200,{signedIn:true});
+      }
+      if(temporary&&action==='status'){
+        const {profile}=temporary;
+        const modules=modulesFor(profile);
+        const owner=await store.getTemporaryOwner();
+        const school=owner?{email:FIXED_AUTHORIZED_EMAIL}:null;
+        const overview={general:null,personal:null};
+        if(owner&&modules.includes('inicio')){
+          await Promise.all(TYPES.map(async type=>{
+            const connection=await store.getConnection(owner,type);
+            if(connection?.email===FIXED_AUTHORIZED_EMAIL&&connection.capabilities.gmail)overview[type]={...school,gmail:true};
+          }));
+        }
+        return reply(200,{configured:true,mode:'temporary',connections:{general:null,personal:null},
+          temporary:{id:profile.id,name:profile.Nome,expiresAt:temporary.expiresAt},modules,school,overview});
+      }
+      if(temporary&&['start','callback','disconnect'].includes(action)){
+        if(action==='callback')return finish('inicio','personal','temporary_active');
+        return reply(403,{error:'temporary_active'});
+      }
+      if(temporaryActions.has(action)||adminActions.has(action)) {
         try {
-          const type=action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','attendance-analysis','authorized-emails','authorized-email'].includes(action))?'general':'personal';
-          if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
-          const current=await account(type);
+          if(temporary){
+            if(!modulesFor(temporary.profile).includes(temporaryActions.get(action)))return reply(403,{error:'module_forbidden'});
+            const owner=await store.getTemporaryOwner(),email=FIXED_AUTHORIZED_EMAIL;
+            if(!owner)return reply(409,{error:'school_unavailable'});
+            if(action==='overview'){
+              const type=url.searchParams.get('type');
+              if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
+              const connection=await store.getConnection(owner,type);
+              if(connection?.email!==email||!connection.capabilities.gmail)return reply(403,{error:'missing_scope'});
+              const client=clientFactory(config);client.setCredentials(connection.credentials);
+              return reply(200,await handleOverview({url,client,email,type}));
+            }
+            if(action==='attendance-analysis')return reply(200,await handleAttendanceAnalysis({url,store,owner,email}));
+            const actor={id:temporary.profile.id,name:temporary.profile.Nome,email:null};
+            return reply(200,await handleStudents({action,url,body,store,owner,email,actor}));
+          }
+          if(['overview','occurrences','attendance-analysis'].includes(action))return reply(403,{error:'module_forbidden'});
+          const type=actionMailbox(action),restricted=adminActions.has(action);
+          const admin=restricted?await verifyAdmin():null;
+          if(restricted&&!admin)return reply(403,{error:'admin_required'});
+          const current=admin?admin[type]:await account(type);
           if(!current)return reply(401,{error:'login_required'});
-          const connection=await store.getConnection(current.user.id,type);
-          if(!connection || connection.email!==current.user.email || !(['students','occurrences','occurrence','attendance-analysis','authorized-emails','authorized-email'].includes(action)?true:['student-import','attendance-import'].includes(action)?connection.capabilities.driveRead:['maintenance','student-files','attendance-files'].includes(action)?connection.capabilities.driveMetadata:connection.capabilities.gmail))return reply(403,{error:'missing_scope'});
+          const connection=admin?admin.connections[type]:await store.getConnection(current.user.id,type);
+          const capability=driveReadActions.has(action)?'driveRead':driveMetadataActions.has(action)?'driveMetadata':'gmail';
+          if(connection?.email!==current.user.email||(!databaseActions.has(action)&&!connection.capabilities[capability]))return reply(403,{error:'missing_scope'});
+          if(action==='temporary-confirm'){
+            if(Object.keys(body).some(key=>!['type','id'].includes(key)))return reply(400,{error:'invalid_temporary_user'});
+            const token=await confirmEnrollment(store,body.id);
+            await clearLocalGoogle();
+            setCookie(res,ENROLLMENT_COOKIE,token,ENROLLMENT_SECONDS);
+            return reply(200,{confirmed:true});
+          }
           const client=clientFactory(config);client.setCredentials(connection.credentials);
           if(action==='institutional-labels'){
             if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox'].includes(key)))return reply(400,{error:'invalid_institutional'});
@@ -333,17 +450,22 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             if(!name)return reply(409,{error:'author_profile_required'});
             actor={email:personal.user.email,name};
           }
-          const result=action==='attendance-analysis'?await handleAttendanceAnalysis({url,store,owner:current.user.id,email:current.user.email}):['attendance-files','attendance-import'].includes(action)?await handleAttendanceImport({action,url,body,client,store,owner:current.user.id,email:current.user.email}):['authorized-emails','authorized-email'].includes(action)?await handleAuthorizedUsers({action,url,body,store,email:current.user.email}):['student-files','student-import'].includes(action)?await handleStudentImport({action,url,body,client,store,owner:current.user.id,email:current.user.email,canRead:connection.capabilities.driveRead===true}):['students','occurrences','occurrence'].includes(action)?await handleStudents({action,url,body,store,owner:current.user.id,email:current.user.email,actor}):action==='maintenance'?await handleMaintenance({url,client,email:current.user.email}):action==='overview'?await handleOverview({url,client,email:current.user.email,type}):action.startsWith('institutional')
-            ?await handleInstitutional({action,url,body,client,store,owner:current.user.id,email:current.user.email,canModify:connection.capabilities.manageInstitutional===true})
-            :await handleDemands({action,url,body,client,store,owner:current.user.id,email:current.user.email,canClassify:connection.capabilities.classify===true});
+          const context={action,url,body,store,client,owner:current.user.id,email:current.user.email};
+          if(action.startsWith('authorized-'))return reply(200,await handleAuthorizedUsers(context));
+          if(['students','occurrence'].includes(action))return reply(200,await handleStudents({...context,actor}));
+          const result=action.startsWith('attendance-')?await handleAttendanceImport(context)
+            :action.startsWith('student-')?await handleStudentImport({...context,canRead:connection.capabilities.driveRead===true})
+            :action==='maintenance'?await handleMaintenance(context)
+            :action.startsWith('institutional')?await handleInstitutional({...context,canModify:connection.capabilities.manageInstitutional===true})
+            :await handleDemands({...context,canClassify:connection.capabilities.classify===true});
           // Credential caching must not turn an already committed demand into a false failure.
           // The stored refresh token remains available for the next request.
           try {await store.putConnection(current.user.id,type,{...connection,credentials:credentialsOf(client)});}catch{}
           return reply(200,result);
         } catch(error) {
-          if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||(action==='overview'?url.searchParams.get('type'):(action.startsWith('institutional')||['maintenance','students','occurrences','occurrence','student-files','student-import','attendance-files','attendance-import','attendance-analysis','authorized-emails','authorized-email'].includes(action))?'general':'personal')});
+          if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||actionMailbox(action)});
           if(['access_setup_required','access_unavailable'].includes(error.message))return reply(503,{error:error.message});
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit','invalid_temporary_user','temporary_activation_unavailable'];
           if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
@@ -372,7 +494,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
         await store.put(hash(state),{version:3,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),previous},Date.now()+600000);
         setCookie(res,cookieName('flow',type),binding,600);
-        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]:[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE],access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
+        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]:[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE],access_type:'offline',prompt:'select_account consent',login_hint:FIXED_AUTHORIZED_EMAIL,state,nonce:hash(nonce),
           code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
         return reply(200,{url:authUrl});
       }
@@ -440,6 +562,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         }
       }
       if(action==='logout'){
+        await clearTemporary();
         for(const type of TYPES)await discardAccount(type,await account(type,false));
         return reply(200,{signedOut:true});
       }
@@ -483,10 +606,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         }
       }
       const mode=connections.general?(connections.personal?'both':'general'):(connections.personal?'personal':'none');
-      return reply(200,{configured:true,mode,connections,errors,...(Object.keys(denied).length?{denied}:{})});
-    } catch {
+      return reply(200,{configured:true,mode,connections,errors,modules:modulesFor(null,connections),...(Object.keys(denied).length?{denied}:{})});
+    } catch(error) {
       // Do not log OAuth exceptions; they may contain credentials, codes or tokens.
       if(action==='callback')return finish('inicio','personal','unavailable');
+      if(['invalid_page','access_setup_required','access_unavailable','login_required','invalid_temporary_user','temporary_rate_limit','temporary_invalid_credentials','temporary_password_confirmation','temporary_password_length','temporary_confirmation_required'].includes(error.message))
+        return reply(error.status||503,{error:error.message});
       return reply(503,{configured:true,error:'unavailable'});
     }
   };

@@ -236,3 +236,12 @@ Executar database/attendance.sql no projeto exclusivo FAROL GE: cria FaltasDosAl
 ## Radar — consulta de faltas por período (revisão 22)
 
 Analisar abre uma matriz diária dos registros já carregados em FaltasDosAlunos, cruzados com Alunos por Escola/CGM da mesma Geral. GET autenticado exclusivo da Geral; não usa APIs Google, Pessoal nem escopos Gmail/Drive para consultar. Mantém a autorização de acesso existente. Sem novo SQL/variável/escopo; exige as tabelas dos scripts anteriores. Período inicial de 30 dias em Brasília e datas editáveis até 366. Zero é distinto de ausência de registro; não infere presença ou risco nem grava análises. Publicar política revisão 22 com o código. Detalhes/limites/verificações no README; sem publicação ou validação visual real nesta entrega.
+
+
+## Conta Google exclusiva de Marcos e acesso temporário — revisão 24
+
+A partir de 18/11/2026, Geral e Pessoal aceitam apenas `marcos.rubo@gmail.com`. O OAuth informa a conta por meio de `login_hint`. A sessão do próprio Google no navegador segue as regras do provedor. O servidor confirma o endereço após verificar identidade, assinatura e nonce, antes de criar sessão ou acessar Gmail/Drive. Sessões Google de outros e-mails deixam de autorizar requisições. O cadastro de usuários passa a servir à Conexão temporária. [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
+
+Manutenção do Sistema, Configurações e ambas as telas de Demandas exigem as duas sessões Google válidas no mesmo navegador. A confirmação presencial de primeiro acesso encerra essas sessões locais, preservando as autorizações armazenadas. A Conexão temporária identifica o cadastro sem conceder sessão Google. Para o grupo autorizado da Visão GERAL, o backend consulta somente os totais Gmail das conexões armazenadas de Marcos. Os dados escolares temporários são consultados no conjunto vinculado a esse proprietário.
+
+Executar `database/temporary-access.sql` no Supabase exclusivo FAROL GE e publicar o código com a política revisão 24. A matriz de permissões e o fluxo presencial estão no README.

@@ -20,6 +20,7 @@ const modules = [
   {id:'manutencao-sistema',icon:'manutencao',label:'Manutenção do Sistema'},
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
+let allowedModules=new Set(),temporaryUser=null;
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 
 function updateSchool(){
@@ -87,11 +88,19 @@ function render(){
   window.FarolAttendanceAnalysis?.unmount();
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const analysis=route==='analise-faltas';
-  const selected=modules.find(item=>item.id===(analysis?'radar':route))||modules[0];
-  document.title='FAROL GE · '+(analysis?'Análise de faltas':selected.label);
-  document.querySelector('#breadcrumb-title').textContent=analysis?'Radar / Análise de faltas':selected.label;
-  document.querySelector('#navigation').innerHTML=modules.map((item,index)=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item.id===selected.id?'active':''}" href="#${item.id}" ${item.id===selected.id?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span>${index>0&&!['manutencao-sistema','configuracoes'].includes(item.id)?'<span class="nav-number">0'+index+'</span>':''}</a>`).join('');
+  const available=modules.filter(item=>allowedModules.has(item.id));
+  const requested=modules.find(item=>item.id===(analysis?'radar':route));
+  const selected=requested?available.find(item=>item===requested):available[0];
+  const title=selected?(analysis?'Radar / Análise de faltas':selected.label):'Acesso';
+  document.title='FAROL GE · '+title;
+  document.querySelector('#breadcrumb-title').textContent=title;
+  document.querySelector('#navigation').innerHTML=available.map(item=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item===selected?'active':''}" href="#${item.id}" ${item===selected?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span></a>`).join('');
   const main=document.querySelector('#main');
+  if(!selected){
+    main.classList.toggle('radar-workspace',false);
+    main.innerHTML=available.length?'<h1>Módulo indisponível</h1><p>Escolha um módulo disponível no menu.</p>':'<h1>FAROL GE</h1><p>Use Conexão temporária para se identificar.</p>';
+    return;
+  }
   main.classList.toggle('radar-workspace',selected.id==='radar'&&!analysis);
   main.innerHTML=analysis?'<section id="attendance-analysis-board" class="demands-workspace"></section>':selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
   if(analysis)window.FarolAttendanceAnalysis?.mount(document.querySelector('#attendance-analysis-board'));
@@ -104,6 +113,7 @@ function render(){
 }
 const connectionMessages={
   access_denied:'E-mail não autorizado a acessar o aplicativo FarolGE.',
+  temporary_active:'Encerre a conexão temporária antes de conectar uma conta Google.',
   access_setup_required:'O controle de acesso precisa ser preparado no Supabase do FAROL GE.',
   access_unavailable:'Não foi possível verificar a autorização de acesso. Tente novamente mais tarde.',
   connected:'Conexão e permissões confirmadas pelo Google.',
@@ -124,14 +134,14 @@ function setupEmailConnections(){
   const feedback=document.querySelector('#email-connection-feedback');
   let configured=false;
   let selectedType='personal';
-  let statusVersion=0;
+  let statusVersion=0,temporaryExpiry=null;
   const types=['general','personal'];
   const deniedDialog=document.querySelector('#access-denied-dialog'),seenDenied=new Set(),activeEmails={general:null,personal:null};
   function showDenied(email){
     if(typeof email!=='string'||!(/^[^@\s]+@[^@\s]+\.[^@\s]+$/).test(email)||seenDenied.has(email))return;
     seenDenied.add(email);
     document.querySelector('#access-denied-email').textContent=email;
-    document.querySelector('#access-denied-support').href='https://wa.me/5543999525060?text='+encodeURIComponent('Gostaria de solicitar acesso ao FarolGE para o E-mail '+email);
+    document.querySelector('#access-denied-support').href='https://wa.me/5543999525060?text='+encodeURIComponent('Preciso de ajuda para acessar o FarolGE. O e-mail da tentativa foi '+email);
     if(dialog.open)dialog.close();
     if(!deniedDialog.open)deniedDialog.showModal();
   }
@@ -145,11 +155,31 @@ function setupEmailConnections(){
     document.querySelector('[data-disconnect-email="'+type+'"]').hidden=true;
     document.querySelector('[data-connect-email="'+type+'"]').textContent='Conectar';
   }
+  function updateAccess(result){
+    const next=new Set(Array.isArray(result?.modules)?result.modules:[]);
+    const user=result?.temporary||null;
+    const changed=next.size!==allowedModules.size||[...next].some(id=>!allowedModules.has(id))||user?.id!==temporaryUser?.id;
+    allowedModules=next;temporaryUser=user;
+    window.FarolTemporaryAccess?.update(user,configured);
+    if(temporaryExpiry!==null)clearTimeout(temporaryExpiry);
+    temporaryExpiry=user?.expiresAt?setTimeout(refresh,Math.max(250,user.expiresAt-Date.now()+250)):null;
+    if(changed){
+      window.FarolDemands?.connectionChanged(null);
+      window.FarolInstitutional?.connectionChanged(null);
+      window.FarolMaintenance?.connectionChanged(null);
+      window.FarolAuthorizedUsers?.connectionChanged(null);
+      window.FarolStudents?.connectionChanged(null);
+      window.FarolStudents?.personalConnectionChanged?.(null);
+      window.FarolAttendanceAnalysis?.connectionChanged(null);
+      for(const type of types)window.FarolOverview?.connectionChanged(type,null);
+      render();
+    }
+  }
   window.FarolAccessDenied=result=>{
     if(result?.error==='access_denied'&&types.includes(result.type)&&activeEmails[result.type]===result.email){
-      ++statusVersion;clearConnection(result.type);showDenied(result.email);
-    }else if(['access_setup_required','access_unavailable'].includes(result?.error)){
-      ++statusVersion;for(const type of types)clearConnection(type);feedback.textContent=connectionMessages[result.error];
+      ++statusVersion;clearConnection(result.type);showDenied(result.email);refresh();
+    }else if(['module_forbidden','admin_required','login_required'].includes(result?.error)){
+      refresh();
     }
   };
   async function api(action,body){
@@ -164,7 +194,7 @@ function setupEmailConnections(){
   }
   function showAvailability(){
     availability.textContent=configured
-      ?'Escolha sua conta no Google e autorize Gmail e Drive. Você pode revisar as permissões na página do Google.'
+      ?'No Google, selecione marcos.rubo@gmail.com e confira as permissões de Gmail e Drive.'
       :connectionMessages.not_configured;
     continueButton.hidden=!configured;
   }
@@ -174,15 +204,17 @@ function setupEmailConnections(){
       const result=await api('status');
       if(version!==statusVersion)return;
       configured=result.configured===true;
+      updateAccess(result);
+      const school=result.temporary?result.school:result.connections?.general;
       for(const type of types)activeEmails[type]=configured?result.connections?.[type]?.email||null:null;
       window.FarolDemands?.connectionChanged(configured?result.connections?.personal||null:null);
       window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
-      window.FarolMaintenance?.connectionChanged(configured?result.connections?.general||null:null);
-      window.FarolStudents?.connectionChanged(configured?result.connections?.general||null:null);
-      window.FarolStudents?.personalConnectionChanged?.(configured?result.connections?.personal||null:null);
-      window.FarolAuthorizedUsers?.connectionChanged(configured?result.connections?.general||null:null);
-      window.FarolAttendanceAnalysis?.connectionChanged(configured?result.connections?.general||null:null);
-      for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.connections?.[type]||null:null);
+      window.FarolMaintenance?.connectionChanged(configured&&allowedModules.has('manutencao-sistema')?result.connections?.general||null:null);
+      window.FarolStudents?.connectionChanged(configured?school||null:null);
+      window.FarolStudents?.personalConnectionChanged?.(configured?(result.temporary||result.connections?.personal)||null:null);
+      window.FarolAuthorizedUsers?.connectionChanged(configured&&allowedModules.has('configuracoes')?result.connections?.general||null:null);
+      window.FarolAttendanceAnalysis?.connectionChanged(configured&&result.temporary&&allowedModules.has('radar')?school||null:null);
+      for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.overview?.[type]||null:null,configured&&allowedModules.has('inicio')?school||null:null);
       for(const type of types){
         const connection=result.connections?.[type];
         const email=connection?.email;
@@ -198,8 +230,8 @@ function setupEmailConnections(){
         status.classList.toggle('is-connected',connected);
         const button=document.querySelector('[data-connect-email="'+type+'"]');
         button.textContent=connected?'Revisar autorização':'Conectar';
-        button.hidden=false;
-        button.disabled=!configured;
+        button.hidden=Boolean(result.temporary);
+        button.disabled=!configured||Boolean(result.temporary);
         document.querySelector('[data-disconnect-email="'+type+'"]').hidden=!connected;
       }
       for(const email of Object.values(result.denied||{}))showDenied(email);
@@ -208,6 +240,7 @@ function setupEmailConnections(){
     } catch {
       if(version!==statusVersion)return;
       configured=false;
+      updateAccess(null);
       window.FarolDemands?.connectionChanged(null);
       window.FarolInstitutional?.connectionChanged(null);
       window.FarolMaintenance?.connectionChanged(null);
@@ -227,15 +260,14 @@ function setupEmailConnections(){
     }
   }
   function openConnection(type){
+    if(temporaryUser)return;
     selectedType=type;
     const isGeneral=type==='general';
     document.querySelector('#email-connection-labels').hidden=isGeneral;
     document.querySelector('#email-general-labels').hidden=!isGeneral;
     document.querySelector('#email-drive-metadata').hidden=!isGeneral;
     document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar conta geral da escola':'Conectar conta pessoal';
-    document.querySelector('#email-connection-description').innerHTML=isGeneral
-      ?'Escolha no Google a conta geral da sua escola. Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta INSTITUCIONAL do colégio.'
-      :'Esta conexão será usada para integração entre o <strong>Farol GE</strong> e a conta Google da pessoa que estiver utilizando a aplicação.';
+    document.querySelector('#email-connection-description').textContent='Esta conexão Google é exclusiva de marcos.rubo@gmail.com.';
     showAvailability();
     dialog.showModal();
   }

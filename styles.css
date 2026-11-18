@@ -191,3 +191,9 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .network-status p{margin:0 0 4px;overflow-wrap:anywhere}
 .network-status button{padding:3px 0;border:0;background:transparent;color:#dce8c9;font-size:11px;text-decoration:underline;text-underline-offset:3px}
 .network-status button:disabled{opacity:.6}
+
+.temporary-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.temporary-bar p{margin:0;font-size:12px}
+.temporary-bar strong:empty{display:none}
+.temporary-users{width:100%;margin-bottom:12px}
+.temporary-users option{padding:6px}

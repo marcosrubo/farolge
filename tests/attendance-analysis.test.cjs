@@ -40,7 +40,7 @@ function frontend(){
 }
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 test('matriz mostra todos os alunos em uma página, distingue zero e sem registro e filtra sem repetir consulta',async()=>{
- const h=frontend();h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.get('#attendance-status').textContent.includes('Conecte'));
+ const h=frontend();h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.get('#attendance-status').textContent.includes('indisponíveis'));
  h.get('#attendance-start').value='2026-11-01';h.get('#attendance-end').value='2026-11-03';h.app.connectionChanged({email});
  const items=Array.from({length:51},(_,i)=>({school:'Escola',name:i===0?'<b>Aluno</b>':'ALUNO '+i,cgm:String(i),classes:[i===0?'B':'A'],counts:{'2026-11-01':2,'2026-11-02':0},total:2}));
  h.respond(0,h.response(0,items));await settle();

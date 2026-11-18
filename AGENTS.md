@@ -14,6 +14,9 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 18/11/2026, Marcos restringiu Geral/Pessoal a marcos.rubo@gmail.com, com duas sessões no mesmo navegador para Manutenção, Configurações e ambas as Demandas. Conexão temporária usa cadastro por nome completo: Visão GERAL para Adriana/Vanusa; Radar para elas, Sandra, Jeisiani, Giovana e Luciani; Inspetores/Monitores e BI SEED para todos os identificados. Marcos confirmou primeiro acesso presencial: em Configurações confirma quem vai criar senha no mesmo navegador, com autorização de uso único de 10 minutos e encerramento das sessões Google locais. Senha própria do FAROL com hash scrypt, limitação de tentativas, sessão de oito horas, opção de troca e encerramento. Backend verifica permissões e consulta dados escolares vinculados a Marcos; Visão GERAL recebe somente os totais Gmail autorizados e ocorrências. SQL database/temporary-access.sql, política revisão 24 e validação visual apenas na Vercel. A senha da conta Google continua sendo informada apenas ao Google.
+
+
 - Em 18/11/2026, Marcos solicitou preparar o cadastro de usuários para a futura identificação ao acessar. Configurações exige Escola, Nome e Função, com E-mail e Ordem facultativos. Ordem é positiva e crescente, com cadastros sem número ao final e desempate estável por ID. Geral autorizada pode editar e excluir por ID, inclusive sem e-mail. O SQL atualizado database/authorized-emails.sql cria ou migra a tabela e preserva cadastros anteriores para preencher a Função real. E-mail preenchido continua único e sujeito à validação Google existente. A seleção de identidade e a nova conexão ficam para a etapa seguinte. Política revisão 23.
 
 
@@ -85,7 +88,7 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 ## Segurança e protótipo
 
 - Usar apenas dados fictícios no protótipo e indicar claramente integrações inexistentes.
-- Senhas somente ao Google. Nunca registrar credenciais, tokens ou conteúdo de e-mails em logs; nunca versionar segredos ou colocá-los no frontend.
+- A senha da Conta Google é informada somente ao Google. Nunca registrar credenciais, tokens ou conteúdo de e-mails em logs; nunca versionar segredos ou colocá-los no frontend.
 - Separar autenticação, autorização de Gmail/Drive e permissões por escola e pessoa.
 - Não tratar níveis ilustrativos de frequência como critérios oficiais, diagnósticos ou avaliações automáticas de risco.
 - Consultar documentação oficial atual antes de implementar as integrações do Google.

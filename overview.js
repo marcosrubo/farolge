@@ -19,8 +19,8 @@ window.FarolOverview=(()=>{
     if(!root)return;
     const s=states[type],group=groups[type],connected=s.connection?.gmail;
     root.querySelector('#overview-identity-'+type).textContent=s.connection?.email||'Conta '+(type==='general'?'GERAL':'PESSOAL')+' não conectada';
-    const messages={login_required:'Conecte novamente esta conta.',missing_scope:'Revise a autorização desta conta para consultar o Gmail.',account_changed:'A conta mudou. Atualize os totais.',unavailable:'Não foi possível consultar os totais. Tente atualizar.'};
-    root.querySelector('#overview-status-'+type).textContent=s.busy?'Atualizando totais…':s.error?(messages[s.error]||messages.unavailable)+(s.items.length?' Dados anteriores mantidos.':''):!connected?'Conecte a conta '+(type==='general'?'GERAL':'PESSOAL')+' com consulta ao Gmail.':'';
+    const messages={login_required:'A consulta ao Gmail precisa ser verificada.',missing_scope:'A consulta ao Gmail precisa de autorização de Marcos.',account_changed:'A conta mudou. Atualize os totais.',unavailable:'Não foi possível consultar os totais. Tente atualizar.'};
+    root.querySelector('#overview-status-'+type).textContent=s.busy?'Atualizando totais…':s.error?(messages[s.error]||messages.unavailable)+(s.items.length?' Dados anteriores mantidos.':''):!connected?'A consulta ao Gmail desta conexão está indisponível.':'';
     root.querySelector('#overview-cards-'+type).innerHTML=group.labels.map(([name,title])=>{
       const item=s.items.find(item=>item.name===name),ready=connected&&item?.status==='ready'&&Number.isSafeInteger(item.total)&&item.total>=0;
       const status=ready?'mensagens':s.busy?'Consultando':!connected?'Sem conexão':s.error?'Indisponível':item?.status==='missing'?'Marcador ausente':item?.status==='unavailable'?'Indisponível':ready?'mensagens':'Aguardando consulta';
@@ -46,9 +46,9 @@ window.FarolOverview=(()=>{
   function drawOccurrences(){
     if(!root)return;
     const s=occurrences;
-    const messages={setup_required:'As tabelas de alunos e ocorrências ainda precisam ser preparadas no Supabase.',login_required:'Conecte novamente a conta GERAL.',account_changed:'A conta mudou. Atualize as ocorrências.',storage_access_denied:'O Supabase recusou o acesso às ocorrências.',invalid_page:'Atualize as ocorrências para reiniciar a consulta.',unavailable:'Não foi possível consultar as ocorrências. Tente atualizar.'};
+    const messages={setup_required:'As tabelas de alunos e ocorrências ainda precisam ser preparadas no Supabase.',login_required:'Identifique-se novamente para consultar as ocorrências.',account_changed:'A conta mudou. Atualize as ocorrências.',storage_access_denied:'O Supabase recusou o acesso às ocorrências.',invalid_page:'Atualize as ocorrências para reiniciar a consulta.',unavailable:'Não foi possível consultar as ocorrências. Tente atualizar.'};
     root.querySelector('#overview-occurrences-identity').textContent=s.connection?.email||'Conta GERAL não conectada';
-    root.querySelector('#overview-occurrences-status').textContent=!s.connection?'Conecte a conta GERAL para consultar as ocorrências dos alunos.':s.busy?'Consultando ocorrências…':s.error?(messages[s.error]||messages.unavailable)+(s.loaded?' A lista anterior foi mantida.':''):s.loaded&&!s.items.length?'Nenhuma ocorrência registrada.':'';
+    root.querySelector('#overview-occurrences-status').textContent=!s.connection?'Os dados de ocorrências da escola estão indisponíveis.':s.busy?'Consultando ocorrências…':s.error?(messages[s.error]||messages.unavailable)+(s.loaded?' A lista anterior foi mantida.':''):s.loaded&&!s.items.length?'Nenhuma ocorrência registrada.':'';
     root.querySelector('#overview-occurrences-rows').innerHTML=s.items.map(item=>`<tr><td>${escape(item.date.split('-').reverse().join('/'))}</td><td>${escape(item.time.slice(0,8))}</td><td>${escape(item.student)}</td><td>${escape(item.className)}</td><td class="occurrence-text">${escape(item.text)}</td><td>${escape(item.authorName||'Não informado')}</td></tr>`).join('');
     root.querySelector('#overview-occurrences-refresh').disabled=s.busy||!s.connection;
     root.querySelector('#overview-occurrences-more').hidden=!s.next;
@@ -73,9 +73,9 @@ window.FarolOverview=(()=>{
     if(changed){clearOccurrences();drawOccurrences();if(root&&value)loadOccurrences();}
   }
   function occurrencesPanel(){return `<section class="overview-group overview-occurrences" aria-labelledby="overview-occurrences-title"><div class="overview-heading"><h2 id="overview-occurrences-title">Ocorrências dos alunos</h2></div><p id="overview-occurrences-identity" class="overview-identity"></p><p class="demand-footnote">Mais recentes primeiro. Horário de Brasília.</p><p id="overview-occurrences-status" class="overview-status" role="status"></p><div class="overview-occurrences-scroll" role="region" aria-label="Lista de ocorrências dos alunos" tabindex="0"><table><thead><tr><th scope="col">Data</th><th scope="col">Hora</th><th scope="col">Aluno</th><th scope="col">Turma</th><th scope="col">Ocorrência</th><th scope="col">Registrado por</th></tr></thead><tbody id="overview-occurrences-rows"></tbody></table></div><div class="button-row"><button type="button" class="button overview-refresh" id="overview-occurrences-refresh">Atualizar ocorrências</button><button type="button" class="button overview-refresh" id="overview-occurrences-more" hidden>Carregar mais</button></div></section>`;}
-  function connectionChanged(type,value){
+  function connectionChanged(type,value,school=value){
     if(!groups[type])return;
-    if(type==='general')occurrenceConnectionChanged(value);
+    if(type==='general')occurrenceConnectionChanged(school);
     const s=states[type],changed=s.connection?.email!==value?.email||s.connection?.gmail!==value?.gmail;s.connection=value;
     if(changed){clear(type);draw(type);if(root&&value?.gmail)load(type);}
   }

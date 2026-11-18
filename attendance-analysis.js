@@ -2,7 +2,7 @@
 window.FarolAttendanceAnalysis=(()=>{
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const label=date=>date.slice(8,10)+'/'+date.slice(5,7),full=date=>label(date)+'/'+date.slice(0,4);
-  const messages={invalid_period:'Informe um período válido de até 366 dias.',analysis_limit:'Há muitos dados para exibir de uma vez. Selecione um período menor.',attendance_setup_required:'Prepare as tabelas de faltas com database/attendance.sql no Supabase do FAROL GE.',setup_required:'Prepare o cadastro de alunos com database/students.sql.',login_required:'Conecte novamente a conta GERAL.',account_changed:'A conta mudou. Atualize a análise.',storage_access_denied:'O Supabase recusou a consulta. Confira as permissões do backend.',unavailable:'Não foi possível atualizar a análise. Tente novamente.'};
+  const messages={invalid_period:'Informe um período válido de até 366 dias.',analysis_limit:'Há muitos dados para exibir de uma vez. Selecione um período menor.',attendance_setup_required:'Prepare as tabelas de faltas com database/attendance.sql no Supabase do FAROL GE.',setup_required:'Prepare o cadastro de alunos com database/students.sql.',login_required:'Identifique-se novamente para consultar as faltas.',account_changed:'A conta mudou. Atualize a análise.',storage_access_denied:'O Supabase recusou a consulta. Confira as permissões do backend.',unavailable:'Não foi possível atualizar a análise. Tente novamente.'};
   let root=null,connection=null,data=null,busy=false,error='',version=0,selectedClasses=new Set();
   function clear(){version++;data=null;busy=false;error='';selectedClasses.clear();}
   function drawClasses(){
@@ -13,8 +13,8 @@ window.FarolAttendanceAnalysis=(()=>{
   }
   function draw(){
     if(!root)return;
-    root.querySelector('#attendance-identity').textContent=connection?.email||'Conta GERAL não conectada';
-    root.querySelector('#attendance-status').textContent=!connection?'Conecte a conta GERAL para analisar as faltas carregadas.':busy?'Consultando faltas…':error?(messages[error]||messages.unavailable)+(data?' Dados anteriores mantidos.':''):data&&!data.items.length?'Nenhum aluno ou registro encontrado. Carregue os relatórios na Manutenção do Sistema.':'';
+    root.querySelector('#attendance-identity').textContent=connection?.email||'Dados escolares indisponíveis';
+    root.querySelector('#attendance-status').textContent=!connection?'Os dados de faltas da escola estão indisponíveis.':busy?'Consultando faltas…':error?(messages[error]||messages.unavailable)+(data?' Dados anteriores mantidos.':''):data&&!data.items.length?'Nenhum aluno ou registro encontrado. Carregue os relatórios na Manutenção do Sistema.':'';
     root.querySelector('#attendance-update').disabled=busy||!connection;
     const query=root.querySelector('#attendance-search').value.trim().toLocaleLowerCase('pt-BR');
     const rows=(data?.items||[]).filter(row=>(row.name+' '+row.cgm).toLocaleLowerCase('pt-BR').includes(query)&&(!selectedClasses.size||row.classes.some(c=>selectedClasses.has(c))));

@@ -1,16 +1,17 @@
 'use strict';
 window.FarolStudents=(()=>{
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const messages={author_required:'Conecte a conta Pessoal de quem vai registrar a ocorrência.',author_changed:'A conta Pessoal mudou. Feche e abra a ocorrência novamente.',author_profile_required:'Cadastre o Nome da pessoa em EmailsAutorizados antes de registrar.',storage_access_denied:'O Supabase recusou o acesso do servidor às tabelas. Confira a configuração no projeto FarolGE.',student_schema_invalid:'A estrutura de Alunos/Ocorrencias é incompatível. Confira database/students.sql no projeto FarolGE.',storage_unavailable:'Não foi possível comunicar com o Supabase. Tente atualizar os alunos.',setup_required:'Execute database/students.sql no Supabase do FAROL GE para preparar Alunos e Ocorrencias.',login_required:'Conecte novamente a conta GERAL.',account_changed:'A conta mudou. Atualize a lista.',invalid_occurrence:'Confira o texto da ocorrência (até 5.000 caracteres).',student_missing:'O aluno não foi encontrado nesta conta. Atualize a lista.',conflict:'Este registro já foi enviado com outros dados. Feche e abra uma nova ocorrência.',unavailable:'Não foi possível concluir. Tente novamente.'};
+  const messages={author_required:'Identifique quem vai registrar a ocorrência.',author_changed:'A identidade mudou. Feche e abra a ocorrência novamente.',author_profile_required:'Cadastre o Nome da pessoa em EmailsAutorizados antes de registrar.',storage_access_denied:'O Supabase recusou o acesso do servidor às tabelas. Confira a configuração no projeto FarolGE.',student_schema_invalid:'A estrutura de Alunos/Ocorrencias é incompatível. Confira database/students.sql no projeto FarolGE.',storage_unavailable:'Não foi possível comunicar com o Supabase. Tente atualizar os alunos.',setup_required:'Execute database/students.sql no Supabase do FAROL GE para preparar Alunos e Ocorrencias.',login_required:'Identifique-se novamente para consultar os alunos.',account_changed:'A conta mudou. Atualize a lista.',invalid_occurrence:'Confira o texto da ocorrência (até 5.000 caracteres).',student_missing:'O aluno não foi encontrado nesta conta. Atualize a lista.',conflict:'Este registro já foi enviado com outros dados. Feche e abra uma nova ocorrência.',unavailable:'Não foi possível concluir. Tente novamente.'};
   let root=null,connection=null,personal=null,actorVersion=0,students=[],version=0,busy=false,saving=false,selected=null,submission=null;
+  const canRecord=()=>Boolean((personal?.id||personal?.email)&&personal?.name);
   function close(){const dialog=root?.querySelector('#student-dialog');if(dialog?.open)dialog.close();selected=null;submission=null;saving=false;}
   function drawActor(){
     if(!root)return;
-    root.querySelector('#student-actor').textContent=personal?.email&&personal?.name?'Registrado por: '+personal.name+' ('+personal.email+')':!personal?'Conecte a conta Pessoal de quem vai registrar a ocorrência.':'Preencha o Nome desta pessoa no cadastro de e-mails em Configurações.';
-    root.querySelector('#student-save').disabled=saving||!personal?.email||!personal?.name;
+    root.querySelector('#student-actor').textContent=canRecord()?'Registrado por: '+personal.name+(personal.email?' ('+personal.email+')':''):'Identifique quem vai registrar a ocorrência.';
+    root.querySelector('#student-save').disabled=saving||!canRecord();
   }
   function personalConnectionChanged(value){
-    const changed=personal?.email!==value?.email||personal?.name!==value?.name;personal=value;
+    const changed=personal?.id!==value?.id||personal?.email!==value?.email||personal?.name!==value?.name;personal=value;
     if(changed){actorVersion++;close();drawActor();}
   }
   function list(){
@@ -43,12 +44,13 @@ window.FarolStudents=(()=>{
     root.querySelector('#student-dialog').showModal();root.querySelector('#student-occurrence').focus();
   }
   async function save(event){
-    event.preventDefault();if(!root||!selected||!connection||!personal?.email||!personal?.name||saving)return;
-    const ticket=version,authorTicket=actorVersion,mailbox=connection.email,authorMailbox=personal.email;
+    event.preventDefault();if(!root||!selected||!connection||!canRecord()||saving)return;
+    const ticket=version,authorTicket=actorVersion,mailbox=connection.email;
+    const author=personal.id?{authorId:personal.id}:{authorMailbox:personal.email};
     saving=true;root.querySelector('#student-save').disabled=true;root.querySelector('#student-cancel').disabled=true;
     root.querySelector('#student-feedback').textContent='Salvando ocorrência…';
     try{
-      const response=await fetch('/api/google/occurrence',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify({type:'general',mailbox,authorMailbox,id:submission,studentId:selected.id,ocorrencia:root.querySelector('#student-occurrence').value})});
+      const response=await fetch('/api/google/occurrence',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify({type:'general',mailbox,...author,id:submission,studentId:selected.id,ocorrencia:root.querySelector('#student-occurrence').value})});
       const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==version||authorTicket!==actorVersion||!root)return;
       if(result.mailbox!==mailbox||!result.saved)throw new Error('account_changed');
@@ -58,7 +60,7 @@ window.FarolStudents=(()=>{
   }
   function connectionChanged(value){
     const changed=connection?.email!==value?.email;connection=value;
-    if(changed){version++;students=[];busy=false;close();if(root){list();root.querySelector('#student-refresh').disabled=!connection;root.querySelector('#student-status').textContent=connection?'':'Conecte a conta GERAL da escola para consultar alunos e registrar ocorrências.';if(connection)load();}}
+    if(changed){version++;students=[];busy=false;close();if(root){list();root.querySelector('#student-refresh').disabled=!connection;root.querySelector('#student-status').textContent=connection?'':'Os dados da escola estão indisponíveis.';if(connection)load();}}
   }
   function mount(element){
     root=element;students=[];busy=false;
@@ -71,7 +73,7 @@ window.FarolStudents=(()=>{
     root.querySelector('#student-dialog').addEventListener('close',()=>{selected=null;submission=null;});
     root.querySelector('#student-refresh').addEventListener('click',load);
     root.querySelector('#student-refresh').disabled=!connection;
-    root.querySelector('#student-status').textContent='Conecte a conta GERAL da escola para consultar alunos e registrar ocorrências.';
+    root.querySelector('#student-status').textContent=connection?'':'Os dados da escola estão indisponíveis.';
     drawActor();if(connection)load();
   }
   function unmount(){version++;close();students=[];busy=false;root=null;}

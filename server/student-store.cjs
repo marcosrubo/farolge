@@ -59,7 +59,7 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
     },
     async saveOccurrence(owner,id,value){
       const protectedFields=['Escola','CGM','Nome','Ocorrencia','EmailAutor','NomeAutor'];
-      const encode=()=>Object.fromEntries(protectedFields.map(field=>[field,seal(value[field],config.key,`occurrence.${owner}.${id}.${field}`)]));
+      const encode=()=>Object.fromEntries(protectedFields.map(field=>[field,value[field]===null?null:seal(value[field],config.key,`occurrence.${owner}.${id}.${field}`)]));
       const rows=await call('Ocorrencias','POST','on_conflict=owner_id,id',{owner_id:owner,id,cgm_key:value.studentId,Data:value.Data,Hora:value.Hora,...encode()});
       if(rows?.length)return value;
       // Reusing the same submission ID after a lost response never duplicates an occurrence.

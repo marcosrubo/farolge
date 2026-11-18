@@ -8,10 +8,10 @@ async function handleStudents({action,url,body,store,owner,email,actor,now=new D
     students.sort((a,b)=>a.Nome.localeCompare(b.Nome,'pt-BR',{sensitivity:'base'})||a.Turma.localeCompare(b.Turma,'pt-BR')||a.CGM.localeCompare(b.CGM));
     return {mailbox:email,students};
   }
-  if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox','studentId','id','ocorrencia','authorMailbox'].includes(key)))fail('invalid_occurrence',400);
+  if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox','studentId','id','ocorrencia','authorMailbox','authorId'].includes(key)))fail('invalid_occurrence',400);
   if(!/^[a-f0-9]{64}$/.test(body.studentId||'')||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(body.id||''))fail('invalid_occurrence',400);
-  if(!actor?.email||!actor?.name)fail('author_required',401);
-  if(body.authorMailbox!==actor.email)fail('author_changed',409);
+  if(!(actor?.id||actor?.email)||!actor?.name)fail('author_required',401);
+  if(actor.id?body.authorId!==actor.id||'authorMailbox' in body:body.authorMailbox!==actor.email||'authorId' in body)fail('author_changed',409);
   const text=typeof body.ocorrencia==='string'?body.ocorrencia.trim():'';
   if(!text||text.length>5000)fail('invalid_occurrence',400);
   const student=await store.getStudent(owner,body.studentId);

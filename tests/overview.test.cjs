@@ -97,7 +97,7 @@ test('ocorrências descartam respostas da Geral anterior e separam ausência de 
  respondOccurrences(h,{mailbox:'old@example.com',items:occurrenceItems});await settle();assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');
  respondOccurrences(h,{error:'storage_unavailable'},false);await settle();assert.ok(h.get('#overview-occurrences-status').textContent.includes('Não foi possível'));assert.ok(!h.get('#overview-occurrences-status').textContent.includes('Nenhuma ocorrência'));
  h.get('#overview-occurrences-refresh').listeners.click();respondOccurrences(h,{mailbox:'new@example.com',items:[],nextPageToken:null});await settle();assert.equal(h.get('#overview-occurrences-status').textContent,'Nenhuma ocorrência registrada.');
- h.app.connectionChanged('general',null);assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');assert.ok(h.get('#overview-occurrences-status').textContent.includes('Conecte a conta GERAL'));
+ h.app.connectionChanged('general',null);assert.equal(h.get('#overview-occurrences-rows').innerHTML,'');assert.ok(h.get('#overview-occurrences-status').textContent.includes('ocorrências da escola'));
 });
 
 test('atualização automática começa marcada, usa 60 segundos e não sobrepõe consultas pendentes',async()=>{

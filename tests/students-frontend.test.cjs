@@ -57,7 +57,7 @@ test('Carga identifica falha do leitor e do Supabase sem repetir POST ou apagar 
 
 test('ocorrência exige Pessoal com nome e fecha o formulário quando o autor muda',async()=>{
  const h=ui('students.js','FarolStudents');h.app.mount(h.root);h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student]});await settle();
- h.get('#student-list').listeners.click(click({student:student.id}));assert.equal(h.get('#student-save').disabled,true);assert.ok(h.get('#student-actor').textContent.includes('conta Pessoal'));
+ h.get('#student-list').listeners.click(click({student:student.id}));assert.equal(h.get('#student-save').disabled,true);assert.ok(h.get('#student-actor').textContent.includes('Identifique'));
  h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});assert.equal(h.get('#student-dialog').open,false);
  h.get('#student-list').listeners.click(click({student:student.id}));assert.equal(h.get('#student-save').disabled,false);assert.ok(h.get('#student-actor').textContent.includes('Monitor Fictício'));
  h.get('#student-occurrence').value='Registro.';h.get('#student-form').listeners.submit({preventDefault(){}});assert.equal(JSON.parse(h.requests[1].opts.body).authorMailbox,'monitor@example.com');
