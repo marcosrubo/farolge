@@ -1,4 +1,4 @@
-/* Exibe somente o IP desta conexão, sem persistir ou autorizar acessos. */
+/* Registra a abertura da página e mantém a consulta de IP independente. */
 (() => {
   'use strict';
   const label = document.getElementById('network-ip');
@@ -25,6 +25,9 @@
       button.disabled = false;
     }
   }
+  fetch('/api/access-log', {
+    method: 'POST', credentials: 'omit', keepalive: true, headers: {'X-Farol-Request': '1'}
+  }).catch(() => {});
   button.addEventListener('click', refresh);
   window.addEventListener('online', refresh);
   refresh();

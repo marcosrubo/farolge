@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 18/11/2026, Marcos solicitou LogDoSistema no Supabase com IP público, data/hora de Brasília, movimento Acessando o sistema e Observacao com tipo aproximado de dispositivo, sistema, navegador e cidade/estado inferidos pela Vercel a partir do IP, quando disponíveis. Registrar cada carregamento da página principal, inclusive antes da conexão. Atualização manual do IP e navegação entre módulos não geram registros. Sem cabeçalho bruto ou identificador persistente do dispositivo. A tabela tem acesso administrativo e a escrita passa pelo servidor. SQL database/system-log.sql; política revisão 27.
+
 - Em 18/11/2026, Marcos restringiu Geral/Pessoal a marcos.rubo@gmail.com, com duas sessões no mesmo navegador para Manutenção, Configurações e ambas as Demandas. Conexão temporária usa cadastro por nome completo: Visão GERAL para Adriana/Vanusa; Radar para elas, Sandra, Jeisiani, Giovana e Luciani; Inspetores/Monitores somente com Conexão temporária ativa, inclusive para Marcos. BI SEED público, sem conexão. Marcos confirmou primeiro acesso presencial: em Configurações confirma quem vai criar senha no mesmo navegador, com autorização de uso único de 10 minutos e encerramento das sessões Google locais. Senha própria do FAROL com hash scrypt, limitação de tentativas, sessão de oito horas, opção de troca e encerramento. Backend verifica permissões e consulta dados escolares vinculados a Marcos; Visão GERAL recebe somente os totais Gmail autorizados e ocorrências. SQL database/temporary-access.sql, política revisão 25 e validação visual apenas na Vercel. A senha da conta Google continua sendo informada apenas ao Google.
 
 

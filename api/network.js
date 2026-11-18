@@ -1,4 +1,4 @@
-const {isIP} = require('node:net');
+const {publicIP} = require('../server/request-network.cjs');
 
 // Diagnóstico na Vercel: não usar esta rota como autorização de rede.
 module.exports = function network(req, res) {
@@ -11,8 +11,7 @@ module.exports = function network(req, res) {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({error: 'Método não permitido.'});
   }
-  const forwarded = req.headers['x-vercel-forwarded-for'] || req.headers['x-forwarded-for'];
-  const ip = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : '';
-  if (!isIP(ip)) return res.status(503).json({error: 'IP público indisponível.'});
+  const ip = publicIP(req.headers);
+  if (!ip) return res.status(503).json({error: 'IP público indisponível.'});
   return res.status(200).json({ip});
 };
