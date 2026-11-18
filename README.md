@@ -439,3 +439,12 @@ Verificação: 208 testes aprovados, incluindo calendário/Brasília, ordenaçã
 
 
 A seleção de turmas da análise permite combinar várias turmas ao mesmo tempo (união: aluno aparece se pertencer a qualquer uma das marcadas, sem duplicar a linha). Sem marcações, mostra todas; Ver todas as turmas limpa a seleção. Busca e turmas são combinadas. A seleção disponível é preservada ao atualizar o período na mesma tela, removendo apenas turmas que deixaram de existir no resultado; troca de conta ou saída da tela limpa a seleção. A escolha filtra a visualização, sem criar restrição de acesso por pedagoga ou gravar preferências.
+
+
+## Diagnóstico de IP público — 18/11/2026
+
+Abaixo da marca, a aplicação consulta GET /api/network ao abrir e mostra o IP público observado pela Vercel (IPv4 ou IPv6), mesmo sem conta Google. Atualizar IP consulta novamente, assim como o evento online do navegador. Após trocar de Wi-Fi/dados móveis, usar o botão ou recarregar para conferir. Sem cache da resposta, serviços externos de IP, gravação no banco ou logs adicionados pela aplicação; os registros técnicos dos fornecedores seguem a política existente. Falha mostra indisponível, nunca um IP fictício ou anterior como atual.
+
+O endpoint usa x-vercel-forwarded-for, com fallback x-forwarded-for e validação de endereço. Não usa o endereço interno do socket. Não implementa bloqueio, identificação automática da escola nem autorização por IP. VPN, proxy, CGNAT, IPv6, troca de provedor e múltiplas saídas podem mudar ou compartilhar o endereço; nome do Wi-Fi e IP local do roteador não são consultados. Validar visualmente somente após publicação na Vercel. Sem SQL, variável ou escopo novo.
+
+Referência: https://vercel.com/docs/headers/request-headers

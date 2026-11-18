@@ -184,3 +184,10 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 @media(max-width:900px){.attendance-matrix .attendance-cgm,.attendance-matrix .attendance-class{position:static}.attendance-matrix .attendance-name{min-width:150px;width:150px;max-width:150px}.attendance-matrix .attendance-total{min-width:65px;width:65px}.attendance-filters .field,.attendance-filters input[type=search]{min-width:0;width:100%}}
 
 .attendance-class-filter{flex:1 1 320px;min-width:0;border:1px solid var(--border);border-radius:8px;padding:12px}.attendance-class-filter legend{font-weight:700;padding:0 5px}.attendance-class-checklist{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;max-height:210px;overflow:auto;margin-bottom:12px}.attendance-class-choice{display:flex;gap:8px;align-items:flex-start;padding:6px;cursor:pointer;overflow-wrap:anywhere}.attendance-class-choice input{margin-top:3px;accent-color:var(--green);flex-shrink:0}
+
+/* Diagnóstico da conexão, abaixo da marca. */
+.sidebar .brand{padding-bottom:12px}
+.network-status{padding:0 9px 18px;color:#c5d5cb;font-size:11px;line-height:1.5}
+.network-status p{margin:0 0 4px;overflow-wrap:anywhere}
+.network-status button{padding:3px 0;border:0;background:transparent;color:#dce8c9;font-size:11px;text-decoration:underline;text-underline-offset:3px}
+.network-status button:disabled{opacity:.6}

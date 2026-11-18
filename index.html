@@ -10,7 +10,8 @@
   <link rel="icon" href="arte/farol-ge-simbolo-quadrado.png">
   <link rel="apple-touch-icon" href="/arte/farol-ge-simbolo-quadrado.png">
   <meta name="apple-mobile-web-app-title" content="FAROL GE">
-  <link rel="stylesheet" href="styles.css?v=20261117-25">
+  <link rel="stylesheet" href="styles.css?v=20261118-ip1">
+  <script src="network.js?v=20261118-ip1" defer></script>
   <script src="config.js?v=20261117-25" defer></script>
   <script src="demands.js?v=20261117-25" defer></script>
   <script src="institutional.js?v=20261117-25" defer></script>
@@ -26,6 +27,10 @@
   <a class="skip-link" href="#main">Ir para o conteúdo</a>
   <aside class="sidebar" aria-label="Menu principal">
     <a class="brand" href="#inicio"><img src="arte/farol-ge-simbolo-quadrado.png" width="46" height="46" alt=""><span>FAROL <b>GE</b><small>GESTÃO ESCOLAR</small></span></a>
+    <div class="network-status" aria-label="Conexão de rede">
+      <p id="network-ip" role="status">IP público: consultando…</p>
+      <button id="network-refresh" type="button">Atualizar IP</button>
+    </div>
     <div class="school-block"><img class="school-emblem" src="arte/thiago-terra-identidade-original.png" width="48" height="48" alt="Emblema do colégio"><span class="school-avatar" hidden>TT</span><div><strong class="school-name-lines" data-school>COLÉGIO ESTADUAL<br>CÍVICO MILITAR<br>THIAGO TERRA</strong><small hidden></small></div></div>
     <p class="nav-caption">ESPAÇO DE TRABALHO</p>
     <nav id="navigation"></nav>
