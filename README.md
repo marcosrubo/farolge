@@ -448,3 +448,10 @@ Abaixo da marca, a aplicação consulta GET /api/network ao abrir e mostra o IP 
 O endpoint usa x-vercel-forwarded-for, com fallback x-forwarded-for e validação de endereço. Não usa o endereço interno do socket. Não implementa bloqueio, identificação automática da escola nem autorização por IP. VPN, proxy, CGNAT, IPv6, troca de provedor e múltiplas saídas podem mudar ou compartilhar o endereço; nome do Wi-Fi e IP local do roteador não são consultados. Validar visualmente somente após publicação na Vercel. Sem SQL, variável ou escopo novo.
 
 Referência: https://vercel.com/docs/headers/request-headers
+
+
+## Cadastro de usuários em Configurações — 18/11/2026
+
+O cadastro exige **Escola**, **Nome** e **Função**. **E-mail** e **Ordem** são opcionais. A lista apresenta os menores números primeiro, seguidos dos cadastros sem ordem. Em caso de empate, usa o identificador do cadastro para manter a ordenação estável entre páginas. Uma conta Geral autorizada pode incluir, editar e excluir cadastros, inclusive os que não têm e-mail. A exclusão exige confirmação.
+
+Antes de publicar, executar o arquivo atualizado `database/authorized-emails.sql` no Supabase exclusivo do FAROL GE. O mesmo script instala ou migra a tabela. Os cadastros existentes preservam seus e-mails e ficam sem Função e Ordem até serem completados em Configurações. Cada cadastro possui um identificador próprio. E-mails preenchidos continuam únicos e normalizados, e a autorização Google continua consultando o endereço verificado. Cadastros sem e-mail ficam disponíveis na lista administrativa. A futura tela de identificação e sua forma de conexão ainda aguardam definição. Política revisão 23.

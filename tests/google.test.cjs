@@ -632,9 +632,9 @@ test('cadastro de e-mails exige Geral autorizada e CSRF, sem herdar Pessoal ou p
  const h=harness();h.store.listAuthorizedEmails=async()=>({users:[],nextPageToken:null});const changes=[];h.store.includeAuthorizedEmail=async row=>changes.push(row);
  const personal=await h.login('personal@example.com');assert.equal((await h.request('authorized-emails',{cookie:personal.cookie,query:'?mailbox=personal@example.com'})).status,401);
  h.setScopes('openid email profile');const general=await h.login(GENERAL_EMAIL,personal.cookie,'general');assert.equal((await h.request('authorized-emails',{cookie:general.cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
- const body={type:'general',mailbox:GENERAL_EMAIL,operation:'include',email:'new@example.com',nome:'Pessoa',escola:'Escola'};
+ const body={type:'general',mailbox:GENERAL_EMAIL,operation:'include',email:null,nome:'Pessoa',escola:'Escola',funcao:'Inspetora'};
  assert.equal((await h.request('authorized-email',{method:'POST',cookie:general.cookie,body,origin:'https://elsewhere.invalid'})).status,403);assert.equal(changes.length,0);
- assert.equal((await h.request('authorized-email',{method:'POST',cookie:general.cookie,body})).status,200);assert.equal(changes[0].Nome,'Pessoa');
+ assert.equal((await h.request('authorized-email',{method:'POST',cookie:general.cookie,body})).status,200);assert.equal(changes[0].Nome,'Pessoa');assert.equal(changes[0].email,null);
 });
 test('ocorrência grava autor Pessoal validado com nome do cadastro; requer Pessoal e rejeita autoria forjada',async()=>{
  const h=harness();const general=await h.login(GENERAL_EMAIL,'','general');const personal=await h.login('monitor@example.com',general.cookie,'personal');

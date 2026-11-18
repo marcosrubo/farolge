@@ -5,7 +5,7 @@ const {handleAttendanceAnalysis}=require('./attendance-analysis.cjs');
 const {handleAttendanceImport}=require('./attendance-import.cjs');
 const {makeStudentStore}=require('./student-store.cjs');
 const {handleStudents}=require('./students.cjs');
-const {handleAuthorizedUsers}=require('./authorized-users.cjs');
+const {handleAuthorizedUsers,validUserId,validUserOrder}=require('./authorized-users.cjs');
 const {handleStudentImport}=require('./student-import.cjs');
 const {handleDemands}=require('./demands.cjs');
 const {handleMaintenance}=require('./maintenance.cjs');
@@ -102,20 +102,32 @@ function makeStore(config,fetcher=fetch) {
     async listAuthorizedEmails(pageToken=''){
       let after='';
       if(pageToken){
-        let cursor;try{if(pageToken.length>1024)throw new Error();cursor=Buffer.from(pageToken,'base64url').toString('utf8');}catch{throw Object.assign(new Error('invalid_page'),{status:400});}
-        if(cursor.length>254||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cursor))throw Object.assign(new Error('invalid_page'),{status:400});
-        after='&email=gt.'+encodeURIComponent(cursor);
+        const invalidPage=()=>Object.assign(new Error('invalid_page'),{status:400});
+        if(!/^[A-Za-z0-9_-]{1,128}$/.test(pageToken))throw invalidPage();
+        let cursor;
+        try{cursor=JSON.parse(Buffer.from(pageToken,'base64url').toString('utf8'));}catch{throw invalidPage();}
+        if(!Array.isArray(cursor)||cursor.length!==2)throw invalidPage();
+        const [order,id]=cursor;
+        if(!validUserOrder(order)||!validUserId(id))throw invalidPage();
+        after=order===null
+          ?'&Ordem=is.null&id=gt.'+id
+          :'&or='+encodeURIComponent(`(Ordem.gt.${order},and(Ordem.eq.${order},id.gt.${id}),Ordem.is.null)`);
       }
-      const rows=await call('EmailsAutorizados','GET','select=Escola,Nome,email&order=email.asc&limit=51'+after,null,'return=representation');
+      const rows=await call('EmailsAutorizados','GET','select=id,Escola,Nome,Funcao,Ordem,email&order=Ordem.asc.nullslast,id.asc&limit=51'+after,null,'return=representation');
       if(!Array.isArray(rows))throw new Error('access_unavailable');
-      return {users:rows.slice(0,50),nextPageToken:rows.length>50?Buffer.from(rows[49].email).toString('base64url'):null};
+      const last=rows[49];
+      return {users:rows.slice(0,50),nextPageToken:rows.length>50?Buffer.from(JSON.stringify([last.Ordem,last.id])).toString('base64url'):null};
     },
     async includeAuthorizedEmail(row){
       const rows=await call('EmailsAutorizados','POST','',row,'return=representation');
       if(!rows?.length)throw new Error('access_unavailable');
     },
-    async excludeAuthorizedEmail(email){
-      await call('EmailsAutorizados','DELETE','email=eq.'+encodeURIComponent(email),null,'return=representation');
+    async updateAuthorizedEmail(id,row){
+      const rows=await call('EmailsAutorizados','PATCH','id=eq.'+id,row,'return=representation');
+      if(!rows?.length)throw Object.assign(new Error('not_found'),{status:404});
+    },
+    async excludeAuthorizedEmail(id){
+      await call('EmailsAutorizados','DELETE','id=eq.'+id,null,'return=representation');
     },
     async get(id) {const rows=await sessions('GET',`id=eq.${id}&select=id,payload,expires_at`,null,'return=representation');return decode(rows[0]);},
     async take(id) {const rows=await sessions('DELETE',`id=eq.${id}`,null,'return=representation');return decode(rows[0]);},
