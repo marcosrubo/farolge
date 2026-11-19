@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 19/11/2026, Marcos definiu que a Pessoal institucional @escola.pr.gov.br associa o e-mail Google verificado ao cadastro e libera seus módulos, com rechecagem no servidor a cada requisição. Sem cadastro, apenas conexão/status e BI SEED público. Demandas e totais Pessoais usam a conta da própria pessoa; origem escolar/Geral segue a fonte já usada para a Conexão temporária. Autoria usa e-mail verificado e nome cadastrado. Administração exige as duas conexões de Marcos. Sem novo SQL, variável ou escopo; política revisão 32.
+
 - Em 19/11/2026, Marcos liberou Geral e Pessoal a Contas Google Workspace com e-mail verificado do domínio exato @escola.pr.gov.br, além de marcos.rubo@gmail.com. Escolher conta no Google, preservar isolamento por identidade/tipo e manter administração com as duas conexões de Marcos. Marcadores e acesso por módulo das novas conexões institucionais aguardam definição. Sem novo SQL, escopo ou variável. Política revisão 31.
 
 - Marcos passou a solicitar todos os módulos para sua conta com Geral e Pessoal verificadas, e permissões por cadastro nos demais acessos. Configurações tem uma caixa por módulo. O menu mostra todos e avisa ao acessar os indisponíveis. Visão GERAL só abre após clique no menu com permissão. O servidor confere permissões; Configurações temporárias mostra os próprios acessos, e administração e confirmação de contas exigem as duas conexões de Marcos. Permitir operações dos demais módulos marcados com as conexões armazenadas de Marcos. Manter BI SEED explicativo público e preservar acessos dos cadastros existentes até salvar as caixas. SQL database/module-access.sql; política revisão 28.

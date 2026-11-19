@@ -252,3 +252,8 @@ Executar `database/temporary-access.sql` no Supabase exclusivo FAROL GE e public
 Em 19/11/2026, Marcos liberou contas institucionais com e-mail verificado no domínio exato `@escola.pr.gov.br` para Geral e Pessoal. O OAuth abre a escolha da conta no Google. Para a conta institucional, o servidor confirma também que a identidade Google pertence a uma conta gerenciada do Workspace. As permissões solicitadas ao Google e o vínculo isolado por identidade/tipo seguem o fluxo descrito acima.
 
 A conta institucional pode conectar, consultar seu status e desconectar. Permissões de módulos e preparação de marcadores para essas contas aguardam definição. A administração exige as duas conexões verificadas de `marcos.rubo@gmail.com`. Sem novo SQL, escopo ou variável. [Validação de identidade Google](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)
+
+
+## Permissões pela Pessoal institucional — revisão 32
+
+Para Pessoal com e-mail @escola.pr.gov.br, o backend associa o e-mail verificado ao cadastro pelos campos já existentes, consulta as permissões de módulo a cada requisição e usa a caixa da própria conta nas operações Pessoais. Configurações mostra os próprios acessos quando habilitada. A administração permanece reservada às duas conexões de Marcos. A Geral institucional continua independente dessa identificação. Sem novo SQL, variável ou escopo.

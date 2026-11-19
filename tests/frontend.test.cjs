@@ -337,3 +337,22 @@ test('Configurações temporárias exibem apenas os acessos do próprio cadastro
  assert.ok(panel.includes('Visão GERAL — Não habilitado'));
  assert.deepEqual(received,[]);
 });
+
+test('Pessoal institucional aplica o cadastro e entrega a própria caixa ao módulo Pessoal',async()=>{
+ const email='professora@escola.pr.gov.br',account={email,gmail:true,labels:'ready'};
+ const received={personal:[],actor:[]};
+ const h=ui({configured:true,mode:'personal',connections:{general:null,personal:account},modules:['pessoais','inspetores-monitores','configuracoes'],
+  institutionalUser:{id:'cadastro-1',name:'Docente cadastrada',email},school:{email:adminEmail},
+  sharedConnections:{general:null,personal:account}},'',{
+  FarolDemands:{connectionChanged:value=>received.personal.push(value),unmount(){}},
+  FarolStudents:{connectionChanged(){},personalConnectionChanged:value=>received.actor.push(value),unmount(){}}
+ });
+ await settle();
+ assert.equal(received.personal.at(-1).email,email);
+ assert.equal(received.actor.at(-1).email,email);
+ assert.equal(received.actor.at(-1).name,'Docente cadastrada');
+ assert.match(h.get('#email-personal-status').textContent,/Docente cadastrada/);
+ assert.equal(h.connect[1].hidden,false);
+ h.context.location.hash='#configuracoes';h.window.listeners.hashchange();
+ assert.ok(h.get('#authorized-users-board').innerHTML.includes('Meus acessos'));
+});

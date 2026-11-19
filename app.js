@@ -21,7 +21,7 @@ const modules = [
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
 window.FarolMenuModules=modules;
-let allowedModules=new Set(['bi-seed']),temporaryUser=null,overviewSelected=false;
+let allowedModules=new Set(['bi-seed']),temporaryUser=null,moduleUserKey=null,overviewSelected=false;
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 
 function updateSchool(){
@@ -110,7 +110,7 @@ function render(){
   if(analysis)window.FarolAttendanceAnalysis?.mount(document.querySelector('#attendance-analysis-board'));
   if(selected.id==='configuracoes'){
     const board=document.querySelector('#authorized-users-board');
-    if(temporaryUser)board.innerHTML=`<h1>Configurações</h1><section class="panel"><h2>Meus acessos</h2><ul>${modules.map(item=>`<li>${item.label} — ${allowedModules.has(item.id)?'Habilitado':'Não habilitado'}</li>`).join('')}</ul></section>`;
+    if(moduleUserKey)board.innerHTML=`<h1>Configurações</h1><section class="panel"><h2>Meus acessos</h2><ul>${modules.map(item=>`<li>${item.label} — ${allowedModules.has(item.id)?'Habilitado':'Não habilitado'}</li>`).join('')}</ul></section>`;
     else window.FarolAuthorizedUsers?.mount(board);
   }
   if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
@@ -165,11 +165,13 @@ function setupEmailConnections(){
   }
   function updateAccess(result){
     const user=result?.temporary||null;
+    const institutional=result?.institutionalUser;
+    const identityKey=user?'temporary:'+user.id:institutional?'google:'+institutional.id+':'+institutional.email:null;
     const next=new Set(Array.isArray(result?.modules)?result.modules:[]);
-    if(!user)next.add('bi-seed');
-    if(user?.id!==temporaryUser?.id||!next.has('inicio'))overviewSelected=false;
-    const changed=next.size!==allowedModules.size||[...next].some(id=>!allowedModules.has(id))||user?.id!==temporaryUser?.id;
-    allowedModules=next;temporaryUser=user;
+    if(!identityKey)next.add('bi-seed');
+    if(identityKey!==moduleUserKey||!next.has('inicio'))overviewSelected=false;
+    const changed=next.size!==allowedModules.size||[...next].some(id=>!allowedModules.has(id))||identityKey!==moduleUserKey;
+    allowedModules=next;temporaryUser=user;moduleUserKey=identityKey;
     window.FarolTemporaryAccess?.update(user,configured);
     if(temporaryExpiry!==null)clearTimeout(temporaryExpiry);
     temporaryExpiry=user?.expiresAt?setTimeout(refresh,Math.max(250,user.expiresAt-Date.now()+250)):null;
@@ -215,9 +217,11 @@ function setupEmailConnections(){
       if(version!==statusVersion)return;
       configured=result.configured===true;
       updateAccess(result);
-      const connections=result.temporary?result.sharedConnections:result.connections;
-      const school=result.temporary?result.school:connections?.general;
-      const actor=result.temporary||(connections?.personal?{email:connections.personal.email,name:'Marcos Rubo'}:null);
+      const registered=Boolean(result.temporary||result.institutionalUser);
+      const connections=registered?result.sharedConnections:result.connections;
+      const school=registered?result.school:connections?.general;
+      const actor=result.temporary||(result.institutionalUser?{email:result.institutionalUser.email,name:result.institutionalUser.name}
+        :connections?.personal?{email:connections.personal.email,name:'Marcos Rubo'}:null);
       const access=(module,value)=>configured&&allowedModules.has(module)?value||null:null;
       for(const type of types)activeEmails[type]=configured?result.connections?.[type]?.email||null:null;
       window.FarolDemands?.connectionChanged(access('pessoais',connections?.personal));
@@ -225,7 +229,7 @@ function setupEmailConnections(){
       window.FarolMaintenance?.connectionChanged(access('manutencao-sistema',connections?.general));
       window.FarolStudents?.connectionChanged(access('inspetores-monitores',school));
       window.FarolStudents?.personalConnectionChanged?.(access('inspetores-monitores',actor));
-      window.FarolAuthorizedUsers?.connectionChanged(access('configuracoes',result.connections?.general));
+      window.FarolAuthorizedUsers?.connectionChanged(registered?null:access('configuracoes',result.connections?.general));
       window.FarolAttendanceAnalysis?.connectionChanged(access('radar',school));
       for(const type of types)window.FarolOverview?.connectionChanged(type,access('inicio',connections?.[type]),access('inicio',school));
       for(const type of types){
@@ -236,7 +240,9 @@ function setupEmailConnections(){
         status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='access_denied'?'Acesso não autorizado':['unavailable','access_unavailable','access_setup_required'].includes(result.errors?.[type])?'Conexão não verificada':'NÃO conectado');
         if(connected&&type==='general')status.textContent+=' · Nomes no Drive: '+(connection.driveMetadata?'autorizado':'revisar autorização')+' · Leitura de PDFs: '+(connection.driveRead?'autorizada':'revisar autorização');
         if(connected) {
-          if(connection.labels==='pending_policy')status.textContent+=' · Módulos aguardando definição de permissões';
+          if(type==='personal'&&result.institutionalUser)status.textContent+=' · '+result.institutionalUser.name;
+          if(connection.labels==='pending_policy')status.textContent+=' · '+(type==='general'?'Módulos aguardando definição de permissões'
+            :result.institutionalUser?'Módulos conforme o cadastro':'E-mail sem cadastro de usuário');
           else{
             const labelMessages={ready:type==='personal'?'labels prontas (4/4)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
             status.textContent+=' · '+(type==='general'&&connection.labels==='missing'&&connection.labelDetails?.missing?.length?'Faltam marcadores: '+connection.labelDetails.missing.join(', '):(labelMessages[connection.labels]||labelMessages.permission_required));

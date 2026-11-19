@@ -11,7 +11,7 @@ function harness(overrides={}){
  const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[];
  let labelFailure=null,labelRace=false;
  const labelError=status=>Object.assign(new Error('label_error'),{response:{status}});
- const store={async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
+ const store={async getRegisteredUser(){return null;},async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
  let email='marcos.rubo@gmail.com',identityOverride={},scopes=null,options,issuedOptions,flowOptions=new Map(),calls=0,authUnavailable=false,nowLogout=[],gmailDenied=false,failedEmail=null,failedStatus=503,failedReason=null,revokedAuthEmail=null;
  const userFor=value=>{if(!users.has(value))users.set(value,{id:'user-'+digest(value).slice(0,16),email:value,identities:[{provider:'google',identity_data:{sub:'sub-'+value}}]});return users.get(value);};
  const auth={async signIn(token,access,nonce){assert.equal(digest(nonce),issuedOptions.nonce);assert.equal(token,'id:'+email);const user=userFor(email);return {user,access_token:'auth:'+email,refresh_token:'refresh:'+email,expires_in:3600};},async user(token){if(authUnavailable || token.slice(5)===revokedAuthEmail)throw new Error('login_required');return userFor(token.slice(5));},async refresh(token){const value=token.slice(8);return {access_token:'auth:'+value,refresh_token:token,expires_in:3600};},async logout(token){nowLogout.push(token);}};
@@ -29,7 +29,7 @@ function harness(overrides={}){
      if(names.has(data.name))throw labelError(409);
      names.add(data.name);return {data:{id:'label-'+names.size,name:data.name}};
    }
-   return {data:{labels:[...names].map(name=>({id:'id-'+name,name}))}};
+   return {data:{labels:[...names].map(name=>({id:'id-'+digest(name).slice(0,12),name}))}};
  }
  if(url.includes('/gmail/v1/users/me/labels/'))return {data:{id:decodeURIComponent(url.split('/').at(-1)),messagesTotal:3}};
  if(url.includes('/drive/v3/files?'))return {data:{files:new URL(url).searchParams.get('q').includes("name = 'FarolGE'")?[{id:'folder-1',name:'FarolGE'}]:new URL(url).searchParams.get('q').includes("name = 'FaltasSemanais'")?[{id:'folder-weekly',name:'FaltasSemanais'}]:[{id:'file-1',name:'Ata da escola'}]}};
@@ -776,4 +776,58 @@ test('listagem pública segue a ordem e expõe somente ID e nome',async()=>{
  assert.deepEqual(result.users,[{id:temporaryId,name:'Exemplo'}]);
  assert.equal(request.searchParams.get('order'),'Ordem.asc.nullslast,id.asc');
  assert.equal(request.searchParams.get('select'),'id,Nome,Ordem');
+});
+
+test('Pessoal institucional usa o cadastro por e-mail e a caixa própria, com revogação a cada consulta',async()=>{
+ const h=harness(),admin=await h.admin();
+ const email='professora@escola.pr.gov.br';
+ const owner=h.userFor(GENERAL_EMAIL).id, ownId=h.userFor(email).id;
+ let profile={id:temporaryId,Nome:'Docente cadastrada',email,permissions:['inicio','pessoais','inspetores-monitores','configuracoes']};
+ h.store.getRegisteredUser=async address=>address===email?profile:null;
+ h.store.getTemporaryOwner=async()=>owner;
+ h.store.getDemands=async id=>{assert.equal(id,ownId);return [];};
+ h.store.getStudents=async id=>{assert.equal(id,owner);return [];};
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ const general=await h.login(email,'','general');
+ assert.deepEqual((await h.request('status',{cookie:general.cookie})).json().modules,['bi-seed']);
+ const personal=await h.login(email,general.cookie,'personal');
+ const cookie=general.cookie+'; '+personal.cookie;
+ const status=(await h.request('status',{cookie})).json();
+ assert.deepEqual(status.institutionalUser,{id:temporaryId,name:'Docente cadastrada',email});
+ assert.deepEqual(status.modules,['inicio','inspetores-monitores','pessoais','configuracoes']);
+ assert.equal(status.sharedConnections.personal.email,email);
+ assert.equal(status.sharedConnections.general.email,GENERAL_EMAIL);
+ assert.equal(status.connections.personal.labels,'ready');
+ const board=await h.request('board',{cookie,query:'?column=0&mailbox='+email});
+ assert.equal(board.status,200);
+ assert.equal(board.json().mailbox,email);
+ assert.equal((await h.request('board',{cookie,query:'?column=0&mailbox='+GENERAL_EMAIL})).status,409);
+ assert.equal(h.labelRequests.at(-1).email,email);
+ assert.equal((await h.request('overview',{cookie,query:'?type=personal&mailbox='+email})).status,200);
+ assert.equal((await h.request('students',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
+ assert.equal((await h.request('authorized-emails',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,403);
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
+ profile.permissions=[];
+ assert.equal((await h.request('board',{cookie,query:'?column=0&mailbox='+email})).json().error,'module_forbidden');
+ assert.deepEqual((await h.request('status',{cookie})).json().modules,[]);
+ profile=null;
+ const afterRemoval=(await h.request('status',{cookie})).json();
+ assert.equal(afterRemoval.connections.personal.email,email);
+ assert.equal(afterRemoval.institutionalUser,undefined);
+ assert.deepEqual(afterRemoval.modules,['bi-seed']);
+});
+
+test('consulta de cadastro institucional confere endereço exato na linha do Supabase',async()=>{
+ const email='professora@escola.pr.gov.br';
+ let profile={id:temporaryId,email,Nome:'Docente',permissions:['radar']};
+ const store=makeStore(configuration(env),async url=>{
+  const request=new URL(url);
+  assert.equal(request.pathname,'/rest/v1/EmailsAutorizados');
+  assert.equal(request.searchParams.get('email'),'eq.'+email);
+  assert.equal(request.searchParams.get('select'),'id,Nome,email,permissions');
+  return {ok:true,status:200,json:async()=>[profile]};
+ });
+ assert.deepEqual(await store.getRegisteredUser(email),profile);
+ profile={...profile,email:'outra@escola.pr.gov.br'};
+ assert.equal(await store.getRegisteredUser(email),null);
 });

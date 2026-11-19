@@ -459,11 +459,11 @@ Antes de publicar, executar o arquivo atualizado `database/authorized-emails.sql
 
 ## Conexão temporária e acesso por módulo — 18/11/2026
 
-Geral e Pessoal aceitam a identidade Google verificada de `marcos.rubo@gmail.com` e Contas Google Workspace com e-mail exatamente no domínio `@escola.pr.gov.br`. Com as duas conexões de sua própria conta ativas no mesmo navegador, Marcos pode usar todos os módulos. O acesso a módulos pelas novas conexões institucionais aguarda definição. Os usuários cadastrados também podem usar a Conexão temporária. Em **Configurações → Cadastro de usuários**, Marcos marca uma caixa para cada funcionalidade e salva o cadastro. O menu mostra todas as opções. Ao abrir um módulo sem permissão, apresenta um aviso. A **Visão GERAL** é aberta somente pelo clique no menu e com permissão ativa.
+Geral e Pessoal aceitam a identidade Google verificada de `marcos.rubo@gmail.com` e Contas Google Workspace com e-mail exatamente no domínio `@escola.pr.gov.br`. Com as duas conexões de sua própria conta ativas no mesmo navegador, Marcos pode usar todos os módulos. A conexão Pessoal institucional usa o cadastro do e-mail verificado para liberar módulos. Os usuários cadastrados também podem usar a Conexão temporária. Em **Configurações → Cadastro de usuários**, Marcos marca uma caixa para cada funcionalidade e salva o cadastro. O menu mostra todas as opções. Ao abrir um módulo sem permissão, apresenta um aviso. A **Visão GERAL** é aberta somente pelo clique no menu e com permissão ativa.
 
 O servidor confere as permissões a cada requisição. Ao habilitar Demandas ou Manutenção, Marcos libera os dados e as ações daquele módulo usando as respectivas conexões armazenadas no servidor, conforme as permissões Google concedidas. Configurações permite ao usuário temporário consultar os próprios acessos. Administração dos cadastros, confirmação de primeiro acesso e alteração de permissões exigem as duas conexões de Marcos. O BI SEED mantém sua tela explicativa pública. Para uma sessão temporária, o acesso ao BI SEED também pode ser marcado ou desmarcado.
 
-Executar `database/module-access.sql` após `database/temporary-access.sql`. A migração conserva as permissões anteriores enquanto o cadastro existente não for salvo com suas caixas de seleção. Cadastros novos começam com todas as caixas desmarcadas. Uma lista vazia salva significa que nenhum módulo foi habilitado para aquela sessão temporária. Publicar com a política de privacidade revisão 31.
+Executar `database/module-access.sql` após `database/temporary-access.sql`. A migração conserva as permissões anteriores enquanto o cadastro existente não for salvo com suas caixas de seleção. Cadastros novos começam com todas as caixas desmarcadas. Uma lista vazia salva significa que nenhum módulo foi habilitado para aquela sessão temporária. Publicar com a política de privacidade revisão 32.
 
 ### Primeiro acesso presencial
 
@@ -491,6 +491,15 @@ Antes de publicar, executar `database/system-log.sql` no Supabase exclusivo do F
 
 ## Conexões Google institucionais — 19/11/2026
 
-A conta é escolhida no Google para Geral ou Pessoal. O FAROL valida o e-mail e a identidade Google, com e-mail verificado, assinatura, audiência, nonce e indicação de conta gerenciada pelo Workspace para endereços `@escola.pr.gov.br`. A autorização institucional é armazenada por identidade e tipo, e a pessoa pode desconectar a própria conta. Ao conectar, o FAROL confirma a identidade e os serviços concedidos. Os marcadores dessas contas aguardam a definição das permissões dos módulos. As duas sessões Google de Marcos continuam necessárias para a administração. A Conexão temporária permanece um fluxo distinto.
+A conta é escolhida no Google para Geral ou Pessoal. O FAROL valida o e-mail e a identidade Google, com e-mail verificado, assinatura, audiência, nonce e indicação de conta gerenciada pelo Workspace para endereços `@escola.pr.gov.br`. A autorização institucional é armazenada por identidade e tipo, e a pessoa pode desconectar a própria conta. Ao conectar, o FAROL confirma a identidade e os serviços concedidos. A preparação dos marcadores das contas institucionais depende do acesso a Demandas PESSOAIS, conforme a seção a seguir. As duas sessões Google de Marcos continuam necessárias para a administração. A Conexão temporária permanece um fluxo distinto.
 
-Sem novo SQL, escopo ou variável. Publicar código e política revisão 31 e validar as duas conexões na Vercel com uma conta institucional real. A autorização no domínio depende da política do Google Workspace da organização. [Validação de identidade Google](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)
+Sem novo SQL, escopo ou variável. Publicar código e política revisão 32 e validar as duas conexões na Vercel com uma conta institucional real. A autorização no domínio depende da política do Google Workspace da organização. [Validação de identidade Google](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)
+
+
+### Permissões pela Pessoal institucional
+
+Ao conectar uma Pessoal `@escola.pr.gov.br`, o backend busca o e-mail verificado em EmailsAutorizados e usa as permissões do cadastro em cada requisição. Com o e-mail ausente do cadastro, a conta pode conferir a conexão e acessar o BI SEED público. Alterar ou excluir o cadastro muda a liberação nas consultas seguintes. Configurações permite consultar os próprios acessos quando habilitada. Administrar cadastros continua reservado às duas conexões de Marcos.
+
+Demandas PESSOAIS e os totais pessoais da Visão GERAL usam a caixa institucional do próprio usuário e exigem as permissões Gmail correspondentes. Demandas PESSOAIS habilitada permite preparar os marcadores dessa caixa ao conectar ou revisar a autorização. Dados escolares e a fonte Geral dos módulos seguem o acervo e a autorização já usados na Conexão temporária. A Geral institucional por si só não atribui permissões. Ocorrências usam o nome cadastrado e o e-mail Pessoal verificado na autoria.
+
+Publicar com a política revisão 32. Sem novo SQL, variável ou escopo. Na Vercel, conferir perfil cadastrado, perfil sem cadastro, remoção de permissão, acesso por URL e resposta quando Gmail ainda não estiver autorizado.
