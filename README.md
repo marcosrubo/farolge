@@ -463,13 +463,15 @@ Geral e Pessoal aceitam somente a identidade Google verificada de `marcos.rubo@g
 
 O servidor confere as permissões a cada requisição. Ao habilitar Demandas ou Manutenção, Marcos libera os dados e as ações daquele módulo usando as respectivas conexões armazenadas no servidor, conforme as permissões Google concedidas. Configurações permite ao usuário temporário consultar os próprios acessos. Administração dos cadastros, confirmação de primeiro acesso e alteração de permissões exigem as duas conexões de Marcos. O BI SEED mantém sua tela explicativa pública. Para uma sessão temporária, o acesso ao BI SEED também pode ser marcado ou desmarcado.
 
-Executar `database/module-access.sql` após `database/temporary-access.sql`. A migração conserva as permissões anteriores enquanto o cadastro existente não for salvo com suas caixas de seleção. Cadastros novos começam com todas as caixas desmarcadas. Uma lista vazia salva significa que nenhum módulo foi habilitado para aquela sessão temporária. Publicar com a política de privacidade revisão 29.
+Executar `database/module-access.sql` após `database/temporary-access.sql`. A migração conserva as permissões anteriores enquanto o cadastro existente não for salvo com suas caixas de seleção. Cadastros novos começam com todas as caixas desmarcadas. Uma lista vazia salva significa que nenhum módulo foi habilitado para aquela sessão temporária. Publicar com a política de privacidade revisão 30.
 
 ### Primeiro acesso presencial
 
 1. Marcos conecta Geral e Pessoal em um navegador sob seu controle. Em **Configurações**, escolhe **Confirmar primeiro acesso** na linha da pessoa.
 2. Marcos cria e confirma a primeira senha. O formulário vale por até dez minutos e depende das duas conexões ativas. Ao salvar, a aplicação mostra **Senha cadastrada** e atualiza a lista. Marcos permanece conectado em Geral e Pessoal e pode cadastrar a próxima senha.
 3. A pessoa usa **Conexão temporária**, seleciona o nome e digita a senha em **Entrar**. Com a conexão ativa, **Alterar senha** aparece ao lado do nome e pede a senha atual, a nova senha e a confirmação. O formulário indica se a nova senha atingiu seis caracteres e mostra **Senhas IGUAIS** ou **Senhas DIFERENTES** conforme a digitação. O servidor confere antes de gravar. **Encerrar conexão temporária** permite deixar o navegador livre para outra pessoa.
+
+Em **Configurações → Cadastro de usuários**, **Resetar senha** aparece nos cadastros que já têm senha. Com as duas conexões Google ativas, Marcos define e confirma a nova senha. Ao salvar, o servidor substitui a senha e invalida as sessões temporárias da pessoa. Fechar o formulário antes de salvar preserva a senha atual.
 
 A senha tem pelo menos 6 caracteres, aceita qualquer tipo de caractere e é armazenada como hash scrypt com salt aleatório. O Supabase limita tentativas por cadastro e pela origem da requisição. Sessões temporárias expiram em oito horas. A troca de senha invalida as sessões antigas. A exclusão do cadastro revoga o acesso e preserva as ocorrências já gravadas. A autoria temporária vem do nome do cadastro validado no servidor, inclusive para usuários sem e-mail. [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 

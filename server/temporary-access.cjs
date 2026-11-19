@@ -63,6 +63,15 @@ function canEnroll(profile,enrollment){
   return profile.password_hash===null&&typeof enrollment==='string'&&SECRET_PATTERN.test(enrollment)
     &&matches(digest(enrollment),profile.activation_hash)&&Date.parse(profile.activation_expires_at)>Date.now();
 }
+async function resetTemporaryPassword(store,body){
+  if(!validUserId(body.id)||Object.keys(body).some(key=>!['type','id','password','confirmation'].includes(key)))
+    fail('invalid_temporary_user',400);
+  const password=newPassword(body);
+  const profile=await store.getTemporaryUser(body.id);
+  if(!profile?.password_hash)fail('temporary_reset_unavailable',409);
+  const stored=await passwordHash(password);
+  if(!await store.changeTemporaryPassword(body.id,profile.password_hash,stored))fail('temporary_reset_unavailable',409);
+}
 async function authenticateTemporary({action,store,body,current,request,key,enrollment}){
   if(action==='temporary-password'&&!current)fail('login_required',401);
   const id=current?.profile.id;
@@ -97,5 +106,5 @@ async function authenticateTemporary({action,store,body,current,request,key,enro
 
 module.exports={
   SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,
-  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,authenticateTemporary
+  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,resetTemporaryPassword,authenticateTemporary
 };

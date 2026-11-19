@@ -636,8 +636,28 @@ test('primeiras senhas são cadastradas em sequência com as duas conexões de M
  assert.equal((await post('temporary-login',{id,password:newPassword})).status,200);
  assert.equal((await post('temporary-logout',{},session)).status,200);
  assert.equal((await h.request('status',{cookie:session})).json().mode,'none');
+
+ const otherHash=profiles.get(otherId).password_hash;
+ const resetPassword='956432';
+ const reset={type:'general',id,password:resetPassword,confirmation:resetPassword};
+ const beforeReset=extractCookie(await post('temporary-login',{id,password:newPassword}),'__Host-farol-temporary');
+ assert.ok(beforeReset);
+ assert.equal((await post('temporary-reset-password',reset,admin.general.cookie)).json().error,'admin_required');
+ assert.equal((await post('temporary-reset-password',reset,beforeReset)).json().error,'module_forbidden');
+ assert.equal((await post('temporary-reset-password',reset,admin.cookie,'https://other.test')).status,403);
+ assert.equal((await post('temporary-reset-password',{...reset,confirmation:'diferente'},admin.cookie)).json().error,'temporary_password_confirmation');
+ assert.equal((await h.request('status',{cookie:beforeReset})).json().mode,'temporary');
+
+ const resetResult=await post('temporary-reset-password',reset,admin.cookie);
+ assert.deepEqual(resetResult.json(),{passwordSaved:true});
+ assert.equal(resetResult.headers['set-cookie'],undefined);
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().mode,'both');
+ assert.equal(profiles.get(otherId).password_hash,otherHash);
+ assert.equal((await h.request('status',{cookie:beforeReset})).json().mode,'none');
+ assert.equal((await post('temporary-login',{id,password:newPassword})).status,401);
+ assert.equal((await post('temporary-login',{id,password:resetPassword})).status,200);
  h.store.allowTemporaryAttempt=async()=>false;
- assert.equal((await post('temporary-login',{id,password:newPassword})).status,429);
+ assert.equal((await post('temporary-login',{id,password:resetPassword})).status,429);
 });
 
 test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API em cada requisição',async()=>{

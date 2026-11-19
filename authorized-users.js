@@ -43,6 +43,7 @@ window.FarolAuthorizedUsers=(()=>{
       <td>${escape(row.email??'—')}</td><td>${escape(row.Ordem??'—')}</td>
       <td><button type="button" class="button" data-authorized-action="edit" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>Editar</button>
       <button type="button" class="button" data-authorized-action="exclude" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>EXCLUIR</button>
+      ${row.hasPassword?`<button type="button" class="button" data-authorized-action="reset" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>Resetar senha</button>`:''}
       ${row.Funcao&&!row.hasPassword?`<button type="button" class="button" data-authorized-action="enroll" data-user-id="${escape(row.id)}" ${disabled?'disabled':''}>Confirmar primeiro acesso</button>`:''}</td>
     </tr>`).join('');
     field('include').textContent=editing?'SALVAR':'INCLUIR';
@@ -178,6 +179,10 @@ window.FarolAuthorizedUsers=(()=>{
       const row=rows.find(row=>row.id===button.dataset.userId);
       if(!row)return;
       if(button.dataset.authorizedAction==='enroll'){enroll(row);return;}
+      if(button.dataset.authorizedAction==='reset'){
+        window.FarolTemporaryAccess?.resetPassword?.({id:row.id,name:row.Nome});
+        return;
+      }
       if(button.dataset.authorizedAction==='edit'){
         fillForm(row);error='';feedback='';draw();field('school').focus();
         return;

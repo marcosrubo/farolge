@@ -11,6 +11,8 @@ window.FarolTemporaryAccess=(()=>{
     temporary_password_length:'Use uma senha com pelo menos 6 caracteres.',
     temporary_password_confirmation:'As duas senhas precisam ser iguais.',
     login_required:'A conexão temporária terminou. Identifique-se novamente.',
+    admin_required:'Conecte Geral e Pessoal para resetar a senha.',
+    temporary_reset_unavailable:'O cadastro ou a senha mudou. Atualize a lista e tente novamente.',
     invalid_temporary_user:'Usuário indisponível. Atualize a lista em Voltar e selecione novamente.',
     access_setup_required:'O cadastro temporário ainda precisa ser preparado no Supabase.',
     unavailable:'Não foi possível concluir. Tente novamente.'
@@ -35,16 +37,17 @@ window.FarolTemporaryAccess=(()=>{
     const type=get('show-password').checked?'text':'password';
     for(const name of ['current','password','confirmation'])get(name).type=type;
   }
+  const editingPassword=()=>mode==='password'||mode==='reset-password';
   function updatePasswordMatch(){
     const password=get('password').value,confirmation=get('confirmation').value;
-    const active=mode==='password'&&Boolean(password||confirmation);
+    const active=editingPassword()&&Boolean(password||confirmation);
     const equal=password===confirmation;
     const status=get('password-match');
     status.className=active?(equal?'password-match is-equal':'password-match is-different'):'password-match';
     status.textContent=active?(equal?'Senhas IGUAIS':'Senhas DIFERENTES'):'';
   }
   function updatePasswordLength(){
-    if(mode!=='password')return;
+    if(!editingPassword())return;
     const valid=meetsPasswordMinimum(get('password').value);
     const status=get('password-length');
     status.className=valid?'password-match is-equal':'password-match is-different';
@@ -68,22 +71,23 @@ window.FarolTemporaryAccess=(()=>{
     selected=profile;
     mode=action;
     resetPasswordForm();
-    const create=action==='activate',change=action==='password';
-    get('title').textContent=create?'Criar senha':change?'Alterar senha':'Entrar';
+    const create=action==='activate',change=action==='password',reset=action==='reset-password';
+    const newPassword=create||change||reset;
+    get('title').textContent=create?'Criar senha':reset?'Resetar senha':change?'Alterar senha':'Entrar';
     get('person').textContent=profile.name;
     get('person').hidden=false;
     get('list-section').hidden=true;
     form.hidden=false;
     get('current-field').hidden=!change;
     get('current').required=change;
-    get('confirm-field').hidden=!create&&!change;
-    get('confirmation').required=create||change;
-    get('password-label').textContent=change?`Nova senha (mínimo de ${minimumPasswordLength} caracteres)`:'Senha';
-    get('confirmation-label').textContent=change?`Confirme a nova senha (mínimo de ${minimumPasswordLength} caracteres)`:'Confirme a senha';
-    get('password').autocomplete=create||change?'new-password':'current-password';
-    get('password').minLength=create||change?minimumPasswordLength:1;
-    get('submit').textContent=create?'Criar senha':change?'Salvar senha':'Entrar';
-    get('back').hidden=change;
+    get('confirm-field').hidden=!newPassword;
+    get('confirmation').required=newPassword;
+    get('password-label').textContent=editingPassword()?`Nova senha (mínimo de ${minimumPasswordLength} caracteres)`:'Senha';
+    get('confirmation-label').textContent=editingPassword()?`Confirme a nova senha (mínimo de ${minimumPasswordLength} caracteres)`:'Confirme a senha';
+    get('password').autocomplete=newPassword?'new-password':'current-password';
+    get('password').minLength=newPassword?minimumPasswordLength:1;
+    get('submit').textContent=create?'Criar senha':editingPassword()?'Salvar senha':'Entrar';
+    get('back').hidden=editingPassword();
     message(create?`Primeiro acesso confirmado. Escolha uma senha com pelo menos ${minimumPasswordLength} caracteres.`:'');
     if(!dialog.open)dialog.showModal();
     (change?get('current'):get('password')).focus();
@@ -133,6 +137,7 @@ window.FarolTemporaryAccess=(()=>{
     message('O cadastro ainda está sem senha.');
   }
   function enroll(profile){showForm('activate',profile);}
+  function resetPassword(profile){showForm('reset-password',profile);}
   get('open').addEventListener('click',showUsers);
   get('show-password').addEventListener('change',updatePasswordVisibility);
   get('back').addEventListener('click',showUsers);
@@ -189,12 +194,13 @@ window.FarolTemporaryAccess=(()=>{
       }
     }
     if(mode==='password')body.currentPassword=get('current').value;
+    if(mode==='reset-password')body.type='general';
     setBusy(true);message('Confirmando…');
     try{
       const result=await api('temporary-'+mode,body);
-      if(mode==='activate'){
+      if(mode==='activate'||mode==='reset-password'){
         if(result.passwordSaved!==true)throw new Error('unavailable');
-        get('status').textContent='Senha cadastrada.';
+        get('status').textContent=mode==='activate'?'Senha cadastrada.':'Senha redefinida.';
         dialog.close();
         await window.FarolAuthorizedUsers?.refresh?.();
         return;
@@ -221,5 +227,5 @@ window.FarolTemporaryAccess=(()=>{
   get('close').addEventListener('click',()=>dialog.close());
   dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
   dialog.addEventListener('close',()=>{requestId++;resetPasswordForm();setBusy(false);});
-  return {update,enroll};
+  return {update,enroll,resetPassword};
 })();

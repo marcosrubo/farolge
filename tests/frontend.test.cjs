@@ -192,7 +192,7 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  const fetch=async(url,opts)=>{
   requests.push({url,opts});
   if(activationConflict&&url.endsWith('/temporary-activate'))return {ok:false,json:async()=>({error:'temporary_password_already_set'})};
-  const result=url.endsWith('/temporary-users')?{users:[profile]}:url.includes('/temporary-user?')?{...profile,hasPassword,canCreatePassword}:url.endsWith('/temporary-activate')?{passwordSaved:true}:{signedIn:true};
+  const result=url.endsWith('/temporary-users')?{users:[profile]}:url.includes('/temporary-user?')?{...profile,hasPassword,canCreatePassword}:['/temporary-activate','/temporary-reset-password'].some(action=>url.endsWith(action))?{passwordSaved:true}:{signedIn:true};
   return {ok:true,json:async()=>result};
  };
  const context=vm.createContext({window,URLSearchParams,fetch,document:{querySelector:s=>get(s.replace('#temporary-','')),createElement:node}});
@@ -291,6 +291,16 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  await get('form').listeners.submit({preventDefault(){}});
  assert.ok(requests.at(-1).url.endsWith('/temporary-password'));
  assert.ok(Object.hasOwn(JSON.parse(requests.at(-1).opts.body),'currentPassword'));
+
+ window.FarolTemporaryAccess.resetPassword(profile);
+ assert.equal(get('title').textContent,'Resetar senha');
+ assert.equal(get('current-field').hidden,true);
+ get('password').value='456789';
+ await assertMismatch();
+ await get('form').listeners.submit({preventDefault(){}});
+ assert.ok(requests.at(-1).url.endsWith('/temporary-reset-password'));
+ assert.deepEqual(JSON.parse(requests.at(-1).opts.body),{type:'general',id:profile.id,password:'456789',confirmation:'456789'});
+ assert.equal(get('status').textContent,'Senha redefinida.');
 });
 
 

@@ -4,7 +4,7 @@ const ADMIN_EMAIL='marcos.rubo@gmail.com';
 const MODULES=['inicio','inspetores-monitores','radar','institucionais','pessoais','bi-seed','manutencao-sistema','configuracoes'];
 const overviewNames=new Set(['adriana','vanusa']);
 const radarNames=new Set([...overviewNames,'sandra','jeisiani','giovana','luciani']);
-const adminOnlyActions=new Set(['authorized-emails','authorized-email','temporary-confirm']);
+const adminOnlyActions=new Set(['authorized-emails','authorized-email','temporary-confirm','temporary-reset-password']);
 const actionModules=new Map([
   ['students','inspetores-monitores'],['occurrence','inspetores-monitores'],
   ['overview','inicio'],['occurrences','inicio'],['attendance-analysis','radar'],

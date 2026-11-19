@@ -65,7 +65,7 @@ function ui(){
  const nodes=new Map(),requests=[],window={FAROL_CONFIG:{schoolName:'Escola'},FarolMenuModules:[{id:'inicio',label:'Visão GERAL'},{id:'radar',label:'Radar'}]};
  const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'',innerHTML:'',textContent:'',listeners:{},open:false,addEventListener(n,fn){this.listeners[n]=fn;},focus(){},showModal(){this.open=true;},close(){this.open=false;}});return nodes.get(id);};
  const root={innerHTML:'',querySelector:get};vm.runInNewContext(fs.readFileSync('authorized-users.js','utf8'),{window,URLSearchParams,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
- return {app:window.FarolAuthorizedUsers,root,get,requests,respond:(i,result,ok=true)=>requests[i].resolve({ok,json:async()=>result})};
+ return {app:window.FarolAuthorizedUsers,window,root,get,requests,respond:(i,result,ok=true)=>requests[i].resolve({ok,json:async()=>result})};
 }
 test('Configurações inclui e exclui somente por ação confirmada, escapando texto do cadastro',async()=>{
  const h=ui();h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.root.innerHTML.includes('Cadastro de usuários'));
@@ -81,9 +81,15 @@ test('Configurações inclui e exclui somente por ação confirmada, escapando t
 test('Configurações edita a ordem e exclui cadastro sem e-mail usando o ID da pessoa',async()=>{
  const h=ui();
  h.app.mount(h.root);h.app.connectionChanged({email});
- const row={id,email:null,Nome:'Pessoa',Escola:'Escola',Funcao:'Inspetora',Ordem:4,permissions:['radar']};
+ const row={id,email:null,Nome:'Pessoa',Escola:'Escola',Funcao:'Inspetora',Ordem:4,permissions:['radar'],hasPassword:true};
  h.respond(0,{mailbox:email,users:[row]});await settle();
  const click=authorizedAction=>h.get('#authorized-rows').listeners.click({target:{closest:()=>({dataset:{authorizedAction,userId:id}})}});
+ assert.ok(h.get('#authorized-rows').innerHTML.includes('Resetar senha'));
+ const resets=[];
+ h.window.FarolTemporaryAccess={resetPassword:profile=>resets.push(profile.id)};
+ click('reset');
+ assert.deepEqual(resets,[id]);
+ assert.equal(h.requests.length,1);
  click('edit');
  assert.equal(h.get('#authorized-function').value,'Inspetora');
  assert.equal(h.get('#authorized-order').value,4);
