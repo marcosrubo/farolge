@@ -77,7 +77,7 @@ test('CSRF e métodos inválidos são bloqueados; login inclui Gmail readonly e 
  assert.equal((await h.request('start',{method:'POST',origin:'https://evil.example',body:{type:'personal'}})).status,403);
  assert.equal((await h.request('start')).status,405);
  const flow=await h.start();
- assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]);assert.equal(flow.options.login_hint,GENERAL_EMAIL);
+ assert.deepEqual(flow.options.scope,[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]);assert.equal(flow.options.login_hint,undefined);
  assert.deepEqual((await h.start('general')).options.scope,[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE]);
  assert.ok(!flow.options.scope.includes(DRIVE_METADATA_SCOPE));assert.ok(!flow.options.scope.includes(DRIVE_READ_SCOPE));
  assert.ok(flow.options.scope.includes(READ_SCOPE));assert.ok(flow.options.scope.includes(DRIVE_SCOPE));
@@ -522,6 +522,51 @@ test('exceção fixa não aceita aliases/endereço parecido nem dispensa identid
   const login=await h.login(email);assert.match(login.response.headers.location,/access_denied/);assert.equal(login.cookie,undefined);
  }
  h.setIdentity({email_verified:false});const invalid=await h.login('marcos.rubo@gmail.com');assert.match(invalid.response.headers.location,/wrong_account/);assert.equal(invalid.cookie,undefined);
+});
+
+test('contas Workspace @escola conectam nas duas opções com autorização apenas da própria conta',async()=>{
+ const h=harness(),admin=await h.admin();
+ const firstEmail='professora@escola.pr.gov.br',secondEmail='secretaria@escola.pr.gov.br';
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ const general=await h.login(firstEmail,'','general');
+ const personal=await h.login(secondEmail,general.cookie,'personal');
+ assert.match(general.response.headers.location,/connection=connected/);
+ assert.match(personal.response.headers.location,/connection=connected/);
+ const cookie=general.cookie+'; '+personal.cookie;
+ const writesBefore=h.labelRequests.length;
+ const result=await h.request('status',{cookie});
+ const data=result.json();
+ assert.equal(data.connections.general.email,firstEmail);
+ assert.equal(data.connections.personal.email,secondEmail);
+ assert.equal(data.connections.general.labels,'pending_policy');
+ assert.equal(data.connections.personal.labels,'pending_policy');
+ assert.deepEqual(data.modules,['bi-seed']);
+ assert.equal(h.labelRequests.length,writesBefore);
+ assert.ok(h.labelRequests.every(item=>item.email===GENERAL_EMAIL));
+ for(const action of ['overview','maintenance','authorized-emails','institutional','board'])
+  assert.equal((await h.request(action,{cookie,query:'?mailbox='+GENERAL_EMAIL+'&type=general'})).status,403);
+ assert.equal((await h.request('status',{cookie:admin.general.cookie+'; '+personal.cookie})).json().modules.length,1);
+ await h.request('disconnect',{method:'POST',cookie,body:{type:'general'}});
+ assert.equal((await h.request('status',{cookie})).json().mode,'personal');
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
+});
+
+test('conta escolar exige domínio de e-mail exato e identidade Workspace validada pelo Google',async()=>{
+ const h=harness();
+ const email='professora@escola.pr.gov.br';
+ const withoutWorkspace=await h.login(email);
+ assert.match(withoutWorkspace.response.headers.location,/access_denied/);
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ for(const other of ['docente@escola.pr.gov.br.example.org','docente@regional.escola.pr.gov.br','docente@outra.pr.gov.br']){
+  const login=await h.login(other);
+  assert.match(login.response.headers.location,/access_denied/);
+  assert.equal(login.cookie,undefined);
+ }
+ h.setIdentity({hd:'escola.pr.gov.br',email_verified:false});
+ const unverified=await h.login(email);
+ assert.match(unverified.response.headers.location,/wrong_account/);
+ assert.equal(h.users.size,0);
+ assert.equal(h.labelRequests.length,0);
 });
 
 test('cadastro de e-mails exige as duas conexões e CSRF, sem precisar de Gmail',async()=>{

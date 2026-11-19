@@ -26,6 +26,7 @@ const LABEL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/labels';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly';
+const SCHOOL_DOMAIN='escola.pr.gov.br';
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
 const ROUTES = new Set(['inicio','analise-faltas','radar','institucionais','pessoais','bi-seed','inspetores-monitores','manutencao-sistema','configuracoes']);
 const TYPES = ['general','personal'];
@@ -283,8 +284,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(!body || typeof body!=='object' || Array.isArray(body))return reply(400,{error:'invalid_body'});
       if(action!=='logout'&&!temporaryPublic.includes(action)&&!TYPES.includes(body.type))return reply(400,{error:'invalid_type'});
     }
-    async function authorizeEmail(email){
-      if(emailOf(email)!==FIXED_AUTHORIZED_EMAIL)throw Object.assign(new Error('access_denied'),{email});
+    function authorizeEmail(email,hostedDomain){
+      if(email===FIXED_AUTHORIZED_EMAIL)return;
+      if(email.split('@')[1]===SCHOOL_DOMAIN&&typeof hostedDomain==='string'&&hostedDomain.trim())return;
+      throw Object.assign(new Error('access_denied'),{email});
     }
     async function account(type,checkAccess=true) {
       const name=accountCookie(type),id=jar[name];
@@ -300,7 +303,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const user=await auth.user(session.auth.accessToken);
         if(user.id!==session.user.id || emailOf(user.email)!==session.user.email)throw new Error('login_required');
         session.user={id:user.id,email:emailOf(user.email)};
-        if(checkAccess)await authorizeEmail(session.user.email);
+        if(checkAccess)authorizeEmail(session.user.email,session.hostedDomain);
         return {id,key,type,session,user:session.user};
       } catch(error) {
         if(error.message!=='login_required')throw error;
@@ -337,7 +340,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     }
     async function verifyAdmin(){
       const accounts=await Promise.all(TYPES.map(type=>account(type)));
-      if(accounts.some(item=>!item)||accounts[0].user.id!==accounts[1].user.id)return null;
+      if(accounts.some(item=>item?.user.email!==FIXED_AUTHORIZED_EMAIL)||accounts[0].user.id!==accounts[1].user.id)return null;
       const [general,personal]=await Promise.all(TYPES.map(type=>store.getConnection(accounts[0].user.id,type)));
       if([general,personal].some(connection=>connection?.email!==FIXED_AUTHORIZED_EMAIL))return null;
       return {general:accounts[0],personal:accounts[1],connections:{general,personal}};
@@ -483,7 +486,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const previous=validId(jar[accountCookie(type)])?hash(jar[accountCookie(type)]):null;
         await store.put(hash(state),{version:3,type,binding:hash(binding),nonce,codeVerifier,route:routeOf(body.route),previous},Date.now()+600000);
         setCookie(res,cookieName('flow',type),binding,600);
-        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]:[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE],access_type:'offline',prompt:'select_account consent',login_hint:FIXED_AUTHORIZED_EMAIL,state,nonce:hash(nonce),
+        const authUrl=client.generateAuthUrl({scope:type==='personal'?[...SCOPES,LABEL_SCOPE,MODIFY_SCOPE]:[...SCOPES,MODIFY_SCOPE,DRIVE_METADATA_SCOPE,DRIVE_READ_SCOPE],access_type:'offline',prompt:'select_account consent',state,nonce:hash(nonce),
           code_challenge:codeChallenge,code_challenge_method:'S256',include_granted_scopes:false});
         return reply(200,{url:authUrl});
       }
@@ -504,7 +507,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           if(!tokens.access_token || !tokens.id_token)throw new Error('failed');
           const ticket=await client.verifyIdToken({idToken:tokens.id_token,audience:config.clientId}),identity=ticket.getPayload();
           const email=validateAccount(identity,{emailAddress:identity?.email},hash(flow.nonce));
-          try{await authorizeEmail(email);}catch(error){
+          try{authorizeEmail(email,identity.hd);}catch(error){
             if(error.message!=='access_denied')throw error;
             const deniedTicket=random(),expiresAt=Date.now()+600000;
             await store.put('denied.'+hash(deniedTicket),{email,expiresAt},expiresAt);
@@ -537,15 +540,19 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           if(!session.access_token || !session.refresh_token || !user?.id || emailOf(user.email)!==email || !google)throw new Error('failed');
           const owner=user.id;
           const labelsAllowed=capabilities.gmail && (scopes.includes(LABEL_SCOPE)||scopes.includes(MODIFY_SCOPE));
-          const labels=await mailboxLabels(client,labelsAllowed,true,type==='personal'?PERSONAL_LABELS:GENERAL_LABELS);
+          const isAdminMailbox=email===FIXED_AUTHORIZED_EMAIL;
+          const labels=isAdminMailbox?await mailboxLabels(client,labelsAllowed,true,type==='personal'?PERSONAL_LABELS:GENERAL_LABELS):null;
           await saveConnection(owner,type,{email,capabilities,labelsAllowed,credentials:credentialsOf(client)});
           const id=random(),expiresAt=Date.now()+TTL*1000;
-          await store.put(accountKey(type,id),{version:3,type,user:{id:owner,email},auth:{accessToken:session.access_token,refreshToken:session.refresh_token,expiresAt:Date.now()+session.expires_in*1000},expiresAt},expiresAt);
+          await store.put(accountKey(type,id),{version:3,type,user:{id:owner,email},hostedDomain:identity.hd,auth:{accessToken:session.access_token,refreshToken:session.refresh_token,expiresAt:Date.now()+session.expires_in*1000},expiresAt},expiresAt);
           await discardAccount(type,current);setCookie(res,accountCookie(type),id,TTL);
           // Invalidate browser-only cookies from the prototype; never adopt unowned legacy connections.
           for(const oldType of TYPES)setCookie(res,cookieName('session',oldType),'',0);
           setCookie(res,'__Host-farol-portal','',0);
-          return finish(flow.route,type,capabilities.gmail && capabilities.drive && (labels==='ready' && (type==='personal'?capabilities.classify:(capabilities.manageInstitutional&&capabilities.driveMetadata&&capabilities.driveRead)))?'connected':'partial');
+          const ready=capabilities.gmail&&capabilities.drive
+            &&(type==='personal'?capabilities.classify:(capabilities.manageInstitutional&&capabilities.driveMetadata&&capabilities.driveRead))
+            &&(!isAdminMailbox||labels==='ready');
+          return finish(flow.route,type,ready?'connected':'partial');
         } catch(error) {
           return finish(flow.route,type,['wrong_account','login_required','invalid_state','access_setup_required','access_unavailable'].includes(error.message)?error.message:'failed');
         }
@@ -579,8 +586,9 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             const {data}=await client.request({url:'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',timeout:10000});
             if(emailOf(data.user?.emailAddress)!==connection.email)throw new Error('wrong_account');
           }
-          const labelDetails=type==='general'?await mailboxLabels(client,connection.labelsAllowed===true,false,GENERAL_LABELS,true):null;
-          const labels=type==='general'?labelDetails.status:await mailboxLabels(client,connection.labelsAllowed===true);
+          const isAdminMailbox=connection.email===FIXED_AUTHORIZED_EMAIL;
+          const labelDetails=isAdminMailbox&&type==='general'?await mailboxLabels(client,connection.labelsAllowed===true,false,GENERAL_LABELS,true):null;
+          const labels=isAdminMailbox?(labelDetails?.status||await mailboxLabels(client,connection.labelsAllowed===true)):'pending_policy';
           connection.credentials=credentialsOf(client);
           await store.putConnection(current.user.id,type,connection);
           connections[type]={email:connection.email,...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};

@@ -51,11 +51,12 @@ for(const mode of ['general','personal','both'])test('conexões verificadas: '+m
   assert.equal(h.get('#main').innerHTML.includes('board'),mode==='both');
  }
 });
-test('Geral indica a conta exclusiva de Marcos',async()=>{
+test('Geral indica contas institucionais e a conta de Marcos',async()=>{
  const h=ui({configured:true,connections:{general:null,personal:null}});await settle();
  assert.equal(h.connect[0].disabled,false);assert.equal(h.connect[1].disabled,false);
  h.connect[0].listeners.click();
  assert.ok(h.get('#email-connection-description').textContent.includes(adminEmail));
+ assert.ok(h.get('#email-connection-description').textContent.includes('@escola.pr.gov.br'));
  await h.get('#email-connection-continue').listeners.click();
  assert.equal(JSON.parse(h.requests.at(-1).opts.body).type,'general');
  assert.ok(!h.get('#email-connection-feedback').textContent.includes('configurado'));

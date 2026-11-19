@@ -459,11 +459,11 @@ Antes de publicar, executar o arquivo atualizado `database/authorized-emails.sql
 
 ## Conexão temporária e acesso por módulo — 18/11/2026
 
-Geral e Pessoal aceitam somente a identidade Google verificada de `marcos.rubo@gmail.com`. Com as duas conexões ativas no mesmo navegador, Marcos pode usar todos os módulos. Os demais usuários usam a Conexão temporária. Em **Configurações → Cadastro de usuários**, Marcos marca uma caixa para cada funcionalidade e salva o cadastro. O menu mostra todas as opções. Ao abrir um módulo sem permissão, apresenta um aviso. A **Visão GERAL** é aberta somente pelo clique no menu e com permissão ativa.
+Geral e Pessoal aceitam a identidade Google verificada de `marcos.rubo@gmail.com` e Contas Google Workspace com e-mail exatamente no domínio `@escola.pr.gov.br`. Com as duas conexões de sua própria conta ativas no mesmo navegador, Marcos pode usar todos os módulos. O acesso a módulos pelas novas conexões institucionais aguarda definição. Os usuários cadastrados também podem usar a Conexão temporária. Em **Configurações → Cadastro de usuários**, Marcos marca uma caixa para cada funcionalidade e salva o cadastro. O menu mostra todas as opções. Ao abrir um módulo sem permissão, apresenta um aviso. A **Visão GERAL** é aberta somente pelo clique no menu e com permissão ativa.
 
 O servidor confere as permissões a cada requisição. Ao habilitar Demandas ou Manutenção, Marcos libera os dados e as ações daquele módulo usando as respectivas conexões armazenadas no servidor, conforme as permissões Google concedidas. Configurações permite ao usuário temporário consultar os próprios acessos. Administração dos cadastros, confirmação de primeiro acesso e alteração de permissões exigem as duas conexões de Marcos. O BI SEED mantém sua tela explicativa pública. Para uma sessão temporária, o acesso ao BI SEED também pode ser marcado ou desmarcado.
 
-Executar `database/module-access.sql` após `database/temporary-access.sql`. A migração conserva as permissões anteriores enquanto o cadastro existente não for salvo com suas caixas de seleção. Cadastros novos começam com todas as caixas desmarcadas. Uma lista vazia salva significa que nenhum módulo foi habilitado para aquela sessão temporária. Publicar com a política de privacidade revisão 30.
+Executar `database/module-access.sql` após `database/temporary-access.sql`. A migração conserva as permissões anteriores enquanto o cadastro existente não for salvo com suas caixas de seleção. Cadastros novos começam com todas as caixas desmarcadas. Uma lista vazia salva significa que nenhum módulo foi habilitado para aquela sessão temporária. Publicar com a política de privacidade revisão 31.
 
 ### Primeiro acesso presencial
 
@@ -488,3 +488,9 @@ Cada carregamento da página principal, inclusive antes da identificação, envi
 A atualização manual do IP ou a troca de módulo não gera outra linha. Uma nova abertura ou recarga gera um novo registro. A escrita é feita pelo servidor, sem acesso direto do navegador à tabela. Se o registro falhar, a página continua disponível. A consulta é administrativa no Supabase, com remoção administrativa e sem expiração automática nesta versão.
 
 Antes de publicar, executar `database/system-log.sql` no Supabase exclusivo do FAROL GE e publicar a política de privacidade revisão 27. A inclusão de cidade e estado usa a coluna Observacao já existente. Usa as variáveis existentes FAROL_ORIGIN, FAROL_SUPABASE_URL e FAROL_SUPABASE_SERVICE_ROLE_KEY. Na Vercel, abrir o endereço de FAROL_ORIGIN e conferir a linha no Table Editor ou com a consulta comentada no SQL.
+
+## Conexões Google institucionais — 19/11/2026
+
+A conta é escolhida no Google para Geral ou Pessoal. O FAROL valida o e-mail e a identidade Google, com e-mail verificado, assinatura, audiência, nonce e indicação de conta gerenciada pelo Workspace para endereços `@escola.pr.gov.br`. A autorização institucional é armazenada por identidade e tipo, e a pessoa pode desconectar a própria conta. Ao conectar, o FAROL confirma a identidade e os serviços concedidos. Os marcadores dessas contas aguardam a definição das permissões dos módulos. As duas sessões Google de Marcos continuam necessárias para a administração. A Conexão temporária permanece um fluxo distinto.
+
+Sem novo SQL, escopo ou variável. Publicar código e política revisão 31 e validar as duas conexões na Vercel com uma conta institucional real. A autorização no domínio depende da política do Google Workspace da organização. [Validação de identidade Google](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)

@@ -9,7 +9,7 @@
 5. Cada autorização pertence ao ID Supabase da própria conta Google e ao tipo Geral/Pessoal. Conectar, revisar, trocar ou desconectar uma delas preserva a outra. A conexão Geral não é vinculada ao usuário da Pessoal e não é recuperada automaticamente só por conectar uma conta Pessoal em outro navegador.
 6. O quadro informa endereço e permissões realmente verificadas de Gmail e Drive por conexão. Recusar uma permissão mantém o serviço correspondente indisponível. O backend distingue `none`, `general`, `personal` e `both`, conforme as conexões verificadas.
 
-Em **Geral**, a pessoa escolhe ou informa a conta geral da própria escola na página do Google. Em **Pessoal**, escolhe a própria conta. O endereço usado é obtido da identidade autorizada e validada no servidor, e confirmado nos serviços concedidos. Não há e-mail Geral fixo, filtro de domínio nem login pessoal obrigatório para Geral. `FAROL_GENERAL_EMAIL` e `FAROL_GENERAL_ADMIN_EMAILS` não são utilizadas, mesmo se permanecerem cadastradas na Vercel.
+Em **Geral**, a pessoa escolhe ou informa a conta geral da própria escola na página do Google. Em **Pessoal**, escolhe a própria conta. O endereço usado é obtido da identidade autorizada e validada no servidor, e confirmado nos serviços concedidos. Geral pode ser conectada primeiro. A regra de e-mails aceitos consta na seção de 19/11/2026 ao final. `FAROL_GENERAL_EMAIL` e `FAROL_GENERAL_ADMIN_EMAILS` não são utilizadas, mesmo se permanecerem cadastradas na Vercel.
 
 Em 09/11/2026, Marcos esclareceu que a plataforma poderá ser usada por qualquer escola do Paraná. As conexões ficam isoladas por identidade Google/Supabase e tipo. Escolher uma conta como Geral não concede acesso a conexões de outra conta nem comprova vínculo escolar. O cadastro/identificação de escolas, seus vínculos com pessoas e o compartilhamento/isolamento de dados por escola ainda serão definidos. A identidade visual configurada no frontend permanece como está; não é usada para autorizar contas.
 
@@ -245,3 +245,10 @@ A partir de 18/11/2026, Geral e Pessoal aceitam apenas `marcos.rubo@gmail.com`. 
 Manutenção do Sistema, Configurações e ambas as telas de Demandas exigem as duas sessões Google válidas no mesmo navegador. Marcos confirma o primeiro acesso e cadastra a senha com as duas conexões ativas. Ambas continuam disponíveis para confirmar os cadastros seguintes. Inspetores/Monitores exige Conexão temporária ativa. BI SEED é público e mantém seu conteúdo explicativo. Para o grupo autorizado da Visão GERAL, o backend consulta somente os totais Gmail das conexões armazenadas de Marcos. Os dados escolares temporários são consultados no conjunto vinculado a esse proprietário.
 
 Executar `database/temporary-access.sql` no Supabase exclusivo FAROL GE e publicar o código com a política revisão 25. A matriz de permissões e o fluxo presencial estão no README.
+
+
+## Conexões Google institucionais — revisão 31
+
+Em 19/11/2026, Marcos liberou contas institucionais com e-mail verificado no domínio exato `@escola.pr.gov.br` para Geral e Pessoal. O OAuth abre a escolha da conta no Google. Para a conta institucional, o servidor confirma também que a identidade Google pertence a uma conta gerenciada do Workspace. As permissões solicitadas ao Google e o vínculo isolado por identidade/tipo seguem o fluxo descrito acima.
+
+A conta institucional pode conectar, consultar seu status e desconectar. Permissões de módulos e preparação de marcadores para essas contas aguardam definição. A administração exige as duas conexões verificadas de `marcos.rubo@gmail.com`. Sem novo SQL, escopo ou variável. [Validação de identidade Google](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)

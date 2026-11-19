@@ -204,7 +204,7 @@ function setupEmailConnections(){
   }
   function showAvailability(){
     availability.textContent=configured
-      ?'No Google, selecione marcos.rubo@gmail.com e confira as permissões de Gmail e Drive.'
+      ?'No Google, escolha a conta que deseja conectar e confira as permissões de Gmail e Drive.'
       :connectionMessages.not_configured;
     continueButton.hidden=!configured;
   }
@@ -236,9 +236,12 @@ function setupEmailConnections(){
         status.textContent=connected?`${email} · Gmail: ${connection.gmail?'autorizado':'não autorizado'} · Drive: ${connection.drive?'autorizado':'não autorizado'}`:(result.errors?.[type]==='access_denied'?'Acesso não autorizado':['unavailable','access_unavailable','access_setup_required'].includes(result.errors?.[type])?'Conexão não verificada':'NÃO conectado');
         if(connected&&type==='general')status.textContent+=' · Nomes no Drive: '+(connection.driveMetadata?'autorizado':'revisar autorização')+' · Leitura de PDFs: '+(connection.driveRead?'autorizada':'revisar autorização');
         if(connected) {
-          const labelMessages={ready:type==='personal'?'labels prontas (4/4)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
-          status.textContent+=' · '+(type==='general'&&connection.labels==='missing'&&connection.labelDetails?.missing?.length?'Faltam marcadores: '+connection.labelDetails.missing.join(', '):(labelMessages[connection.labels]||labelMessages.permission_required));
-          status.textContent+=' · Classificação: '+((type==='personal'?connection.classify:connection.manageInstitutional)?'autorizada':'revisar autorização');
+          if(connection.labels==='pending_policy')status.textContent+=' · Módulos aguardando definição de permissões';
+          else{
+            const labelMessages={ready:type==='personal'?'labels prontas (4/4)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
+            status.textContent+=' · '+(type==='general'&&connection.labels==='missing'&&connection.labelDetails?.missing?.length?'Faltam marcadores: '+connection.labelDetails.missing.join(', '):(labelMessages[connection.labels]||labelMessages.permission_required));
+            status.textContent+=' · Classificação: '+((type==='personal'?connection.classify:connection.manageInstitutional)?'autorizada':'revisar autorização');
+          }
         }
         status.classList.toggle('is-connected',connected);
         const button=document.querySelector('[data-connect-email="'+type+'"]');
@@ -280,7 +283,7 @@ function setupEmailConnections(){
     document.querySelector('#email-general-labels').hidden=!isGeneral;
     document.querySelector('#email-drive-metadata').hidden=!isGeneral;
     document.querySelector('#email-connection-title').textContent=isGeneral?'Conectar conta geral da escola':'Conectar conta pessoal';
-    document.querySelector('#email-connection-description').textContent='Esta conexão Google é exclusiva de marcos.rubo@gmail.com.';
+    document.querySelector('#email-connection-description').textContent='Use uma Conta Google institucional @escola.pr.gov.br ou marcos.rubo@gmail.com.';
     showAvailability();
     dialog.showModal();
   }
