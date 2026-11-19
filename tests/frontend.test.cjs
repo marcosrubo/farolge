@@ -70,7 +70,7 @@ test('sem identificação, hashes diretos não abrem módulos restritos',async()
  const h=ui({configured:true,connections:{general:null,personal:null},modules:[]});await settle();
  for(const route of ['inicio','radar','analise-faltas','institucionais','pessoais','inspetores-monitores','configuracoes']){
   h.context.location.hash='#'+route;h.window.listeners.hashchange();
-  assert.ok(h.get('#main').innerHTML.includes('Módulo indisponível'));
+  assert.match(h.get('#main').innerHTML,/<section class="development-content module-unavailable"[^>]*><h1[^>]*>[^<]+<\/h1><h2>Módulo indisponível/);
   assert.ok(h.get('#navigation').innerHTML.includes('href="#bi-seed"'));
   assert.equal((h.get('#navigation').innerHTML.match(/<a /g)||[]).length,8);
  }
@@ -257,7 +257,8 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  window.FarolTemporaryAccess.update(profile,true);
  assert.equal(get('change').hidden,false);
  get('change').listeners.click();
- assert.equal(get('confirmation-label').textContent,'Confirme a nova senha');
+ assert.equal(get('password-label').textContent,'Nova senha (mínimo de 6 caracteres)');
+ assert.equal(get('confirmation-label').textContent,'Confirme a nova senha (mínimo de 6 caracteres)');
  assert.equal(get('current-field').hidden,false);
  assert.equal(get('password').minLength,6);
  assert.equal(get('current').type,'password');
@@ -267,10 +268,17 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  assert.equal(get('current').type,'password');
  get('current').value='uma senha longa de teste';
  assert.equal(get('password-match').textContent,'');
+ assert.equal(get('password-length').textContent,'');
+ get('password').value='😀😀😀😀😀';
+ get('password').listeners.input();
+ assert.equal(get('password-length').textContent,'senha inválida');
+ assert.match(get('password-length').className,/is-different/);
  get('password').value='outra senha longa de teste';
  get('password').listeners.input();
  assert.equal(get('password-match').textContent,'Senhas DIFERENTES');
  assert.match(get('password-match').className,/is-different/);
+ assert.equal(get('password-length').textContent,'senha válida');
+ assert.match(get('password-length').className,/is-equal/);
  await assertMismatch();
  assert.equal(get('password-match').textContent,'Senhas IGUAIS');
  assert.match(get('password-match').className,/is-equal/);
@@ -292,6 +300,7 @@ test('Visão GERAL exige clique no menu e permissão ativa',async()=>{
  h.context.location.hash='';h.window.listeners.hashchange();
  assert.ok(!h.get('#main').innerHTML.includes('overview-board'));
  h.context.location.hash='#inicio';h.window.listeners.hashchange();
+ assert.match(h.get('#main').innerHTML,/<section class="development-content"[^>]*><h1[^>]*>Meu espaço/);
  assert.ok(!h.get('#main').innerHTML.includes('overview-board'));
  const click=()=>h.get('#navigation').listeners.click({target:{closest:()=>({})}});
  click();

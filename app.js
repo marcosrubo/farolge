@@ -100,7 +100,9 @@ function render(){
   const main=document.querySelector('#main');
   if(!selected){
     main.classList.toggle('radar-workspace',false);
-    main.innerHTML=requested&&!enabled?'<h1>Módulo indisponível</h1><p>Esta opção não está habilitada para o seu acesso.</p>':'<h1>Meu espaço</h1><p>Escolha uma opção no menu.</p>';
+    main.innerHTML=requested&&!enabled
+      ?`<section class="development-content module-unavailable" aria-labelledby="module-title"><h1 id="module-title">${title}</h1><h2>Módulo indisponível</h2><p>Esta opção não está habilitada para o seu acesso.</p></section>`
+      :'<section class="development-content" aria-labelledby="module-title"><h1 id="module-title">Meu espaço</h1><p>Escolha uma opção no menu.</p></section>';
     return;
   }
   main.classList.toggle('radar-workspace',selected.id==='radar'&&!analysis);

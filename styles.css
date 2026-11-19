@@ -29,6 +29,7 @@ main.empty-workspace{padding:0;min-height:calc(100vh - 76px)}@media(max-width:60
 .development-content h1{font-size:28px;color:var(--green);margin:0 0 28px;letter-spacing:-.6px}
 .development-content p,.development-content li{font-size:15px;line-height:1.9;color:#52664f;overflow-wrap:anywhere}
 .development-content p{margin:0}
+.module-unavailable h1{margin-bottom:10px}.module-unavailable h2{font-size:18px;margin:0 0 10px}
 .development-content ul{margin:18px 0 0;padding-left:24px}
 .development-content li{padding-left:4px;margin-bottom:8px}
 @media(max-width:600px){.development-content{padding:28px 20px}.development-content h1{font-size:25px}}
@@ -201,3 +202,4 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .authorized-permissions{flex:1 0 100%;margin:0}.authorized-permissions input[type=checkbox]{width:auto}.authorized-permissions .attendance-class-checklist{margin-bottom:0}
 
 .password-match{align-self:center;font-weight:700}.password-match:empty{display:none}.password-match.is-equal{color:#166534}.password-match.is-different{color:#b91c1c}
+#temporary-password-length{font-size:12px}

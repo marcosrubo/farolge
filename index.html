@@ -10,7 +10,7 @@
   <link rel="icon" href="arte/farol-ge-simbolo-quadrado.png">
   <link rel="apple-touch-icon" href="/arte/farol-ge-simbolo-quadrado.png">
   <meta name="apple-mobile-web-app-title" content="FAROL GE">
-  <link rel="stylesheet" href="styles.css?v=20261118-admin-enroll1">
+  <link rel="stylesheet" href="styles.css?v=20261119-layout1">
   <script src="network.js?v=20261118-log1" defer></script>
   <script src="config.js?v=20261117-25" defer></script>
   <script src="demands.js?v=20261117-25" defer></script>
@@ -21,8 +21,8 @@
   <script src="student-import.js?v=20261117-25" defer></script>
   <script src="maintenance.js?v=20261117-25" defer></script>
   <script src="attendance-analysis.js?v=20261118-access1" defer></script>
-  <script src="temporary-access.js?v=20261118-admin-enroll1" defer></script>
-  <script src="app.js?v=20261118-modules1" defer></script>
+  <script src="temporary-access.js?v=20261119-layout1" defer></script>
+  <script src="app.js?v=20261119-layout1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Ir para o conteúdo</a>
@@ -68,7 +68,11 @@
     </div>
     <form id="temporary-form" hidden>
       <label class="field" id="temporary-current-field" hidden>Senha atual<input class="form-control" id="temporary-current" type="password" autocomplete="current-password" spellcheck="false" autocapitalize="off" maxlength="512"></label>
-      <label class="field"><span id="temporary-password-label">Senha</span><input class="form-control" id="temporary-password" type="password" autocomplete="current-password" spellcheck="false" autocapitalize="off" maxlength="512" required></label>
+      <div class="field">
+        <label for="temporary-password" id="temporary-password-label">Senha</label>
+        <input class="form-control" id="temporary-password" type="password" autocomplete="current-password" spellcheck="false" autocapitalize="off" maxlength="512" aria-describedby="temporary-password-length" required>
+        <small id="temporary-password-length" class="password-match" role="status"></small>
+      </div>
       <label class="field" id="temporary-confirm-field" hidden><span id="temporary-confirmation-label">Confirme a senha</span><input class="form-control" id="temporary-confirmation" type="password" autocomplete="new-password" spellcheck="false" autocapitalize="off" maxlength="512" aria-describedby="temporary-feedback temporary-password-match"></label>
       <p><label><input id="temporary-show-password" type="checkbox" aria-controls="temporary-current temporary-password temporary-confirmation"> Mostrar senha</label></p>
       <div class="button-row"><button type="submit" id="temporary-submit" class="button primary">Entrar</button><span id="temporary-password-match" class="password-match" role="status"></span><button type="button" id="temporary-back" class="button">Voltar</button></div>

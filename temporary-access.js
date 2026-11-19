@@ -2,6 +2,8 @@
 window.FarolTemporaryAccess=(()=>{
   const get=name=>document.querySelector('#temporary-'+name);
   const dialog=get('dialog'),form=get('form');
+  const minimumPasswordLength=6;
+  const meetsPasswordMinimum=value=>[...value].length>=minimumPasswordLength;
   const errors={
     access_unavailable:'Não foi possível verificar se há uma senha cadastrada. Tente novamente.',
     temporary_invalid_credentials:'Não foi possível confirmar o acesso. Confira a senha e tente novamente.',
@@ -41,10 +43,18 @@ window.FarolTemporaryAccess=(()=>{
     status.className=active?(equal?'password-match is-equal':'password-match is-different'):'password-match';
     status.textContent=active?(equal?'Senhas IGUAIS':'Senhas DIFERENTES'):'';
   }
+  function updatePasswordLength(){
+    if(mode!=='password')return;
+    const valid=meetsPasswordMinimum(get('password').value);
+    const status=get('password-length');
+    status.className=valid?'password-match is-equal':'password-match is-different';
+    status.textContent=valid?'senha válida':'senha inválida';
+  }
   function resetPasswordForm(){
     form.reset();
     updatePasswordVisibility();
     updatePasswordMatch();
+    get('password-length').textContent='';
   }
   function update(value,configured){
     user=value;
@@ -68,13 +78,13 @@ window.FarolTemporaryAccess=(()=>{
     get('current').required=change;
     get('confirm-field').hidden=!create&&!change;
     get('confirmation').required=create||change;
-    get('password-label').textContent=change?'Nova senha':'Senha';
-    get('confirmation-label').textContent=change?'Confirme a nova senha':'Confirme a senha';
+    get('password-label').textContent=change?`Nova senha (mínimo de ${minimumPasswordLength} caracteres)`:'Senha';
+    get('confirmation-label').textContent=change?`Confirme a nova senha (mínimo de ${minimumPasswordLength} caracteres)`:'Confirme a senha';
     get('password').autocomplete=create||change?'new-password':'current-password';
-    get('password').minLength=create||change?6:1;
+    get('password').minLength=create||change?minimumPasswordLength:1;
     get('submit').textContent=create?'Criar senha':change?'Salvar senha':'Entrar';
     get('back').hidden=change;
-    message(create?'Primeiro acesso confirmado. Escolha uma senha com pelo menos 6 caracteres.':change?'Use pelo menos 6 caracteres na nova senha.':'');
+    message(create?`Primeiro acesso confirmado. Escolha uma senha com pelo menos ${minimumPasswordLength} caracteres.`:'');
     if(!dialog.open)dialog.showModal();
     (change?get('current'):get('password')).focus();
   }
@@ -146,6 +156,7 @@ window.FarolTemporaryAccess=(()=>{
   get('change').addEventListener('click',()=>{if(user)showForm('password',user);});
   for(const name of ['password','confirmation']){
     get(name).addEventListener('input',()=>{
+      if(name==='password')updatePasswordLength();
       updatePasswordMatch();
       if(get('feedback').textContent===errors.temporary_password_confirmation)message('');
     });
@@ -169,6 +180,11 @@ window.FarolTemporaryAccess=(()=>{
       if(body.password!==body.confirmation){
         message(errors.temporary_password_confirmation);
         get('confirmation').focus();
+        return;
+      }
+      if(!meetsPasswordMinimum(body.password)){
+        message(errors.temporary_password_length);
+        get('password').focus();
         return;
       }
     }
