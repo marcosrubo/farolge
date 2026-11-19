@@ -117,7 +117,7 @@ window.FarolAuthorizedUsers=(()=>{
     }
   }
   async function enroll(row){
-    if(!window.confirm('Confirma presencialmente que '+row.Nome+' vai criar a própria senha? As sessões do FAROL vinculadas ao Google serão encerradas neste navegador.'))return;
+    if(!window.confirm('Confirma a criação da primeira senha de '+row.Nome+'?'))return;
     const ticket=version;
     busy=true;error='';feedback='';draw();
     try {
@@ -130,7 +130,6 @@ window.FarolAuthorizedUsers=(()=>{
       window.FarolAccessDenied?.(result);
       if(!response.ok||result.confirmed!==true)throw new Error(result.error||'unavailable');
       if(ticket===version)window.FarolTemporaryAccess?.enroll({id:row.id,name:row.Nome});
-      await window.FarolRefreshConnections?.();
     }catch(e){if(ticket===version)error=e.message;}
     finally{if(ticket===version){busy=false;draw();}}
   }
@@ -194,5 +193,5 @@ window.FarolAuthorizedUsers=(()=>{
     draw();if(connection)load();
   }
   function unmount(){clear();root=null;}
-  return {mount,unmount,connectionChanged};
+  return {mount,unmount,connectionChanged,refresh:()=>load()};
 })();

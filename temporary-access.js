@@ -33,9 +33,18 @@ window.FarolTemporaryAccess=(()=>{
     const type=get('show-password').checked?'text':'password';
     for(const name of ['current','password','confirmation'])get(name).type=type;
   }
+  function updatePasswordMatch(){
+    const password=get('password').value,confirmation=get('confirmation').value;
+    const active=mode==='password'&&Boolean(password||confirmation);
+    const equal=password===confirmation;
+    const status=get('password-match');
+    status.className=active?(equal?'password-match is-equal':'password-match is-different'):'password-match';
+    status.textContent=active?(equal?'Senhas IGUAIS':'Senhas DIFERENTES'):'';
+  }
   function resetPasswordForm(){
     form.reset();
     updatePasswordVisibility();
+    updatePasswordMatch();
   }
   function update(value,configured){
     user=value;
@@ -137,6 +146,7 @@ window.FarolTemporaryAccess=(()=>{
   get('change').addEventListener('click',()=>{if(user)showForm('password',user);});
   for(const name of ['password','confirmation']){
     get(name).addEventListener('input',()=>{
+      updatePasswordMatch();
       if(get('feedback').textContent===errors.temporary_password_confirmation)message('');
     });
   }
@@ -166,14 +176,22 @@ window.FarolTemporaryAccess=(()=>{
     setBusy(true);message('Confirmando…');
     try{
       const result=await api('temporary-'+mode,body);
+      if(mode==='activate'){
+        if(result.passwordSaved!==true)throw new Error('unavailable');
+        get('status').textContent='Senha cadastrada.';
+        dialog.close();
+        await window.FarolAuthorizedUsers?.refresh?.();
+        return;
+      }
       if(result.signedIn!==true)throw new Error('unavailable');
-      get('status').textContent=mode==='password'?'Senha atualizada.':mode==='activate'?'Senha cadastrada. Conexão temporária ativa.':'Conexão temporária ativa.';
+      get('status').textContent=mode==='password'?'Senha atualizada.':'Conexão temporária ativa.';
       dialog.close();
       await window.FarolRefreshConnections?.();
     }catch(error){
       if(mode==='activate'&&error.message==='temporary_password_already_set'){
-        showForm('login',selected);
-        message('A senha já está cadastrada. Digite-a para entrar.');
+        get('status').textContent='A senha já está cadastrada.';
+        dialog.close();
+        await window.FarolAuthorizedUsers?.refresh?.();
       }else if(mode==='activate'&&error.message==='temporary_confirmation_required'){
         const profile=selected;
         await showUsers();

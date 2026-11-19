@@ -549,7 +549,7 @@ test('carga de faltas exige as duas conexões, exigem drive.readonly para POST e
 const temporaryId='12345678-1234-4234-8234-123456789abc';
 const extractCookie=(response,name)=>response.headers['set-cookie']?.find(item=>item.startsWith(name+'=')&&!item.includes('Max-Age=0'))?.split(';')[0];
 
-test('primeiro acesso presencial encerra somente as sessões locais e autoriza a pessoa confirmada',async()=>{
+test('primeiras senhas são cadastradas em sequência com as duas conexões de Marcos',async()=>{
  const h=harness(),admin=await h.admin();
  const id=temporaryId,otherId='22345678-1234-4234-8234-123456789abc';
  const profiles=new Map([[id,{id,Nome:'Adriana',password_hash:null}],[otherId,{id:otherId,Nome:'Sandra',password_hash:null}]]);
@@ -584,30 +584,41 @@ test('primeiro acesso presencial encerra somente as sessões locais e autoriza a
  assert.deepEqual(response.json(),{confirmed:true});
  const enrollment=extractCookie(response,'__Host-farol-enrollment');
  assert.ok(enrollment);
+ const adminEnrollment=admin.cookie+'; '+enrollment;
+ assert.equal((await post('temporary-activate',signUp,enrollment)).status,403);
  const state=async(target=id,cookie='')=>(await h.request('temporary-user',{query:'?id='+target,cookie})).json();
  assert.deepEqual(await state(),{id,name:'Adriana',hasPassword:false,canCreatePassword:false});
- assert.equal((await state(id,enrollment)).canCreatePassword,true);
- assert.equal((await state(otherId,enrollment)).canCreatePassword,false);
+ assert.equal((await state(id,adminEnrollment)).canCreatePassword,true);
+ assert.equal((await state(otherId,adminEnrollment)).canCreatePassword,false);
  assert.match(response.headers['set-cookie'].join(';'),/HttpOnly; Secure; SameSite=Lax; Max-Age=600/);
- assert.equal((await h.request('status',{cookie:admin.cookie})).json().mode,'none');
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().mode,'both');
  assert.equal(h.connections.size,2);
- assert.equal((await post('temporary-activate',{...signUp,id:otherId},enrollment)).status,403);
+ assert.equal((await post('temporary-activate',{...signUp,id:otherId},adminEnrollment)).status,403);
  const expires=profiles.get(id).activation_expires_at;
  profiles.get(id).activation_expires_at=new Date(Date.now()-1000).toISOString();
- assert.equal((await state(id,enrollment)).canCreatePassword,false);
- assert.equal((await post('temporary-activate',signUp,enrollment)).status,403);
+ assert.equal((await state(id,adminEnrollment)).canCreatePassword,false);
+ assert.equal((await post('temporary-activate',signUp,adminEnrollment)).status,403);
  profiles.get(id).activation_expires_at=expires;
- assert.equal((await post('temporary-activate',{...signUp,confirmation:'outra senha'},enrollment)).json().error,'temporary_password_confirmation');
- assert.equal((await post('temporary-activate',{id,password:'39742',confirmation:'39742'},enrollment)).json().error,'temporary_password_length');
- const activated=await post('temporary-activate',signUp,enrollment);
- const firstSession=extractCookie(activated,'__Host-farol-temporary');
- assert.ok(firstSession);
+ assert.equal((await post('temporary-activate',{...signUp,confirmation:'outra senha'},adminEnrollment)).json().error,'temporary_password_confirmation');
+ assert.equal((await post('temporary-activate',{id,password:'39742',confirmation:'39742'},adminEnrollment)).json().error,'temporary_password_length');
+ const activated=await post('temporary-activate',signUp,adminEnrollment);
+ assert.deepEqual(activated.json(),{passwordSaved:true});
+ assert.equal(extractCookie(activated,'__Host-farol-temporary'),undefined);
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().mode,'both');
  const selected=await h.request('temporary-user',{query:'?id='+id});
  assert.deepEqual(selected.json(),{id,name:'Adriana',hasPassword:true,canCreatePassword:false});
  assert.equal(activated.body.includes(password),false);
  assert.match(profiles.get(id).password_hash,/^scrypt-v1:/);
  assert.notEqual(profiles.get(id).password_hash,password);
- assert.equal((await post('temporary-activate',signUp,enrollment)).json().error,'temporary_password_already_set');
+ assert.equal((await post('temporary-activate',signUp,adminEnrollment)).json().error,'temporary_password_already_set');
+ const another=await post('temporary-confirm',{type:'general',id:otherId},admin.cookie);
+ const anotherEnrollment=admin.cookie+'; '+extractCookie(another,'__Host-farol-enrollment');
+ assert.deepEqual((await post('temporary-activate',{...signUp,id:otherId},anotherEnrollment)).json(),{passwordSaved:true});
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().mode,'both');
+
+ const firstLogin=await post('temporary-login',{id,password});
+ const firstSession=extractCookie(firstLogin,'__Host-farol-temporary');
+ assert.ok(firstSession);
  const info=(await h.request('status',{cookie:firstSession})).json();
  assert.deepEqual(info.modules,['inspetores-monitores','bi-seed','inicio','radar']);
  assert.equal(info.temporary.name,'Adriana');

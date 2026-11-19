@@ -358,7 +358,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const profile=await store.getTemporaryUser(id);
         if(!profile)return reply(404,{error:'invalid_temporary_user'});
         if(profile.password_hash!==null&&!profile.password_hash)return reply(503,{error:'access_unavailable'});
-        return reply(200,{id,name:profile.Nome,hasPassword:profile.password_hash!==null,canCreatePassword:canEnroll(profile,jar[ENROLLMENT_COOKIE])});
+        const canCreatePassword=canEnroll(profile,jar[ENROLLMENT_COOKIE])&&Boolean(await verifyAdmin());
+        return reply(200,{id,name:profile.Nome,hasPassword:profile.password_hash!==null,canCreatePassword});
       }
       if(action==='temporary-logout'){
         await clearTemporary();
@@ -366,10 +367,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       }
       const temporary=await readTemporarySession(store,jar[SESSION_COOKIE]);
       if(['temporary-login','temporary-activate','temporary-password'].includes(action)){
+        if(action==='temporary-activate'&&(temporary||!await verifyAdmin()))return reply(403,{error:'temporary_confirmation_required'});
         const profile=await authenticateTemporary({action,store,body,current:temporary,request:req,key:config.key,enrollment:jar[ENROLLMENT_COOKIE]});
+        setCookie(res,ENROLLMENT_COOKIE,'',0);
+        if(action==='temporary-activate')return reply(200,{passwordSaved:true});
         await clearLocalGoogle();
         await clearTemporary();
-        setCookie(res,ENROLLMENT_COOKIE,'',0);
         try{await store.cleanup();}catch{}
         const token=await writeTemporarySession(store,profile);
         setCookie(res,SESSION_COOKIE,token,SESSION_SECONDS);
@@ -417,7 +420,6 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           if(action==='temporary-confirm'){
             if(Object.keys(body).some(key=>!['type','id'].includes(key)))return reply(400,{error:'invalid_temporary_user'});
             const token=await confirmEnrollment(store,body.id);
-            await clearLocalGoogle();
             setCookie(res,ENROLLMENT_COOKIE,token,ENROLLMENT_SECONDS);
             return reply(200,{confirmed:true});
           }
