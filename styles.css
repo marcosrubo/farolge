@@ -197,3 +197,5 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .temporary-bar strong:empty{display:none}
 .temporary-users{width:100%;margin-bottom:12px}
 .temporary-users option{padding:6px}
+
+.authorized-permissions{flex:1 0 100%;margin:0}.authorized-permissions input[type=checkbox]{width:auto}.authorized-permissions .attendance-class-checklist{margin-bottom:0}

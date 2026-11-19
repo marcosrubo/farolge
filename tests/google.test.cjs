@@ -458,19 +458,27 @@ test('Manutenção usa somente Geral e não exige Gmail, exigindo também a sess
  assert.equal((await h.request('maintenance',{cookie:old.cookie,query:'?mailbox='+GENERAL_EMAIL})).status,403);
 });
 
-test('Inspetores exige conexão temporária mesmo com ambas as conexões Google de Marcos',async()=>{
+test('Marcos recebe todos os módulos e registra ocorrências com as duas conexões',async()=>{
  const h=harness(),{general,personal,cookie}=await h.admin();
  const query='?mailbox='+GENERAL_EMAIL;
  const body={type:'general',mailbox:GENERAL_EMAIL,studentId:'a'.repeat(64),id:'12345678-1234-4234-8234-123456789abc',ocorrencia:'Fato registrado.'};
- h.store.getStudents=async()=>assert.fail('leitura sem conexão temporária');
- h.store.saveOccurrence=async()=>assert.fail('gravação sem conexão temporária');
- for(const credentials of ['',general.cookie,personal.cookie,cookie]){
+ h.store.getStudents=async()=>[];
+ h.store.getStudent=async()=>({id:body.studentId,Escola:'Escola',CGM:'1',Nome:'Aluno'});
+ h.store.saveOccurrence=async(owner,id,value)=>{
+  assert.equal(value.NomeAutor,'Marcos Rubo');
+  assert.equal(value.EmailAutor,GENERAL_EMAIL);
+  return value;
+ };
+ for(const credentials of ['',general.cookie,personal.cookie]){
   const status=(await h.request('status',{cookie:credentials})).json();
   assert.ok(status.modules.includes('bi-seed'));
   assert.equal(status.modules.includes('inspetores-monitores'),false);
   assert.equal((await h.request('students',{cookie:credentials,query})).json().error,'module_forbidden');
   assert.equal((await h.request('occurrence',{cookie:credentials,method:'POST',body})).json().error,'module_forbidden');
  }
+ assert.equal((await h.request('status',{cookie})).json().modules.length,8);
+ assert.equal((await h.request('students',{cookie,query})).status,200);
+ assert.equal((await h.request('occurrence',{cookie,method:'POST',body:{...body,authorMailbox:GENERAL_EMAIL}})).status,200);
  assert.equal((await h.request('occurrence',{method:'POST',cookie,body,origin:'https://elsewhere.invalid'})).status,403);
  assert.equal((await h.request('occurrence',{method:'GET',cookie})).status,405);
 });
@@ -604,7 +612,7 @@ test('primeiro acesso presencial encerra somente as sessões locais e autoriza a
  assert.deepEqual(info.modules,['inspetores-monitores','bi-seed','inicio','radar']);
  assert.equal(info.temporary.name,'Adriana');
  assert.deepEqual(info.connections,{general:null,personal:null});
- assert.equal(info.overview.general.gmail,true);
+ assert.equal(info.sharedConnections.general.gmail,true);
  const secondLogin=await post('temporary-login',{id,password});
  const secondSession=extractCookie(secondLogin,'__Host-farol-temporary');
  assert.ok(secondSession);
@@ -652,7 +660,7 @@ test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API
   assert.equal((await h.request('attendance-analysis',{cookie,query:analysis})).status,radar?200:403);
   assert.equal((await h.request('students',{cookie,query})).status,200);
  }
- assert.equal((await h.request('occurrences',{cookie:admin.cookie,query})).status,403);
+ assert.equal((await h.request('occurrences',{cookie:admin.cookie,query})).status,200);
  for(const action of ['maintenance','authorized-emails','institutional','board','student-files','attendance-files']){
   assert.equal((await h.request(action,{cookie:admin.cookie+'; '+cookie,query})).json().error,'module_forbidden');
  }
@@ -666,6 +674,15 @@ test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API
  assert.equal((await h.request('occurrence',{method:'POST',cookie,body})).status,200);
  assert.equal(saved.NomeAutor,'Pessoa fictícia');
  assert.equal(saved.EmailAutor,null);
+ profile.permissions=['configuracoes','institucionais','manutencao-sistema'];
+ assert.deepEqual((await h.request('status',{cookie})).json().modules,['institucionais','manutencao-sistema','configuracoes']);
+ assert.equal((await h.request('institutional',{cookie,query})).status,200);
+ assert.equal((await h.request('maintenance',{cookie,query})).status,200);
+ assert.equal((await h.request('board',{cookie,query})).json().error,'module_forbidden');
+ assert.equal((await h.request('students',{cookie,query})).json().error,'module_forbidden');
+ assert.equal((await h.request('authorized-emails',{cookie,query})).json().error,'module_forbidden');
+ assert.equal((await h.request('authorized-email',{cookie,method:'POST',body:{type:'general',operation:'update',id:temporaryId,permissions:['inicio']}})).json().error,'module_forbidden');
+ profile.permissions=['inspetores-monitores'];
  h.store.getStudents=async()=>{throw Object.assign(new Error('storage_access_denied'),{status:403});};
  assert.deepEqual((await h.request('students',{cookie,query})).json(),{error:'storage_access_denied'});
  profile=null;

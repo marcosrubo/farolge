@@ -459,17 +459,11 @@ Antes de publicar, executar o arquivo atualizado `database/authorized-emails.sql
 
 ## Conexão temporária e acesso por módulo — 18/11/2026
 
-Geral e Pessoal aceitam somente a identidade Google verificada de `marcos.rubo@gmail.com`. As duas conexões são necessárias no mesmo navegador para Manutenção do Sistema, Configurações e as duas telas de Demandas.
+Geral e Pessoal aceitam somente a identidade Google verificada de `marcos.rubo@gmail.com`. Com as duas conexões ativas no mesmo navegador, Marcos pode usar todos os módulos. Os demais usuários usam a Conexão temporária. Em **Configurações → Cadastro de usuários**, Marcos marca uma caixa para cada funcionalidade e salva o cadastro. O menu mostra todas as opções. Ao abrir um módulo sem permissão, apresenta um aviso. A **Visão GERAL** é aberta somente pelo clique no menu e com permissão ativa.
 
-| Módulo | Quem pode acessar |
-| --- | --- |
-| Visão GERAL | Adriana e Vanusa |
-| Radar e análise de faltas | Adriana, Vanusa, Sandra, Jeisiani, Giovana e Luciani |
-| Inspetores/Monitores | Todos os usuários com Conexão temporária ativa |
-| BI SEED | Acesso público, inclusive sem conexão |
-| Manutenção do Sistema, Configurações e Demandas INSTITUCIONAIS/PESSOAIS | Marcos, com Geral e Pessoal conectadas |
+O servidor confere as permissões a cada requisição. Ao habilitar Demandas ou Manutenção, Marcos libera os dados e as ações daquele módulo usando as respectivas conexões armazenadas no servidor, conforme as permissões Google concedidas. Configurações permite ao usuário temporário consultar os próprios acessos. Administração dos cadastros, confirmação de primeiro acesso e alteração de permissões exigem as duas conexões de Marcos. O BI SEED mantém sua tela explicativa pública. Para uma sessão temporária, o acesso ao BI SEED também pode ser marcado ou desmarcado.
 
-A comparação usa o nome completo do cadastro, ignorando espaços nas extremidades e diferenças de maiúsculas. A Conexão temporária lista os nomes na ordem cadastrada e verifica se existe senha ao selecionar uma pessoa. O servidor aplica as mesmas regras a cada requisição. O acesso de Adriana e Vanusa à Visão GERAL inclui ocorrências e os totais por marcador das conexões Google autorizadas de Marcos. O conteúdo das mensagens permanece restrito às telas de Demandas.
+Executar `database/module-access.sql` após `database/temporary-access.sql`. A migração conserva as permissões anteriores enquanto o cadastro existente não for salvo com suas caixas de seleção. Cadastros novos começam com todas as caixas desmarcadas. Uma lista vazia salva significa que nenhum módulo foi habilitado para aquela sessão temporária. Publicar com a política de privacidade revisão 28.
 
 ### Primeiro acesso presencial
 
@@ -481,7 +475,7 @@ A senha tem pelo menos 6 caracteres, aceita qualquer tipo de caractere e é arma
 
 ### Ativação na Vercel
 
-Antes de publicar, executar `database/temporary-access.sql` no Supabase exclusivo FAROL GE, após a migração `database/authorized-emails.sql` já usada para os cadastros. O script acrescenta os campos de autenticação à tabela existente e mantém suas linhas. Publicar a política revisão 25 junto com o código. Nenhum novo escopo Google ou variável Vercel é necessário.
+Antes de publicar, executar `database/temporary-access.sql` no Supabase exclusivo FAROL GE, após a migração `database/authorized-emails.sql` já usada para os cadastros. O script acrescenta os campos de autenticação à tabela existente e mantém suas linhas. Publicar a política de privacidade junto com o código. Nenhum novo escopo Google ou variável Vercel é necessário.
 
 A conexão temporária consulta alunos, faltas e ocorrências do proprietário verificado `marcos.rubo@gmail.com`. Dados carregados antes por outra conta Geral continuam vinculados àquele proprietário. Com a conta de Marcos, conferir o acervo que aparece nos módulos e a carga de alunos/faltas. Validar na Vercel o primeiro acesso presencial, entrada posterior, alteração de senha, permissões de cada módulo, bloqueio por URL e perda de acesso administrativo ao desconectar uma das duas contas. SQL remoto e validação visual ficam pendentes nesta entrega.
 

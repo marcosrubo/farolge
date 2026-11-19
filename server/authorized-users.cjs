@@ -1,4 +1,5 @@
 'use strict';
+const {MODULES}=require('./module-access.cjs');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const emailOf=value=>typeof value==='string'?value.trim().toLowerCase():'';
 const validEmail=email=>email.length<=254&&/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
@@ -12,7 +13,7 @@ async function handleAuthorizedUsers({action,url,body,store,email}){
   const {operation,id}=body;
   const keys=['type','mailbox','operation'];
   if(operation!=='include')keys.push('id');
-  if(operation!=='exclude')keys.push('email','nome','escola','funcao','ordem');
+  if(operation!=='exclude')keys.push('email','nome','escola','funcao','ordem','permissions');
   if(body.type!=='general'||!['include','update','exclude'].includes(operation)
     ||Object.keys(body).some(key=>!keys.includes(key))
     ||(operation!=='include'&&!validUserId(id)))fail('invalid_authorized_email');
@@ -27,6 +28,12 @@ async function handleAuthorizedUsers({action,url,body,store,email}){
       ||(body.email!=null&&typeof body.email!=='string')
       ||(target&&!validEmail(target))||!validUserOrder(Ordem))fail('invalid_authorized_email');
     const row={email:target||null,Nome,Escola,Funcao,Ordem};
+    if(body.permissions!==undefined){
+      if(!Array.isArray(body.permissions)||body.permissions.length>MODULES.length||body.permissions.some(id=>!MODULES.includes(id)))fail('invalid_authorized_email');
+      row.permissions=MODULES.filter(id=>body.permissions.includes(id));
+    }else if(operation==='include'){
+      row.permissions=[];
+    }
     if(operation==='include')await store.includeAuthorizedEmail(row);
     else await store.updateAuthorizedEmail(id,row);
   }

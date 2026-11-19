@@ -13,11 +13,11 @@ test('cadastro exige Escola, Nome e Função, aceita e-mail vazio e opera pelo I
   updateAuthorizedEmail:async (target,row)=>updated.push([target,row]),
   excludeAuthorizedEmail:async target=>removed.push(target)
  };
- const body={type:'general',mailbox:email,operation:'include',email:' USER@EXAMPLE.COM ',nome:' Pessoa ',escola:' Escola ',funcao:' Inspetora ',ordem:2};
+ const body={type:'general',mailbox:email,operation:'include',email:' USER@EXAMPLE.COM ',nome:' Pessoa ',escola:' Escola ',funcao:' Inspetora ',ordem:2,permissions:['radar','inicio']};
  const base={action:'authorized-email',email,store,body};
  const result=await handleAuthorizedUsers(base);
  assert.equal(result.saved,true);
- const profile={email:'user@example.com',Nome:'Pessoa',Escola:'Escola',Funcao:'Inspetora',Ordem:2};
+ const profile={email:'user@example.com',Nome:'Pessoa',Escola:'Escola',Funcao:'Inspetora',Ordem:2,permissions:['inicio','radar']};
  assert.deepEqual(saved,[profile]);
  await handleAuthorizedUsers({...base,body:{...body,email:' ',ordem:null}});
  assert.deepEqual(saved[1],{...profile,email:null,Ordem:null});
@@ -26,7 +26,7 @@ test('cadastro exige Escola, Nome e Função, aceita e-mail vazio e opera pelo I
  await handleAuthorizedUsers({...base,body:{type:'general',mailbox:email,operation:'exclude',id}});
  assert.deepEqual(removed,[id]);
  await assert.rejects(handleAuthorizedUsers({...base,body:{...body,mailbox:'other@example.com'}}),{message:'account_changed'});
- for(const invalid of [{role:'admin'},{nome:''},{escola:' '},{funcao:undefined},{email:'inválido'},{email:123},{ordem:0},{ordem:1.5},{ordem:2147483648},{ordem:'1'},{operation:'update',id:'inválido'}]){
+ for(const invalid of [{role:'admin'},{nome:''},{escola:' '},{funcao:undefined},{email:'inválido'},{email:123},{ordem:0},{ordem:1.5},{ordem:2147483648},{ordem:'1'},{permissions:['forged']},{permissions:null},{operation:'update',id:'inválido'}]){
   await assert.rejects(handleAuthorizedUsers({...base,body:{...body,...invalid}}),{message:'invalid_authorized_email'});
  }
 });
@@ -62,7 +62,7 @@ test('persistência pagina por ordem e ID, inclusive após registros sem ordem',
 });
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function ui(){
- const nodes=new Map(),requests=[],window={FAROL_CONFIG:{schoolName:'Escola'}};
+ const nodes=new Map(),requests=[],window={FAROL_CONFIG:{schoolName:'Escola'},FarolMenuModules:[{id:'inicio',label:'Visão GERAL'},{id:'radar',label:'Radar'}]};
  const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'',innerHTML:'',textContent:'',listeners:{},open:false,addEventListener(n,fn){this.listeners[n]=fn;},focus(){},showModal(){this.open=true;},close(){this.open=false;}});return nodes.get(id);};
  const root={innerHTML:'',querySelector:get};vm.runInNewContext(fs.readFileSync('authorized-users.js','utf8'),{window,URLSearchParams,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
  return {app:window.FarolAuthorizedUsers,root,get,requests,respond:(i,result,ok=true)=>requests[i].resolve({ok,json:async()=>result})};
@@ -81,15 +81,18 @@ test('Configurações inclui e exclui somente por ação confirmada, escapando t
 test('Configurações edita a ordem e exclui cadastro sem e-mail usando o ID da pessoa',async()=>{
  const h=ui();
  h.app.mount(h.root);h.app.connectionChanged({email});
- const row={id,email:null,Nome:'Pessoa',Escola:'Escola',Funcao:'Inspetora',Ordem:4};
+ const row={id,email:null,Nome:'Pessoa',Escola:'Escola',Funcao:'Inspetora',Ordem:4,permissions:['radar']};
  h.respond(0,{mailbox:email,users:[row]});await settle();
  const click=authorizedAction=>h.get('#authorized-rows').listeners.click({target:{closest:()=>({dataset:{authorizedAction,userId:id}})}});
  click('edit');
  assert.equal(h.get('#authorized-function').value,'Inspetora');
  assert.equal(h.get('#authorized-order').value,4);
+ assert.equal(h.get('#authorized-permission-radar').checked,true);
+ h.get('#authorized-permission-radar').checked=false;
+ h.get('#authorized-permission-inicio').checked=true;
  h.get('#authorized-order').value='1';
  h.get('#authorized-form').listeners.submit({preventDefault(){}});
- assert.deepEqual(JSON.parse(h.requests[1].opts.body),{type:'general',mailbox:email,operation:'update',id,escola:'Escola',nome:'Pessoa',funcao:'Inspetora',email:'',ordem:1});
+ assert.deepEqual(JSON.parse(h.requests[1].opts.body),{type:'general',mailbox:email,operation:'update',id,escola:'Escola',nome:'Pessoa',funcao:'Inspetora',email:'',ordem:1,permissions:['inicio']});
  h.respond(1,{mailbox:email,saved:true,operation:'update'});await settle();
  h.respond(2,{mailbox:email,users:[{...row,Ordem:1}]});await settle();
  click('exclude');

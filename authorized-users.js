@@ -17,6 +17,7 @@ window.FarolAuthorizedUsers=(()=>{
   const success={include:'Usuário incluído.',update:'Cadastro atualizado.',exclude:'Usuário excluído do cadastro.'};
   let root=null,connection=null,rows=[],next=null,busy=false,error='',feedback='',version=0,selected=null,editing=null;
   const field=name=>root.querySelector('#authorized-'+name);
+  const permissions=()=>window.FarolMenuModules||[];
   function close(){
     const dialog=field('delete-dialog');
     if(dialog?.open)dialog.close();
@@ -29,6 +30,7 @@ window.FarolAuthorizedUsers=(()=>{
     field('function').value=row?.Funcao??'';
     field('email').value=row?.email??'';
     field('order').value=row?.Ordem??'';
+    for(const item of permissions())field('permission-'+item.id).checked=row?.permissions?.includes(item.id)===true;
   }
   function clear(){version++;if(root)close();rows=[];next=null;busy=false;error='';feedback='';editing=null;}
   function draw(){
@@ -46,6 +48,7 @@ window.FarolAuthorizedUsers=(()=>{
     field('include').textContent=editing?'SALVAR':'INCLUIR';
     field('cancel-edit').hidden=!editing;
     for(const name of ['school','name','function','email','order','include','cancel-edit','refresh'])field(name).disabled=disabled;
+    field('permissions').disabled=disabled;
     field('more').hidden=!next;
     field('more').disabled=busy||Boolean(error);
     field('delete-confirm').disabled=busy;
@@ -79,7 +82,8 @@ window.FarolAuthorizedUsers=(()=>{
         nome:field('name').value,
         funcao:field('function').value,
         email:field('email').value,
-        ordem:order===''?null:Number(order)
+        ordem:order===''?null:Number(order),
+        permissions:permissions().filter(item=>field('permission-'+item.id).checked).map(item=>item.id)
       });
     }
     busy=true;error='';feedback='';draw();let saved=false;
@@ -143,6 +147,10 @@ window.FarolAuthorizedUsers=(()=>{
           <label class="field">Função<input class="form-control" id="authorized-function" required maxlength="200"></label>
           <label class="field">E-mail (opcional)<input class="form-control" id="authorized-email" type="email" maxlength="254"></label>
           <label class="field">Ordem (opcional)<input class="form-control" id="authorized-order" type="number" min="1" max="2147483647" step="1" aria-describedby="authorized-order-help"></label>
+          <fieldset id="authorized-permissions" class="attendance-class-filter authorized-permissions">
+            <legend>Funcionalidades habilitadas</legend>
+            <div class="attendance-class-checklist">${permissions().map(item=>`<label class="attendance-class-choice"><input type="checkbox" id="authorized-permission-${item.id}"> ${item.label}</label>`).join('')}</div>
+          </fieldset>
           <button type="submit" class="button primary" id="authorized-include">INCLUIR</button>
           <button type="button" class="button" id="authorized-cancel-edit" hidden>Cancelar edição</button>
         </form>

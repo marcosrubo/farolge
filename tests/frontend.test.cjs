@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const adminEmail='marcos.rubo@gmail.com';
-const adminModules=['bi-seed','manutencao-sistema','configuracoes','institucionais','pessoais'];
+const adminModules=['inicio','radar','inspetores-monitores','bi-seed','manutencao-sistema','configuracoes','institucionais','pessoais'];
 function ui(status={configured:false,connections:{general:null,personal:null}},search='',modules={}){
  const nodes=new Map();
  const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;},close(){this.open=false;}});
@@ -38,8 +38,8 @@ for(const mode of ['general','personal','both'])test('conexões verificadas: '+m
  };
  const h=ui({configured:true,mode,connections,modules:mode==='both'?adminModules:['bi-seed']});await settle();
  assert.equal(h.get('#main').hidden,false);
- assert.ok(h.get('#main').innerHTML.includes('Módulo indisponível'));
- assert.ok(!h.get('#navigation').innerHTML.includes('#inspetores-monitores'));
+ assert.equal(h.get('#main').innerHTML.includes('Módulo indisponível'),mode!=='both');
+ assert.ok(h.get('#navigation').innerHTML.includes('#inspetores-monitores'));
  for(const type of ['general','personal']){
   assert.equal(h.get('#email-'+type+'-status').textContent.includes('NÃO conectado'),!connections[type]);
   assert.equal(h.get('[data-disconnect-email="'+type+'"]').hidden,!connections[type]);
@@ -72,7 +72,7 @@ test('sem identificação, hashes diretos não abrem módulos restritos',async()
   h.context.location.hash='#'+route;h.window.listeners.hashchange();
   assert.ok(h.get('#main').innerHTML.includes('Módulo indisponível'));
   assert.ok(h.get('#navigation').innerHTML.includes('href="#bi-seed"'));
-  assert.equal((h.get('#navigation').innerHTML.match(/<a /g)||[]).length,1);
+  assert.equal((h.get('#navigation').innerHTML.match(/<a /g)||[]).length,8);
  }
 });
 test('desconectar Geral preserva Pessoal e a explicação do módulo',async()=>{
@@ -270,4 +270,37 @@ test('Conexão temporária verifica a senha ao selecionar e permite criar e alte
  await get('form').listeners.submit({preventDefault(){}});
  assert.ok(requests.at(-1).url.endsWith('/temporary-password'));
  assert.ok(Object.hasOwn(JSON.parse(requests.at(-1).opts.body),'currentPassword'));
+});
+
+
+test('Visão GERAL exige clique no menu e permissão ativa',async()=>{
+ const status={configured:true,connections:{general:null,personal:null},modules:['inicio','bi-seed'],temporary:{id:'adriana',name:'Adriana'}};
+ const h=ui(status);await settle();
+ h.context.location.hash='';h.window.listeners.hashchange();
+ assert.ok(!h.get('#main').innerHTML.includes('overview-board'));
+ h.context.location.hash='#inicio';h.window.listeners.hashchange();
+ assert.ok(!h.get('#main').innerHTML.includes('overview-board'));
+ const click=()=>h.get('#navigation').listeners.click({target:{closest:()=>({})}});
+ click();
+ assert.ok(h.get('#main').innerHTML.includes('overview-board'));
+ status.modules=['bi-seed'];
+ await h.window.FarolRefreshConnections();
+ assert.ok(h.get('#main').innerHTML.includes('Módulo indisponível'));
+ click();
+ assert.ok(!h.get('#main').innerHTML.includes('overview-board'));
+});
+
+test('Configurações temporárias exibem apenas os acessos do próprio cadastro',async()=>{
+ const received=[];
+ const h=ui({configured:true,connections:{general:null,personal:null},modules:['configuracoes','radar'],
+  temporary:{id:'temp-user',name:'Pessoa fictícia'}},'',{
+  FarolAuthorizedUsers:{mount(){received.push('mount');},unmount(){},connectionChanged(){}}
+ });
+ await settle();
+ h.context.location.hash='#configuracoes';h.window.listeners.hashchange();
+ const panel=h.get('#authorized-users-board').innerHTML;
+ assert.ok(panel.includes('Meus acessos'));
+ assert.ok(panel.includes('Radar — Habilitado'));
+ assert.ok(panel.includes('Visão GERAL — Não habilitado'));
+ assert.deepEqual(received,[]);
 });

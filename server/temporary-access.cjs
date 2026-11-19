@@ -4,7 +4,6 @@ const {isIP}=require('node:net');
 const {promisify}=require('node:util');
 const {validUserId}=require('./authorized-users.cjs');
 
-const ADMIN_EMAIL='marcos.rubo@gmail.com';
 const SESSION_COOKIE='__Host-farol-temporary';
 const SESSION_SECONDS=8*3600;
 const ENROLLMENT_COOKIE='__Host-farol-enrollment';
@@ -15,26 +14,6 @@ const options={N:2**17,r:8,p:1,maxmem:160*1024*1024};
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
 const digest=value=>createHash('sha256').update(value).digest('hex');
 const temporarySessionKey=token=>'temporary.'+digest(token);
-const normalizedName=name=>name?.trim().normalize('NFC').toLocaleLowerCase('pt-BR');
-const overviewNames=new Set(['adriana','vanusa']);
-const radarNames=new Set([...overviewNames,'sandra','jeisiani','giovana','luciani']);
-const adminModules=['manutencao-sistema','configuracoes','institucionais','pessoais'];
-const adminActions=new Set(['maintenance','student-files','student-import','attendance-files','attendance-import','authorized-emails','authorized-email','temporary-confirm','institutional','institutional-move','institutional-labels','board','thread','demand','inbox','classified','classify']);
-const temporaryActions=new Map([
-  ['students','inspetores-monitores'],['occurrence','inspetores-monitores'],
-  ['overview','inicio'],['occurrences','inicio'],['attendance-analysis','radar']
-]);
-
-function modulesFor(profile,connections={}){
-  if(profile){
-    const name=normalizedName(profile.Nome);
-    return ['inspetores-monitores','bi-seed',...(overviewNames.has(name)?['inicio']:[]),...(radarNames.has(name)?['radar']:[])];
-  }
-  const general=connections.general?.email===ADMIN_EMAIL;
-  const personal=connections.personal?.email===ADMIN_EMAIL;
-  return ['bi-seed',...(general&&personal?adminModules:[])];
-}
-
 function matches(a,b){
   if(typeof a!=='string'||typeof b!=='string')return false;
   const first=Buffer.from(a),second=Buffer.from(b);
@@ -117,6 +96,6 @@ async function authenticateTemporary({action,store,body,current,request,key,enro
 }
 
 module.exports={
-  ADMIN_EMAIL,SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,adminActions,temporaryActions,modulesFor,
+  SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,
   temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,authenticateTemporary
 };

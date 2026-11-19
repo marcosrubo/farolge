@@ -20,7 +20,8 @@ const modules = [
   {id:'manutencao-sistema',icon:'manutencao',label:'Manutenção do Sistema'},
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
-let allowedModules=new Set(['bi-seed']),temporaryUser=null;
+window.FarolMenuModules=modules;
+let allowedModules=new Set(['bi-seed']),temporaryUser=null,overviewSelected=false;
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 
 function updateSchool(){
@@ -88,23 +89,28 @@ function render(){
   window.FarolAttendanceAnalysis?.unmount();
   const route=location.hash.slice(1)==='demandas'?'pessoais':location.hash.slice(1);
   const analysis=route==='analise-faltas';
-  const available=modules.filter(item=>allowedModules.has(item.id));
   const requested=modules.find(item=>item.id===(analysis?'radar':route));
-  const selected=requested?available.find(item=>item===requested):available[0];
-  const title=selected?(analysis?'Radar / Análise de faltas':selected.label):'Acesso';
+  const enabled=requested&&allowedModules.has(requested.id);
+  const waitingForOverview=enabled&&requested.id==='inicio'&&!overviewSelected;
+  const selected=enabled&&!waitingForOverview?requested:!requested&&allowedModules.has('bi-seed')?modules.find(item=>item.id==='bi-seed'):null;
+  const title=analysis?'Radar / Análise de faltas':(selected||requested)?.label||'Meu espaço';
   document.title='FAROL GE · '+title;
   document.querySelector('#breadcrumb-title').textContent=title;
-  document.querySelector('#navigation').innerHTML=available.map(item=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item===selected?'active':''}" href="#${item.id}" ${item===selected?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span></a>`).join('');
+  document.querySelector('#navigation').innerHTML=modules.map(item=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item===selected?'active':''}" href="#${item.id}" ${item===selected?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span></a>`).join('');
   const main=document.querySelector('#main');
   if(!selected){
     main.classList.toggle('radar-workspace',false);
-    main.innerHTML='<h1>Módulo indisponível</h1><p>Escolha um módulo disponível no menu.</p>';
+    main.innerHTML=requested&&!enabled?'<h1>Módulo indisponível</h1><p>Esta opção não está habilitada para o seu acesso.</p>':'<h1>Meu espaço</h1><p>Escolha uma opção no menu.</p>';
     return;
   }
   main.classList.toggle('radar-workspace',selected.id==='radar'&&!analysis);
   main.innerHTML=analysis?'<section id="attendance-analysis-board" class="demands-workspace"></section>':selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
   if(analysis)window.FarolAttendanceAnalysis?.mount(document.querySelector('#attendance-analysis-board'));
-  if(selected.id==='configuracoes')window.FarolAuthorizedUsers?.mount(document.querySelector('#authorized-users-board'));
+  if(selected.id==='configuracoes'){
+    const board=document.querySelector('#authorized-users-board');
+    if(temporaryUser)board.innerHTML=`<h1>Configurações</h1><section class="panel"><h2>Meus acessos</h2><ul>${modules.map(item=>`<li>${item.label} — ${allowedModules.has(item.id)?'Habilitado':'Não habilitado'}</li>`).join('')}</ul></section>`;
+    else window.FarolAuthorizedUsers?.mount(board);
+  }
   if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
   if(selected.id==='manutencao-sistema')window.FarolMaintenance?.mount(document.querySelector('#maintenance-board'));
   if(selected.id==='inicio')window.FarolOverview?.mount(document.querySelector('#overview-board'));
@@ -158,8 +164,8 @@ function setupEmailConnections(){
   function updateAccess(result){
     const user=result?.temporary||null;
     const next=new Set(Array.isArray(result?.modules)?result.modules:[]);
-    next.add('bi-seed');
-    if(!user)next.delete('inspetores-monitores');
+    if(!user)next.add('bi-seed');
+    if(user?.id!==temporaryUser?.id||!next.has('inicio'))overviewSelected=false;
     const changed=next.size!==allowedModules.size||[...next].some(id=>!allowedModules.has(id))||user?.id!==temporaryUser?.id;
     allowedModules=next;temporaryUser=user;
     window.FarolTemporaryAccess?.update(user,configured);
@@ -207,16 +213,19 @@ function setupEmailConnections(){
       if(version!==statusVersion)return;
       configured=result.configured===true;
       updateAccess(result);
-      const school=result.temporary?result.school:null;
+      const connections=result.temporary?result.sharedConnections:result.connections;
+      const school=result.temporary?result.school:connections?.general;
+      const actor=result.temporary||(connections?.personal?{email:connections.personal.email,name:'Marcos Rubo'}:null);
+      const access=(module,value)=>configured&&allowedModules.has(module)?value||null:null;
       for(const type of types)activeEmails[type]=configured?result.connections?.[type]?.email||null:null;
-      window.FarolDemands?.connectionChanged(configured?result.connections?.personal||null:null);
-      window.FarolInstitutional?.connectionChanged(configured?result.connections?.general||null:null);
-      window.FarolMaintenance?.connectionChanged(configured&&allowedModules.has('manutencao-sistema')?result.connections?.general||null:null);
-      window.FarolStudents?.connectionChanged(configured&&allowedModules.has('inspetores-monitores')?school||null:null);
-      window.FarolStudents?.personalConnectionChanged?.(configured&&allowedModules.has('inspetores-monitores')?result.temporary||null:null);
-      window.FarolAuthorizedUsers?.connectionChanged(configured&&allowedModules.has('configuracoes')?result.connections?.general||null:null);
-      window.FarolAttendanceAnalysis?.connectionChanged(configured&&result.temporary&&allowedModules.has('radar')?school||null:null);
-      for(const type of types)window.FarolOverview?.connectionChanged(type,configured?result.overview?.[type]||null:null,configured&&allowedModules.has('inicio')?school||null:null);
+      window.FarolDemands?.connectionChanged(access('pessoais',connections?.personal));
+      window.FarolInstitutional?.connectionChanged(access('institucionais',connections?.general));
+      window.FarolMaintenance?.connectionChanged(access('manutencao-sistema',connections?.general));
+      window.FarolStudents?.connectionChanged(access('inspetores-monitores',school));
+      window.FarolStudents?.personalConnectionChanged?.(access('inspetores-monitores',actor));
+      window.FarolAuthorizedUsers?.connectionChanged(access('configuracoes',result.connections?.general));
+      window.FarolAttendanceAnalysis?.connectionChanged(access('radar',school));
+      for(const type of types)window.FarolOverview?.connectionChanged(type,access('inicio',connections?.[type]),access('inicio',school));
       for(const type of types){
         const connection=result.connections?.[type];
         const email=connection?.email;
@@ -318,7 +327,14 @@ function setupEmailConnections(){
   refresh();
 }
 
+document.querySelector('#navigation').addEventListener('click',event=>{
+  if(!event.target.closest('a[href="#inicio"]')||!allowedModules.has('inicio'))return;
+  if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+  overviewSelected=true;
+  if(location.hash==='#inicio')render();
+});
 window.addEventListener('hashchange',()=>{
+  if(location.hash!=='#inicio')overviewSelected=false;
   render();
   document.querySelector('#main').focus({preventScroll:true});
   window.scrollTo(0,0);
