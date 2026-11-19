@@ -335,6 +335,7 @@ test('Configurações temporárias exibem apenas os acessos do próprio cadastro
  assert.ok(panel.includes('Meus acessos'));
  assert.ok(panel.includes('Radar — Habilitado'));
  assert.ok(panel.includes('Visão GERAL — Não habilitado'));
+ assert.ok(panel.includes('conecte Geral e Pessoal com <strong>'+adminEmail));
  assert.deepEqual(received,[]);
 });
 

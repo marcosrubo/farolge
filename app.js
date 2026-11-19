@@ -110,7 +110,16 @@ function render(){
   if(analysis)window.FarolAttendanceAnalysis?.mount(document.querySelector('#attendance-analysis-board'));
   if(selected.id==='configuracoes'){
     const board=document.querySelector('#authorized-users-board');
-    if(moduleUserKey)board.innerHTML=`<h1>Configurações</h1><section class="panel"><h2>Meus acessos</h2><ul>${modules.map(item=>`<li>${item.label} — ${allowedModules.has(item.id)?'Habilitado':'Não habilitado'}</li>`).join('')}</ul></section>`;
+    if(moduleUserKey)board.innerHTML=`
+      <h1>Configurações</h1>
+      <section class="panel">
+        <h2>Meus acessos</h2>
+        <ul>${modules.map(item=>`<li>${item.label} — ${allowedModules.has(item.id)?'Habilitado':'Não habilitado'}</li>`).join('')}</ul>
+      </section>
+      <section class="panel">
+        <h2>Cadastro de usuários</h2>
+        <p>Para editar cadastros, permissões e senhas, conecte Geral e Pessoal com <strong>marcos.rubo@gmail.com</strong> no quadro acima.</p>
+      </section>`;
     else window.FarolAuthorizedUsers?.mount(board);
   }
   if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
