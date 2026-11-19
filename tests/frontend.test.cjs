@@ -323,29 +323,32 @@ test('Visão GERAL exige clique no menu e permissão ativa',async()=>{
  assert.ok(!h.get('#main').innerHTML.includes('overview-board'));
 });
 
-test('Configurações temporárias exibem apenas os acessos do próprio cadastro',async()=>{
+test('Configurações abre o cadastro com a permissão da conexão temporária e sem Geral',async()=>{
  const received=[];
- const h=ui({configured:true,connections:{general:null,personal:null},modules:['configuracoes','radar'],
-  temporary:{id:'temp-user',name:'Pessoa fictícia'}},'',{
-  FarolAuthorizedUsers:{mount(){received.push('mount');},unmount(){},connectionChanged(){}}
+ const status={configured:true,connections:{general:null,personal:null},modules:['configuracoes','radar'],
+  temporary:{id:'temp-user',name:'Pessoa fictícia'}};
+ const h=ui(status,'',{
+  FarolAuthorizedUsers:{mount(){received.push('mount');},unmount(){},connectionChanged(value){received.push(value);}}
  });
  await settle();
+ assert.equal(received.at(-1).email,'temp-user');
+ assert.equal(received.at(-1).name,'Pessoa fictícia');
  h.context.location.hash='#configuracoes';h.window.listeners.hashchange();
- const panel=h.get('#authorized-users-board').innerHTML;
- assert.ok(panel.includes('Meus acessos'));
- assert.ok(panel.includes('Radar — Habilitado'));
- assert.ok(panel.includes('Visão GERAL — Não habilitado'));
- assert.ok(panel.includes('conecte Geral e Pessoal com <strong>'+adminEmail));
- assert.deepEqual(received,[]);
+ assert.equal(received.at(-1),'mount');
+ status.modules=['radar'];
+ await h.window.FarolRefreshConnections();
+ assert.equal(received.at(-1),null);
+ assert.match(h.get('#main').innerHTML,/Módulo indisponível/);
 });
 
 test('Pessoal institucional aplica o cadastro e entrega a própria caixa ao módulo Pessoal',async()=>{
  const email='professora@escola.pr.gov.br',account={email,gmail:true,labels:'ready'};
- const received={personal:[],actor:[]};
+ const received={personal:[],actor:[],settings:[]};
  const h=ui({configured:true,mode:'personal',connections:{general:null,personal:account},modules:['pessoais','inspetores-monitores','configuracoes'],
   institutionalUser:{id:'cadastro-1',name:'Docente cadastrada',email},school:{email:adminEmail},
   sharedConnections:{general:null,personal:account}},'',{
   FarolDemands:{connectionChanged:value=>received.personal.push(value),unmount(){}},
+  FarolAuthorizedUsers:{mount(){received.settings.push('mount');},unmount(){},connectionChanged(value){received.settings.push(value);}},
   FarolStudents:{connectionChanged(){},personalConnectionChanged:value=>received.actor.push(value),unmount(){}}
  });
  await settle();
@@ -355,5 +358,6 @@ test('Pessoal institucional aplica o cadastro e entrega a própria caixa ao mód
  assert.match(h.get('#email-personal-status').textContent,/Docente cadastrada/);
  assert.equal(h.connect[1].hidden,false);
  h.context.location.hash='#configuracoes';h.window.listeners.hashchange();
- assert.ok(h.get('#authorized-users-board').innerHTML.includes('Meus acessos'));
+ assert.equal(received.settings.at(-2).email,email);
+ assert.equal(received.settings.at(-1),'mount');
 });

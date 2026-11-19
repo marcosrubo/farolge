@@ -8,10 +8,10 @@ window.FarolAuthorizedUsers=(()=>{
     email_exists:'Este e-mail já está cadastrado.',
     invalid_authorized_email:'Preencha Escola, Nome e Função. Se informar e-mail e ordem, use um endereço válido e um número inteiro positivo.',
     not_found:'Este cadastro não foi encontrado. Atualize a lista.',
-    admin_required:'Conecte Geral e Pessoal com a conta de Marcos para administrar os cadastros.',
+    admin_required:'Entre com um usuário autorizado a administrar os cadastros.',
     temporary_activation_unavailable:'O cadastro já tem senha ou foi removido. Atualize a lista.',
-    login_required:'Conecte novamente a conta GERAL.',
-    account_changed:'A conta GERAL mudou. Atualize o cadastro.',
+    login_required:'Identifique-se novamente.',
+    account_changed:'A sessão mudou. Atualize o cadastro.',
     unavailable:'Não foi possível concluir. Atualize o cadastro para conferir o resultado.'
   };
   const success={include:'Usuário incluído.',update:'Cadastro atualizado.',exclude:'Usuário excluído do cadastro.'};
@@ -36,8 +36,8 @@ window.FarolAuthorizedUsers=(()=>{
   function draw(){
     if(!root)return;
     const disabled=busy||!connection;
-    field('identity').textContent=connection?.email||'Conta GERAL não conectada';
-    field('status').textContent=!connection?'Conecte Geral e Pessoal com a conta de Marcos para administrar os cadastros.':busy?'Processando cadastro…':error?(messages[error]||messages.unavailable):feedback||(!rows.length?'Nenhum usuário cadastrado.':'');
+    field('identity').textContent=connection?.name||connection?.email||'';
+    field('status').textContent=!connection?'Entre com um usuário autorizado a administrar os cadastros.':busy?'Processando cadastro…':error?(messages[error]||messages.unavailable):feedback||(!rows.length?'Nenhum usuário cadastrado.':'');
     field('rows').innerHTML=rows.map(row=>`<tr>
       <td>${escape(row.Escola)}</td><td>${escape(row.Nome)}</td><td>${escape(row.Funcao??'A preencher')}</td>
       <td>${escape(row.email??'—')}</td><td>${escape(row.Ordem??'—')}</td>
@@ -108,7 +108,7 @@ window.FarolAuthorizedUsers=(()=>{
     }
   }
   function connectionChanged(value){
-    const changed=connection?.email!==value?.email;
+    const changed=connection?.email!==value?.email||connection?.name!==value?.name;
     connection=value;
     if(!changed)return;
     clear();

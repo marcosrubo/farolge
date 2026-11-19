@@ -256,4 +256,4 @@ A conta institucional pode conectar, consultar seu status e desconectar. Permiss
 
 ## Permissões pela Pessoal institucional — revisão 32
 
-Para Pessoal com e-mail @escola.pr.gov.br, o backend associa o e-mail verificado ao cadastro pelos campos já existentes, consulta as permissões de módulo a cada requisição e usa a caixa da própria conta nas operações Pessoais. Configurações mostra os próprios acessos quando habilitada. A administração permanece reservada às duas conexões de Marcos. A Geral institucional continua independente dessa identificação. Sem novo SQL, variável ou escopo.
+Para Pessoal com e-mail @escola.pr.gov.br, o backend associa o e-mail verificado ao cadastro pelos campos já existentes, consulta as permissões de módulo a cada requisição e usa a caixa da própria conta nas operações Pessoais. Configurações habilitada permite administrar cadastros, permissões e senhas com a Pessoal institucional ou Conexão temporária, inclusive sem Geral. A Geral institucional continua independente dessa identificação. Sem novo SQL, variável ou escopo.

@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 19/11/2026, Marcos autorizou as opções administrativas de Configurações para quem tem o módulo marcado e uma sessão Pessoal institucional ou temporária válida, inclusive sem Geral. A lista, edição, permissões, primeiro acesso e reset de senha são protegidos pela mesma verificação no servidor. As duas conexões de Marcos também concedem acesso. Sem novo SQL; política revisão 33.
+
 - Em 19/11/2026, Marcos definiu que a Pessoal institucional @escola.pr.gov.br associa o e-mail Google verificado ao cadastro e libera seus módulos, com rechecagem no servidor a cada requisição. Sem cadastro, apenas conexão/status e BI SEED público. Demandas e totais Pessoais usam a conta da própria pessoa; origem escolar/Geral segue a fonte já usada para a Conexão temporária. Autoria usa e-mail verificado e nome cadastrado. Administração exige as duas conexões de Marcos. Sem novo SQL, variável ou escopo; política revisão 32.
 
 - Em 19/11/2026, Marcos liberou Geral e Pessoal a Contas Google Workspace com e-mail verificado do domínio exato @escola.pr.gov.br, além de marcos.rubo@gmail.com. Escolher conta no Google, preservar isolamento por identidade/tipo e manter administração com as duas conexões de Marcos. Marcadores e acesso por módulo das novas conexões institucionais aguardam definição. Sem novo SQL, escopo ou variável. Política revisão 31.

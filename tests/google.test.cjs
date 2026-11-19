@@ -756,9 +756,11 @@ test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API
  assert.equal((await h.request('maintenance',{cookie,query})).status,200);
  assert.equal((await h.request('board',{cookie,query})).json().error,'module_forbidden');
  assert.equal((await h.request('students',{cookie,query})).json().error,'module_forbidden');
- assert.equal((await h.request('authorized-emails',{cookie,query})).json().error,'module_forbidden');
- assert.equal((await h.request('authorized-email',{cookie,method:'POST',body:{type:'general',operation:'update',id:temporaryId,permissions:['inicio']}})).json().error,'module_forbidden');
+ h.store.listAuthorizedEmails=async()=>({users:[],nextPageToken:null});
+ assert.equal((await h.request('authorized-emails',{cookie,query})).json().error,'account_changed');
+ assert.equal((await h.request('authorized-emails',{cookie,query:'?mailbox='+temporaryId})).status,200);
  profile.permissions=['inspetores-monitores'];
+ assert.equal((await h.request('authorized-emails',{cookie,query:'?mailbox='+temporaryId})).json().error,'module_forbidden');
  h.store.getStudents=async()=>{throw Object.assign(new Error('storage_access_denied'),{status:403});};
  assert.deepEqual((await h.request('students',{cookie,query})).json(),{error:'storage_access_denied'});
  profile=null;
@@ -805,7 +807,7 @@ test('Pessoal institucional usa o cadastro por e-mail e a caixa própria, com re
  assert.equal(h.labelRequests.at(-1).email,email);
  assert.equal((await h.request('overview',{cookie,query:'?type=personal&mailbox='+email})).status,200);
  assert.equal((await h.request('students',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
- assert.equal((await h.request('authorized-emails',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,403);
+ assert.equal((await h.request('authorized-emails',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,409);
  assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
  profile.permissions=[];
  assert.equal((await h.request('board',{cookie,query:'?column=0&mailbox='+email})).json().error,'module_forbidden');
@@ -830,4 +832,63 @@ test('consulta de cadastro institucional confere endereço exato na linha do Sup
  assert.deepEqual(await store.getRegisteredUser(email),profile);
  profile={...profile,email:'outra@escola.pr.gov.br'};
  assert.equal(await store.getRegisteredUser(email),null);
+});
+
+
+test('Pessoal institucional autorizada administra cadastros e senhas sem Geral',async()=>{
+ const h=harness(),email='secretaria@escola.pr.gov.br';
+ const targetId='45678901-1234-4234-8234-123456789abc';
+ const target={id:targetId,Nome:'Pessoa convidada',password_hash:null};
+ const profile={id:temporaryId,Nome:'Secretaria',email,permissions:['configuracoes']};
+ h.store.getRegisteredUser=async address=>address===email?profile:null;
+ h.store.getTemporaryOwner=async()=>assert.fail('Configurações independe do acervo da Geral');
+ h.store.listAuthorizedEmails=async()=>({users:[],nextPageToken:null});
+ h.store.getTemporaryUser=async id=>id===targetId?target:null;
+ h.store.allowTemporaryAttempt=async()=>true;
+ h.store.issueTemporaryActivation=async(id,hash,expiresAt)=>{
+  assert.equal(id,targetId);
+  Object.assign(target,{activation_hash:hash,activation_expires_at:expiresAt});
+  return true;
+ };
+ h.store.activateTemporaryUser=async(id,hash,password)=>{
+  assert.equal(id,targetId);
+  assert.equal(hash,target.activation_hash);
+  target.password_hash=password;
+  return true;
+ };
+ h.store.changeTemporaryPassword=async(id,previous,password)=>{
+  assert.equal(id,targetId);
+  assert.equal(previous,target.password_hash);
+  target.password_hash=password;
+  return true;
+ };
+ let written;
+ h.store.includeAuthorizedEmail=async row=>{written=row;};
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ h.setScopes('openid email profile');
+ const personal=await h.login(email);
+ const post=(action,body,cookie=personal.cookie,origin)=>h.request(action,{method:'POST',body,cookie,origin});
+ assert.deepEqual((await h.request('status',{cookie:personal.cookie})).json().modules,['configuracoes']);
+ assert.equal((await h.request('authorized-emails',{cookie:personal.cookie,query:'?mailbox='+email})).status,200);
+ assert.equal((await post('authorized-email',{type:'general',mailbox:email,operation:'include',nome:'Nova pessoa',escola:'Escola',funcao:'Função',permissions:['radar']})).status,200);
+ assert.deepEqual(written.permissions,['radar']);
+ const confirmed=await post('temporary-confirm',{type:'general',id:targetId});
+ const enrollment=personal.cookie+'; '+extractCookie(confirmed,'__Host-farol-enrollment');
+ const password={id:targetId,password:'123456',confirmation:'123456'};
+ profile.permissions=[];
+ assert.equal((await post('temporary-activate',password,enrollment)).json().error,'temporary_confirmation_required');
+ assert.equal(target.password_hash,null);
+ profile.permissions=['configuracoes'];
+ assert.deepEqual((await post('temporary-activate',password,enrollment)).json(),{passwordSaved:true});
+ const old=target.password_hash;
+ assert.equal((await post('temporary-reset-password',{...password,type:'general'},personal.cookie,'https://outside.example')).status,403);
+ assert.equal(target.password_hash,old);
+ assert.deepEqual((await post('temporary-reset-password',{...password,type:'general'})).json(),{passwordSaved:true});
+ assert.notEqual(target.password_hash,old);
+ const status=(await h.request('status',{cookie:personal.cookie})).json();
+ assert.equal(status.connections.general,null);
+ assert.equal(status.connections.personal.email,email);
+ profile.permissions=[];
+ assert.equal((await h.request('authorized-emails',{cookie:personal.cookie,query:'?mailbox='+email})).json().error,'module_forbidden');
+ assert.equal((await post('temporary-reset-password',{...password,type:'general'})).json().error,'module_forbidden');
 });

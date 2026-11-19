@@ -16,7 +16,7 @@ const {
   SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,
   temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,resetTemporaryPassword,authenticateTemporary
 }=require('./temporary-access.cjs');
-const {ADMIN_EMAIL:FIXED_AUTHORIZED_EMAIL,actionModules,adminOnlyActions,modulesFor}=require('./module-access.cjs');
+const {ADMIN_EMAIL:FIXED_AUTHORIZED_EMAIL,actionModules,settingsActions,modulesFor}=require('./module-access.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
@@ -353,6 +353,20 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if([generalConnection,personalConnection].some(connection=>connection?.email!==FIXED_AUTHORIZED_EMAIL))return null;
       return {general,personal,connections:{general:generalConnection,personal:personalConnection}};
     }
+    async function moduleIdentity(temporary){
+      if(temporary)return {profile:temporary.profile};
+      const current=await account('personal');
+      const admin=await verifyAdmin(current);
+      if(admin)return {admin};
+      if(!current||current.user.email===FIXED_AUTHORIZED_EMAIL)return {};
+      const connection=await store.getConnection(current.user.id,'personal');
+      if(connection?.email!==current.user.email)return {};
+      return {personal:current,personalConnection:connection,profile:await store.getRegisteredUser(current.user.email)};
+    }
+    async function canManageSettings(temporary){
+      const {admin,profile}=await moduleIdentity(temporary);
+      return Boolean(admin||(profile&&modulesFor(profile).includes('configuracoes')));
+    }
     async function moduleConnections(profile,ownPersonal){
       const modules=modulesFor(profile);
       const needed={general:['inicio','institucionais','manutencao-sistema'],personal:['inicio','pessoais']};
@@ -388,7 +402,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         const profile=await store.getTemporaryUser(id);
         if(!profile)return reply(404,{error:'invalid_temporary_user'});
         if(profile.password_hash!==null&&!profile.password_hash)return reply(503,{error:'access_unavailable'});
-        const canCreatePassword=canEnroll(profile,jar[ENROLLMENT_COOKIE])&&Boolean(await verifyAdmin());
+        const canCreatePassword=canEnroll(profile,jar[ENROLLMENT_COOKIE])
+          &&await canManageSettings(await readTemporarySession(store,jar[SESSION_COOKIE]));
         return reply(200,{id,name:profile.Nome,hasPassword:profile.password_hash!==null,canCreatePassword});
       }
       if(action==='temporary-logout'){
@@ -397,7 +412,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       }
       const temporary=await readTemporarySession(store,jar[SESSION_COOKIE]);
       if(['temporary-login','temporary-activate','temporary-password'].includes(action)){
-        if(action==='temporary-activate'&&(temporary||!await verifyAdmin()))return reply(403,{error:'temporary_confirmation_required'});
+        if(action==='temporary-activate'&&!await canManageSettings(temporary))return reply(403,{error:'temporary_confirmation_required'});
         const profile=await authenticateTemporary({action,store,body,current:temporary,request:req,key:config.key,enrollment:jar[ENROLLMENT_COOKIE]});
         setCookie(res,ENROLLMENT_COOKIE,'',0);
         if(action==='temporary-activate')return reply(200,{passwordSaved:true});
@@ -420,26 +435,24 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(actionModules.has(action)) {
         try {
           const module=actionModules.get(action);
-          const current=temporary?null:await account('personal');
-          const admin=temporary?null:await verifyAdmin(current);
-          let personal,personalConnection;
-          let profile=temporary?.profile;
-          if(!temporary&&!admin&&!adminOnlyActions.has(action)){
-            if(current&&current.user.email!==FIXED_AUTHORIZED_EMAIL){
-              const connection=await store.getConnection(current.user.id,'personal');
-              if(connection?.email===current.user.email){
-                personal=current;
-                personalConnection=connection;
-                profile=await store.getRegisteredUser(current.user.email);
-              }
-            }
+          const {admin,personal,personalConnection,profile}=await moduleIdentity(temporary);
+          if(!admin&&(!profile||!modulesFor(profile).includes(module))){
+            const error=temporary||personal||schoolActions.has(action)||action==='overview'?'module_forbidden':'admin_required';
+            return reply(403,{error});
           }
-          if(!admin){
-            if(temporary||personal){
-              if(adminOnlyActions.has(action)||!profile||!modulesFor(profile).includes(module))return reply(403,{error:'module_forbidden'});
-            }else{
-              return reply(403,{error:schoolActions.has(action)||action==='overview'?'module_forbidden':'admin_required'});
+          if(settingsActions.has(action)){
+            if(action==='temporary-confirm'){
+              if(Object.keys(body).some(key=>!['type','id'].includes(key)))return reply(400,{error:'invalid_temporary_user'});
+              const token=await confirmEnrollment(store,body.id);
+              setCookie(res,ENROLLMENT_COOKIE,token,ENROLLMENT_SECONDS);
+              return reply(200,{confirmed:true});
             }
+            if(action==='temporary-reset-password'){
+              await resetTemporaryPassword(store,body);
+              return reply(200,{passwordSaved:true});
+            }
+            const email=admin?FIXED_AUTHORIZED_EMAIL:personal?.user.email||profile.id;
+            return reply(200,await handleAuthorizedUsers({action,url,body,store,email}));
           }
           const type=action==='overview'?url.searchParams.get('type'):actionMailbox(action);
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
@@ -452,17 +465,6 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:personal?{name:profile.Nome,email:personal.user.email}:{name:'Marcos Rubo',email};
             return reply(200,await handleStudents({action,url,body,store,owner,email,actor}));
           }
-          if(action==='temporary-confirm'){
-            if(Object.keys(body).some(key=>!['type','id'].includes(key)))return reply(400,{error:'invalid_temporary_user'});
-            const token=await confirmEnrollment(store,body.id);
-            setCookie(res,ENROLLMENT_COOKIE,token,ENROLLMENT_SECONDS);
-            return reply(200,{confirmed:true});
-          }
-          if(action==='temporary-reset-password'){
-            await resetTemporaryPassword(store,body);
-            return reply(200,{passwordSaved:true});
-          }
-          if(action.startsWith('authorized-'))return reply(200,await handleAuthorizedUsers({action,url,body,store,email}));
           const connection=admin?admin.connections[type]:ownPersonal?personalConnection:await store.getConnection(owner,type);
           const capability=driveReadActions.has(action)?'driveRead':driveMetadataActions.has(action)?'driveMetadata':'gmail';
           if(connection?.email!==email||!connection.capabilities[capability])return reply(403,{error:'missing_scope'});

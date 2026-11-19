@@ -108,20 +108,7 @@ function render(){
   main.classList.toggle('radar-workspace',selected.id==='radar'&&!analysis);
   main.innerHTML=analysis?'<section id="attendance-analysis-board" class="demands-workspace"></section>':selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de entrada, Classificadas e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
   if(analysis)window.FarolAttendanceAnalysis?.mount(document.querySelector('#attendance-analysis-board'));
-  if(selected.id==='configuracoes'){
-    const board=document.querySelector('#authorized-users-board');
-    if(moduleUserKey)board.innerHTML=`
-      <h1>Configurações</h1>
-      <section class="panel">
-        <h2>Meus acessos</h2>
-        <ul>${modules.map(item=>`<li>${item.label} — ${allowedModules.has(item.id)?'Habilitado':'Não habilitado'}</li>`).join('')}</ul>
-      </section>
-      <section class="panel">
-        <h2>Cadastro de usuários</h2>
-        <p>Para editar cadastros, permissões e senhas, conecte Geral e Pessoal com <strong>marcos.rubo@gmail.com</strong> no quadro acima.</p>
-      </section>`;
-    else window.FarolAuthorizedUsers?.mount(board);
-  }
+  if(selected.id==='configuracoes')window.FarolAuthorizedUsers?.mount(document.querySelector('#authorized-users-board'));
   if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
   if(selected.id==='manutencao-sistema')window.FarolMaintenance?.mount(document.querySelector('#maintenance-board'));
   if(selected.id==='inicio')window.FarolOverview?.mount(document.querySelector('#overview-board'));
@@ -238,7 +225,9 @@ function setupEmailConnections(){
       window.FarolMaintenance?.connectionChanged(access('manutencao-sistema',connections?.general));
       window.FarolStudents?.connectionChanged(access('inspetores-monitores',school));
       window.FarolStudents?.personalConnectionChanged?.(access('inspetores-monitores',actor));
-      window.FarolAuthorizedUsers?.connectionChanged(registered?null:access('configuracoes',result.connections?.general));
+      const settings=result.temporary?{email:result.temporary.id,name:result.temporary.name}
+        :result.institutionalUser||result.connections?.general;
+      window.FarolAuthorizedUsers?.connectionChanged(access('configuracoes',settings));
       window.FarolAttendanceAnalysis?.connectionChanged(access('radar',school));
       for(const type of types)window.FarolOverview?.connectionChanged(type,access('inicio',connections?.[type]),access('inicio',school));
       for(const type of types){
