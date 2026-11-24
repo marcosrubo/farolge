@@ -42,6 +42,7 @@ function frontend(){
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,{textContent:'',innerHTML:'',listeners:{},addEventListener(name,fn){this.listeners[name]=fn;}});return nodes.get(selector);};
  const root={innerHTML:'',querySelector:get},window={};
  const context=vm.createContext({window,document,Intl,URLSearchParams,setInterval:(fn,ms)=>{const id=++nextTimer;timers.set(id,{fn,ms});return id;},clearInterval:id=>timers.delete(id),fetch:(url)=>new Promise(resolve=>requests.push({url,resolve}))});
+ vm.runInContext(fs.readFileSync('occurrences.js','utf8'),context);
  vm.runInContext(fs.readFileSync('overview.js','utf8'),context);
  const respond=(type,mailbox,items,ok=true)=>{const req=requests.find(r=>!r.done&&new URL('https://farol.invalid'+r.url).searchParams.get('type')===type);assert.ok(req);req.done=true;req.resolve({ok,json:async()=>ok?{type,mailbox,items}:{error:'unavailable'}});};
  return {app:window.FarolOverview,root,get,requests,respond,timers,document,tick:()=>{for(const timer of timers.values())timer.fn();}};

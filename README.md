@@ -295,7 +295,7 @@ Esta entrega exibe orientações e disponibilidade; a captura/importação de da
 
 ## Inspetores/Monitores e Carga de Alunos — 17/11/2026
 
-O menu mostra Inspetores/Monitores antes de Radar. A tela consulta os alunos da identidade **Geral**, em ordem alfabética em português, com série/turma/turno à direita; permite buscar por nome, CGM ou turma. Cada nome abre um diálogo para digitar a ocorrência. Escola, CGM e Nome derivam do vínculo selecionado, nunca de dados livres enviados pelo navegador. Data e Hora usam o instante do servidor no fuso America/Sao_Paulo. Cada envio tem um UUID para evitar duplicação se a resposta for perdida; não há repetição automática de POST. Não envia avisos nem faz avaliação automática do aluno. A consulta de ocorrências está na Visão GERAL, conforme a seção ao final; edição do histórico ainda não está implementada.
+O menu mostra Inspetores/Monitores antes de Radar. A tela consulta os alunos da identidade **Geral**, em ordem alfabética em português, com série/turma/turno à direita; permite buscar por nome, CGM ou turma. Cada nome abre um diálogo para digitar a ocorrência. Escola, CGM e Nome derivam do vínculo selecionado, nunca de dados livres enviados pelo navegador. Data e Hora usam o instante do servidor no fuso America/Sao_Paulo. Cada envio tem um UUID para evitar duplicação se a resposta for perdida; não há repetição automática de POST. Não envia avisos nem faz avaliação automática do aluno. A consulta de ocorrências está na Visão GERAL e na aba **CONSULTAR** de Inspetores/Monitores, conforme a seção ao final.
 
 Na manutenção, **Carga de Alunos** lista os arquivos diretamente em **FarolGE/ListaAlunos**, próprios ou compartilhados com a Geral, em páginas de 10. Mostra nome, geração identificada no PDF e criação no Drive (identificadas separadamente). A data de geração é buscada em `/CreationDate` nos últimos 64 KB do PDF, com concorrência 2; formatos que não a exponham nessa faixa aparecem como não identificados, sem usar a criação do Drive como substituta. Ao carregar, PDF.js confirma a geração pelo metadado completo. Arquivos incompatíveis ficam sem ação de carga.
 
@@ -503,3 +503,10 @@ Ao conectar uma Pessoal `@escola.pr.gov.br`, o backend busca o e-mail verificado
 Demandas PESSOAIS e os totais pessoais da Visão GERAL usam a caixa institucional do próprio usuário e exigem as permissões Gmail correspondentes. Demandas PESSOAIS habilitada permite preparar os marcadores dessa caixa ao conectar ou revisar a autorização. Dados escolares e a fonte Geral dos módulos seguem o acervo e a autorização já usados na Conexão temporária. A Geral institucional por si só não atribui permissões. Ocorrências usam o nome cadastrado e o e-mail Pessoal verificado na autoria.
 
 Publicar com a política revisão 33. Sem novo SQL, variável ou escopo. Na Vercel, conferir perfil cadastrado, perfil sem cadastro, remoção de permissão, acesso por URL e resposta quando Gmail ainda não estiver autorizado.
+
+
+## Inspetores/Monitores — abas de registro e consulta (24/11/2026)
+
+**REGISTRAR** abre por padrão com a busca de alunos e o formulário de ocorrência. **CONSULTAR** carrega as ocorrências da mesma conta Geral usada pela Visão GERAL, em páginas de 20, das mais recentes para as mais antigas. Cada registro mostra data e hora de Brasília, aluno, turma, texto e autoria. Em telas estreitas, a consulta apresenta cartões e o registro posiciona a turma abaixo do nome do aluno.
+
+`GET /api/google/inspector-occurrences` exige a permissão Inspetores/Monitores. A Visão GERAL continua usando sua rota e sua própria permissão. A nova rota reaproveita a consulta escolar e o cursor existentes. A lista é carregada ao abrir a aba e pode ser atualizada manualmente. Para publicar, enviar o código junto com a política de privacidade revisão 34. A entrega usa o banco, as variáveis e os escopos Google existentes.

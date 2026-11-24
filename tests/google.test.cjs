@@ -767,6 +767,34 @@ test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API
  assert.equal((await h.request('students',{cookie,query})).json().error,'module_forbidden');
 });
 
+test('consulta de Inspetores respeita a permissão do módulo e reutiliza o cursor da Visão GERAL',async()=>{
+ const {writeTemporarySession}=require('../server/temporary-access.cjs');
+ const h=harness(),admin=await h.admin();
+ const owner=h.userFor(GENERAL_EMAIL).id;
+ const profile={id:temporaryId,Nome:'Pessoa fictícia',password_hash:'hash simulado',permissions:['inspetores-monitores']};
+ h.store.getTemporaryUser=async()=>profile;
+ h.store.getTemporaryOwner=async()=>owner;
+ const reads=[];
+ h.store.getOccurrences=async(id,cursor)=>{reads.push({id,cursor});return {items:[],nextPageToken:null};};
+ const token=await writeTemporarySession(h.store,profile);
+ const cookie='__Host-farol-temporary='+token;
+ const query='?mailbox='+GENERAL_EMAIL+'&pageToken=next';
+ const action='inspector-occurrences';
+ assert.equal((await h.request(action,{query})).status,403);
+ assert.equal((await h.request('occurrences',{cookie,query})).status,403);
+ assert.equal((await h.request(action,{cookie,query:'?mailbox=other@example.com'})).status,409);
+ assert.equal((await h.request(action,{method:'POST',cookie,query})).status,405);
+ assert.deepEqual(reads,[]);
+ const response=await h.request(action,{cookie,query});
+ assert.equal(response.status,200);
+ assert.deepEqual(response.json(),{mailbox:GENERAL_EMAIL,items:[],nextPageToken:null});
+ profile.permissions=['inicio'];
+ assert.equal((await h.request(action,{cookie,query})).json().error,'module_forbidden');
+ assert.equal((await h.request('occurrences',{cookie,query})).status,200);
+ assert.equal((await h.request(action,{cookie:admin.cookie,query})).status,200);
+ assert.deepEqual(reads,Array.from({length:3},()=>({id:owner,cursor:'next'})));
+});
+
 test('listagem pública segue a ordem e expõe somente ID e nome',async()=>{
  const profile={id:temporaryId,Nome:'Exemplo',Ordem:1,password_hash:'hash fictício'};
  let request;
@@ -788,6 +816,7 @@ test('Pessoal institucional usa o cadastro por e-mail e a caixa própria, com re
  h.store.getRegisteredUser=async address=>address===email?profile:null;
  h.store.getTemporaryOwner=async()=>owner;
  h.store.getDemands=async id=>{assert.equal(id,ownId);return [];};
+ h.store.getOccurrences=async id=>{assert.equal(id,owner);return {items:[],nextPageToken:null};};
  h.store.getStudents=async id=>{assert.equal(id,owner);return [];};
  h.setIdentity({hd:'escola.pr.gov.br'});
  const general=await h.login(email,'','general');
@@ -807,9 +836,11 @@ test('Pessoal institucional usa o cadastro por e-mail e a caixa própria, com re
  assert.equal(h.labelRequests.at(-1).email,email);
  assert.equal((await h.request('overview',{cookie,query:'?type=personal&mailbox='+email})).status,200);
  assert.equal((await h.request('students',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
+ assert.equal((await h.request('inspector-occurrences',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
  assert.equal((await h.request('authorized-emails',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,409);
  assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
  profile.permissions=[];
+ assert.equal((await h.request('inspector-occurrences',{cookie,query:'?mailbox='+GENERAL_EMAIL})).json().error,'module_forbidden');
  assert.equal((await h.request('board',{cookie,query:'?column=0&mailbox='+email})).json().error,'module_forbidden');
  assert.deepEqual((await h.request('status',{cookie})).json().modules,[]);
  profile=null;

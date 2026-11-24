@@ -2,6 +2,7 @@
 window.FarolOverview=(()=>{
   const groups={general:{title:'E-mails da ESCOLA',labels:[['INBOX','Caixa de Entrada'],['GE_Classificadas','Classificadas'],['GE_Arquivadas','Arquivadas']]},personal:{title:'E-mails PESSOAIS',labels:[['GE_ME DEVEM','ME DEVEM'],['GE_MINHAS','MINHAS'],['GE_DEVO','DEVO'],['INBOX','Caixa de Entrada'],['GE_Despachadas','Despachadas']]}};
   const types=Object.keys(groups),escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const occurrences=window.FarolOccurrences?.create({id:'overview-occurrences',action:'occurrences'});
   const number=new Intl.NumberFormat('pt-BR');
   let autoEnabled=true,autoTimer=null;
   function stopAuto(){if(autoTimer!==null){clearInterval(autoTimer);autoTimer=null;}}
@@ -9,7 +10,7 @@ window.FarolOverview=(()=>{
   function refreshAuto(){
     if(!root||!autoEnabled||document.hidden)return;
     for(const type of types)load(type);
-    loadOccurrences();
+    occurrences?.load();
   }
   function scheduleAuto(){stopAuto();drawAuto();if(root&&autoEnabled&&!document.hidden)autoTimer=setInterval(refreshAuto,60000);}
   function visibilityChanged(){scheduleAuto();if(!document.hidden)refreshAuto();}
@@ -41,56 +42,21 @@ window.FarolOverview=(()=>{
     }catch(error){if(ticket===s.version){s.error=error.message;if(['login_required','account_changed','missing_scope'].includes(s.error))s.items=[];}}
     finally{if(ticket===s.version){s.busy=false;draw(type);}}
   }
-  const occurrences={connection:null,items:[],next:null,busy:false,error:'',loaded:false,version:0};
-  function clearOccurrences(){occurrences.version++;occurrences.items=[];occurrences.next=null;occurrences.busy=false;occurrences.error='';occurrences.loaded=false;}
-  function drawOccurrences(){
-    if(!root)return;
-    const s=occurrences;
-    const messages={setup_required:'As tabelas de alunos e ocorrências ainda precisam ser preparadas no Supabase.',login_required:'Identifique-se novamente para consultar as ocorrências.',account_changed:'A conta mudou. Atualize as ocorrências.',storage_access_denied:'O Supabase recusou o acesso às ocorrências.',invalid_page:'Atualize as ocorrências para reiniciar a consulta.',unavailable:'Não foi possível consultar as ocorrências. Tente atualizar.'};
-    root.querySelector('#overview-occurrences-identity').textContent=s.connection?.email||'Conta GERAL não conectada';
-    root.querySelector('#overview-occurrences-status').textContent=!s.connection?'Os dados de ocorrências da escola estão indisponíveis.':s.busy?'Consultando ocorrências…':s.error?(messages[s.error]||messages.unavailable)+(s.loaded?' A lista anterior foi mantida.':''):s.loaded&&!s.items.length?'Nenhuma ocorrência registrada.':'';
-    root.querySelector('#overview-occurrences-rows').innerHTML=s.items.map(item=>`<tr><td>${escape(item.date.split('-').reverse().join('/'))}</td><td>${escape(item.time.slice(0,8))}</td><td>${escape(item.student)}</td><td>${escape(item.className)}</td><td class="occurrence-text">${escape(item.text)}</td><td>${escape(item.authorName||'Não informado')}</td></tr>`).join('');
-    root.querySelector('#overview-occurrences-refresh').disabled=s.busy||!s.connection;
-    root.querySelector('#overview-occurrences-more').hidden=!s.next;
-    root.querySelector('#overview-occurrences-more').disabled=s.busy||Boolean(s.error);
-  }
-  async function loadOccurrences(more=false){
-    const s=occurrences;if(!root||!s.connection||s.busy)return;
-    const ticket=++s.version,mailbox=s.connection.email;s.busy=true;s.error='';drawOccurrences();
-    try{
-      const params=new URLSearchParams({mailbox,...(more?{pageToken:s.next}:{})});
-      const response=await fetch('/api/google/occurrences?'+params,{credentials:'same-origin',cache:'no-store'}),result=await response.json();window.FarolAccessDenied?.(result);
-      if(!response.ok)throw new Error(result.error||'unavailable');
-      if(ticket!==s.version||!root)return;
-      if(result.mailbox!==mailbox||!Array.isArray(result.items))throw new Error('account_changed');
-      s.items=(more?[...new Map([...s.items,...result.items].map(item=>[item.id,item])).values()]:result.items).sort((a,b)=>(b.date+'T'+b.time).localeCompare(a.date+'T'+a.time)||b.id.localeCompare(a.id));
-      s.next=result.nextPageToken||null;s.loaded=true;
-    }catch(error){if(ticket===s.version){s.error=error.message;if(['login_required','account_changed'].includes(s.error)){s.items=[];s.next=null;s.loaded=false;}}}
-    finally{if(ticket===s.version){s.busy=false;drawOccurrences();}}
-  }
-  function occurrenceConnectionChanged(value){
-    const changed=occurrences.connection?.email!==value?.email;occurrences.connection=value;
-    if(changed){clearOccurrences();drawOccurrences();if(root&&value)loadOccurrences();}
-  }
-  function occurrencesPanel(){return `<section class="overview-group overview-occurrences" aria-labelledby="overview-occurrences-title"><div class="overview-heading"><h2 id="overview-occurrences-title">Ocorrências dos alunos</h2></div><p id="overview-occurrences-identity" class="overview-identity"></p><p class="demand-footnote">Mais recentes primeiro. Horário de Brasília.</p><p id="overview-occurrences-status" class="overview-status" role="status"></p><div class="overview-occurrences-scroll" role="region" aria-label="Lista de ocorrências dos alunos" tabindex="0"><table><thead><tr><th scope="col">Data</th><th scope="col">Hora</th><th scope="col">Aluno</th><th scope="col">Turma</th><th scope="col">Ocorrência</th><th scope="col">Registrado por</th></tr></thead><tbody id="overview-occurrences-rows"></tbody></table></div><div class="button-row"><button type="button" class="button overview-refresh" id="overview-occurrences-refresh">Atualizar ocorrências</button><button type="button" class="button overview-refresh" id="overview-occurrences-more" hidden>Carregar mais</button></div></section>`;}
   function connectionChanged(type,value,school=value){
     if(!groups[type])return;
-    if(type==='general')occurrenceConnectionChanged(school);
+    if(type==='general')occurrences?.connectionChanged(school);
     const s=states[type],changed=s.connection?.email!==value?.email||s.connection?.gmail!==value?.gmail;s.connection=value;
     if(changed){clear(type);draw(type);if(root&&value?.gmail)load(type);}
   }
   function mount(element){
     root=element;
-    root.innerHTML=`<h1>Visão GERAL</h1><p class="demand-intro">Acompanhe os totais de mensagens da Escola e Pessoal e as ocorrências dos alunos.</p><div class="overview-auto"><label><input type="checkbox" id="overview-auto-refresh"> Atualizar automaticamente a cada 1 minuto</label><p class="overview-status" id="overview-auto-status" role="status"></p></div><div class="overview-groups">${types.map(type=>`<section class="overview-group" aria-labelledby="overview-title-${type}"><div class="overview-heading"><h2 id="overview-title-${type}">${groups[type].title}</h2></div><p class="overview-identity" id="overview-identity-${type}"></p><dl class="overview-totals" id="overview-cards-${type}"></dl><p class="overview-status" role="status" id="overview-status-${type}"></p><button class="button overview-refresh" id="overview-refresh-${type}">Atualizar totais</button></section>`).join('')}${occurrencesPanel()}</div><p class="demand-footnote">Os números são totais de mensagens por marcador, incluindo lidas e não lidas e todas as páginas. Uma mensagem pode aparecer em vários marcadores; os totais não devem ser somados. Marcadores ausentes e falhas de consulta não são apresentados como zero.</p><p class="demand-footnote">Em desenvolvimento: acompanhamento de alunos e índices do BI da SEED.</p>`;
+    root.innerHTML=`<h1>Visão GERAL</h1><p class="demand-intro">Acompanhe os totais de mensagens da Escola e Pessoal e as ocorrências dos alunos.</p><div class="overview-auto"><label><input type="checkbox" id="overview-auto-refresh"> Atualizar automaticamente a cada 1 minuto</label><p class="overview-status" id="overview-auto-status" role="status"></p></div><div class="overview-groups">${types.map(type=>`<section class="overview-group" aria-labelledby="overview-title-${type}"><div class="overview-heading"><h2 id="overview-title-${type}">${groups[type].title}</h2></div><p class="overview-identity" id="overview-identity-${type}"></p><dl class="overview-totals" id="overview-cards-${type}"></dl><p class="overview-status" role="status" id="overview-status-${type}"></p><button class="button overview-refresh" id="overview-refresh-${type}">Atualizar totais</button></section>`).join('')}${occurrences?.markup()||''}</div><p class="demand-footnote">Os números são totais de mensagens por marcador, incluindo lidas e não lidas e todas as páginas. Uma mensagem pode aparecer em vários marcadores; os totais não devem ser somados. Marcadores ausentes e falhas de consulta não são apresentados como zero.</p><p class="demand-footnote">Em desenvolvimento: acompanhamento de alunos e índices do BI da SEED.</p>`;
     root.querySelector('#overview-auto-refresh').checked=autoEnabled;
     root.querySelector('#overview-auto-refresh').addEventListener('change',()=>{autoEnabled=root.querySelector('#overview-auto-refresh').checked;scheduleAuto();refreshAuto();});
     document.addEventListener('visibilitychange',visibilityChanged);scheduleAuto();
-    clearOccurrences();
-    root.querySelector('#overview-occurrences-refresh').addEventListener('click',()=>loadOccurrences());
-    root.querySelector('#overview-occurrences-more').addEventListener('click',()=>loadOccurrences(true));
-    drawOccurrences();if(occurrences.connection)loadOccurrences();
+    occurrences?.mount(root);
     for(const type of types){clear(type);root.querySelector('#overview-refresh-'+type).addEventListener('click',()=>load(type));draw(type);if(states[type].connection?.gmail)load(type);}
   }
-  function unmount(){stopAuto();document.removeEventListener('visibilitychange',visibilityChanged);clearOccurrences();for(const type of types)clear(type);root=null;}
+  function unmount(){stopAuto();document.removeEventListener('visibilitychange',visibilityChanged);occurrences?.unmount();for(const type of types)clear(type);root=null;}
   return {mount,unmount,connectionChanged};
 })();

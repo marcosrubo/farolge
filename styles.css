@@ -203,3 +203,30 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 
 .password-match{align-self:center;font-weight:700}.password-match:empty{display:none}.password-match.is-equal{color:#166534}.password-match.is-different{color:#b91c1c}
 #temporary-password-length{font-size:12px}
+
+.inspector-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;width:min(100%,360px);padding:4px;margin:14px 0;border:1px solid var(--border);border-radius:10px;background:#eef3e7}
+.inspector-tabs button{min-height:44px;padding:8px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--green);font-weight:700}
+.inspector-tabs button[aria-selected="true"]{background:var(--green);color:#fff}
+#student-search{width:min(100%,420px);min-height:44px;color:#253d34;font-size:16px}
+#students-board .student-row,#students-board .button{min-height:44px}
+#students-board :focus-visible,#student-dialog textarea:focus-visible{outline:3px solid #b18b32;outline-offset:2px}
+.inspector-occurrence-cards{display:none}
+
+@media(max-width:760px){
+  .inspector-tabs{width:100%}
+  #inspector-panel-register,#inspector-panel-consult .overview-group{padding:16px}
+  #students-board .student-row{flex-direction:column;align-items:flex-start;gap:4px;padding:12px 4px;font-size:15px}
+  #students-board .student-class{max-width:100%;text-align:left;font-size:13px;overflow-wrap:anywhere}
+  #student-occurrence{font-size:16px}
+  #student-dialog .button-row button,#inspector-panel-consult .button-row button{flex:1 1 auto}
+  #inspector-occurrences-refresh{width:100%;margin:0 0 6px}
+  #inspector-panel-consult .button{font-size:14px}
+  #inspector-panel-consult .overview-occurrences-scroll{display:none}
+  .inspector-occurrence-cards{display:grid;gap:12px;list-style:none;padding:0;margin:12px 0;overflow-wrap:anywhere}
+  .inspector-occurrence-cards:empty{display:none}
+  .inspector-occurrence-cards li{padding:14px;border:1px solid var(--border);border-radius:9px;background:#fafcf9}
+  .inspector-occurrence-cards h3{margin:6px 0 2px;color:var(--green);font-size:16px}
+  .inspector-occurrence-cards p{margin:0}
+  .inspector-occurrence-date,.inspector-occurrence-class,.inspector-occurrence-author{font-size:13px;color:#51664d}
+  .inspector-occurrence-cards .occurrence-text{margin:10px 0;min-width:0;white-space:pre-wrap;font-size:15px;line-height:1.5}
+}

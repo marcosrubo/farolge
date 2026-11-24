@@ -33,7 +33,7 @@ const TYPES = ['general','personal'];
 const personalActions=new Set(['board','thread','demand','inbox','classified','classify']);
 const driveReadActions=new Set(['student-import','attendance-import']);
 const driveMetadataActions=new Set(['maintenance','student-files','attendance-files']);
-const schoolActions=new Set(['students','occurrence','occurrences','attendance-analysis']);
+const schoolActions=new Set(['students','occurrence','occurrences','inspector-occurrences','attendance-analysis']);
 const actionMailbox=action=>personalActions.has(action)?'personal':'general';
 const TTL = 30 * 24 * 3600;
 const random = () => crypto.randomBytes(32).toString('base64url');
@@ -463,7 +463,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           if(action==='attendance-analysis')return reply(200,await handleAttendanceAnalysis({url,store,owner,email}));
           if(schoolActions.has(action)){
             const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:personal?{name:profile.Nome,email:personal.user.email}:{name:'Marcos Rubo',email};
-            return reply(200,await handleStudents({action,url,body,store,owner,email,actor}));
+            const studentAction=action==='inspector-occurrences'?'occurrences':action;
+            return reply(200,await handleStudents({action:studentAction,url,body,store,owner,email,actor}));
           }
           const connection=admin?admin.connections[type]:ownPersonal?personalConnection:await store.getConnection(owner,type);
           const capability=driveReadActions.has(action)?'driveRead':driveMetadataActions.has(action)?'driveMetadata':'gmail';

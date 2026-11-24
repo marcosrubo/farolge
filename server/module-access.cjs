@@ -6,7 +6,7 @@ const overviewNames=new Set(['adriana','vanusa']);
 const radarNames=new Set([...overviewNames,'sandra','jeisiani','giovana','luciani']);
 const settingsActions=new Set(['authorized-emails','authorized-email','temporary-confirm','temporary-reset-password']);
 const actionModules=new Map([
-  ['students','inspetores-monitores'],['occurrence','inspetores-monitores'],
+  ['students','inspetores-monitores'],['occurrence','inspetores-monitores'],['inspector-occurrences','inspetores-monitores'],
   ['overview','inicio'],['occurrences','inicio'],['attendance-analysis','radar'],
   ...['maintenance','student-files','student-import','attendance-files','attendance-import'].map(action=>[action,'manutencao-sistema']),
   ...['institutional','institutional-move','institutional-labels'].map(action=>[action,'institucionais']),
