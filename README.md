@@ -225,6 +225,7 @@ Marcos confirmou e corrigiu a distribuição por conexão em 15/11/2026. Esta se
 | PESSOAL | `GE_DEVO` | DEVO |
 | PESSOAL | `GE_Despachadas` | Despachadas |
 | GERAL | `GE_Classificadas` | Classificadas |
+| GERAL | `GE_Anuais` | Anuais (desde 24/11/2026) |
 | GERAL | `GE_Arquivadas` | Arquivadas |
 | Ambas, cada qual na própria conta | `INBOX` do Gmail | Caixa de Entrada |
 
@@ -232,7 +233,7 @@ O prefixo GE_ identifica os marcadores do FAROL no Gmail. A INBOX padrão não �
 
 Pessoal classifica a mensagem adicionando o ID da categoria GE_ escolhida e de GE_Despachadas, removendo apenas INBOX. A lista Despachadas consulta GE_Despachadas. Geral classifica com data confirmada em GE_Classificadas e arquiva em GE_Arquivadas, removendo somente INBOX e, no arquivamento, GE_Classificadas. Os outros marcadores e UNREAD são preservados. Visão GERAL mostra três caixas da Escola e cinco Pessoais com os nomes visuais solicitados e consulta os totais dos novos marcadores GE_. Nenhuma operação foi transferida de uma conexão à outra.
 
-Preparação: no callback OAuth, cada tipo verifica/cria somente seus nomes ausentes, na ordem da tabela. GERAL também mantém o botão Preparar marcadores com autorização existente. Status e contadores não criam. Se uma criação falhar, tenta os demais nomes fixos e retorna a falha sem simular sucesso completo; reconectar/preparar novamente tenta somente o que ainda falta. Conflitos ou respostas perdidas são reavaliados por nova listagem. Sucesso depende de confirmar todos os nomes reais no Gmail.
+Preparação: no callback OAuth, cada tipo verifica/cria somente seus nomes ausentes. GERAL também mantém o botão Preparar marcadores com autorização existente. Status e contadores não criam. Se uma criação falhar, tenta os demais nomes fixos e retorna a falha sem simular sucesso completo; reconectar/preparar novamente tenta somente o que ainda falta. Conflitos ou respostas perdidas são reavaliados por nova listagem. Sucesso depende de confirmar todos os nomes reais no Gmail.
 
 Marcadores sem GE_ e os nomes numéricos anteriores não são adotados como aliases nem renomeados ou excluídos. Não há migração automática de mensagens. Marcadores antigos, suas mensagens e dados de acompanhamento permanecem; mensagens precisam receber os novos marcadores para aparecer nas novas seleções. Não há alteração de SQL, variáveis ou escopos. Política revisão 14 e diálogo de conexão atualizados.
 
@@ -491,7 +492,7 @@ Antes de publicar, executar `database/system-log.sql` no Supabase exclusivo do F
 
 ## Conexões Google institucionais — 19/11/2026
 
-A conta é escolhida no Google para Geral ou Pessoal. O FAROL valida o e-mail e a identidade Google, com e-mail verificado, assinatura, audiência, nonce e indicação de conta gerenciada pelo Workspace para endereços `@escola.pr.gov.br`. A autorização institucional é armazenada por identidade e tipo, e a pessoa pode desconectar a própria conta. Ao conectar, o FAROL confirma a identidade e os serviços concedidos. A preparação dos marcadores das contas institucionais depende do acesso a Demandas PESSOAIS, conforme a seção a seguir. A permissão Configurações permite administrar o cadastro sem Geral. A Conexão temporária permanece um fluxo distinto.
+A conta é escolhida no Google para Geral ou Pessoal. O FAROL valida o e-mail e a identidade Google, com e-mail verificado, assinatura, audiência, nonce e indicação de conta gerenciada pelo Workspace para endereços `@escola.pr.gov.br`. A autorização institucional é armazenada por identidade e tipo, e a pessoa pode desconectar a própria conta. Ao conectar, o FAROL confirma a identidade e os serviços concedidos. A preparação dos marcadores da Pessoal institucional depende do acesso a Demandas PESSOAIS. A preparação de GE_Anuais ocorre na conexão Geral, conforme a seção Demandas Anuais. A permissão Configurações permite administrar o cadastro sem Geral. A Conexão temporária permanece um fluxo distinto.
 
 Sem novo SQL, escopo ou variável. Publicar código e política revisão 33 e validar as duas conexões na Vercel com uma conta institucional real. A autorização no domínio depende da política do Google Workspace da organização. [Validação de identidade Google](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)
 
@@ -510,3 +511,13 @@ Publicar com a política revisão 33. Sem novo SQL, variável ou escopo. Na Verc
 **REGISTRAR** abre por padrão com a busca de alunos e o formulário de ocorrência. **CONSULTAR** carrega as ocorrências da mesma conta Geral usada pela Visão GERAL, em páginas de 20, das mais recentes para as mais antigas. Cada registro mostra data e hora de Brasília, aluno, turma, texto e autoria. Em telas estreitas, a consulta apresenta cartões e o registro posiciona a turma abaixo do nome do aluno.
 
 `GET /api/google/inspector-occurrences` exige a permissão Inspetores/Monitores. A Visão GERAL continua usando sua rota e sua própria permissão. A nova rota reaproveita a consulta escolar e o cursor existentes. A lista é carregada ao abrir a aba e pode ser atualizada manualmente. Para publicar, enviar o código junto com a política de privacidade revisão 34. A entrega usa o banco, as variáveis e os escopos Google existentes.
+
+## Demandas Anuais (24/11/2026)
+
+Demandas INSTITUCIONAIS apresenta **Caixa de Entrada**, **Classificadas**, **Anuais** e **Arquivadas**, nessa ordem. Marcar **Demanda ANUAL** em uma mensagem da entrada abre um formulário de observações e procedimentos. Após a confirmação, o servidor grava o texto e aplica o marcador `GE_Anuais` à mensagem individual, retirando-a da Caixa de Entrada. Cancelar fecha o formulário sem movimentar a mensagem.
+
+As observações são obrigatórias, aceitam várias linhas e têm limite de 4.000 caracteres. Ficam vinculadas à mensagem em um campo criptografado da tabela de acompanhamento institucional já existente. O botão **Arquivar** retira `GE_Anuais` e aplica `GE_Arquivadas`, mantendo as observações disponíveis no cartão, os demais marcadores alheios ao fluxo e o estado de leitura. Anuais segue a ordem de recebimento da mais recente para a mais antiga e usa páginas de 20 mensagens.
+
+A conexão Geral verifica e cria `GE_Anuais` se estiver ausente. Em uma conexão Geral já autorizada para Demandas INSTITUCIONAIS, **Preparar marcadores** também cria o marcador, caso esteja ausente. A preparação usa o escopo Gmail já concedido; a tabela existente recebe as observações no campo criptografado, sem migração de SQL.
+
+Publicar com a Política de Privacidade revisão 35. Na Vercel, conferir a preparação de `GE_Anuais`, registrar uma demanda de teste e atualizar o quadro para conferir as observações. Arquivar a mesma demanda e conferir as observações e os marcadores no Gmail e no FAROL.

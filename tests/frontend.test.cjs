@@ -102,10 +102,11 @@ for(const [labels,expected] of [['ready','labels prontas (4/4)'],['missing','lab
 test('diálogo GERAL explica marcadores e alcance da escrita antes do consentimento',async()=>{
  const h=ui({configured:true,connections:{general:{email:'school@example.com',gmail:true,drive:true,manageInstitutional:true,labels:'ready'},personal:null}});await settle();
  h.connect[0].listeners.click();assert.equal(h.get('#email-general-labels').hidden,false);assert.equal(h.get('#email-connection-labels').hidden,true);
- assert.ok(h.get('#email-general-status').textContent.includes('Classificadas e Arquivadas prontas'));
+ assert.ok(h.get('#email-general-status').textContent.includes('Classificadas, Anuais e Arquivadas prontas'));
  assert.ok(h.get('#email-general-status').textContent.includes('Classificação: autorizada'));
  h.connect[1].listeners.click();assert.equal(h.get('#email-general-labels').hidden,true);assert.equal(h.get('#email-connection-labels').hidden,false);
- const html=fs.readFileSync('index.html','utf8');assert.ok(html.includes('A data limite, o e-mail da conta GERAL e a chave da mensagem'));
+ const html=fs.readFileSync('index.html','utf8');assert.ok(html.includes('verificamos GE_Anuais e criamos o marcador se estiver ausente'));
+ assert.ok(html.includes('guarda o prazo ou as observações e o e-mail da conta GERAL de forma criptografada'));
 });
 
 test('status GERAL mostra exatamente quais marcadores estão faltando',async()=>{

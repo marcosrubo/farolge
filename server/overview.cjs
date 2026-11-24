@@ -1,11 +1,11 @@
 'use strict';
-const {PERSONAL_LABELS,GENERAL_LABELS}=require('./mailbox-labels.cjs');
+const {PERSONAL_LABELS,GENERAL_LABELS,ANNUAL_LABEL}=require('./mailbox-labels.cjs');
 const BASE='https://gmail.googleapis.com/gmail/v1/users/me/labels';
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
 async function handleOverview({url,client,email,type}){
   if(!['general','personal'].includes(type))fail('invalid_type',400);
   if(url.searchParams.get('mailbox')!==email)fail('account_changed',409);
-  const names=type==='general'?['INBOX',...GENERAL_LABELS]:[...PERSONAL_LABELS.slice(0,3),'INBOX',PERSONAL_LABELS[3]];
+  const names=type==='general'?['INBOX',...GENERAL_LABELS.filter(name=>name!==ANNUAL_LABEL)]:[...PERSONAL_LABELS.slice(0,3),'INBOX',PERSONAL_LABELS[3]];
   const {data}=await client.request({url:BASE,timeout:10000});
   if(!Array.isArray(data?.labels))fail('invalid_provider',502);
   const ids=names.map(name=>name==='INBOX'?'INBOX':data.labels.find(label=>label.name===name)?.id);

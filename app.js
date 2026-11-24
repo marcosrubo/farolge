@@ -242,7 +242,7 @@ function setupEmailConnections(){
           if(connection.labels==='pending_policy')status.textContent+=' · '+(type==='general'?'Módulos aguardando definição de permissões'
             :result.institutionalUser?'Módulos conforme o cadastro':'E-mail sem cadastro de usuário');
           else{
-            const labelMessages={ready:type==='personal'?'labels prontas (4/4)':'Classificadas e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
+            const labelMessages={ready:type==='personal'?'labels prontas (4/4)':'Classificadas, Anuais e Arquivadas prontas',missing:'labels incompletas — revise a autorização',permission_required:'labels: autorize o gerenciamento de marcadores',unavailable:'labels: não foi possível verificar — revise a autorização'};
             status.textContent+=' · '+(type==='general'&&connection.labels==='missing'&&connection.labelDetails?.missing?.length?'Faltam marcadores: '+connection.labelDetails.missing.join(', '):(labelMessages[connection.labels]||labelMessages.permission_required));
             status.textContent+=' · Classificação: '+((type==='personal'?connection.classify:connection.manageInstitutional)?'autorizada':'revisar autorização');
           }

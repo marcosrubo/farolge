@@ -21,7 +21,7 @@ const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 const LABEL_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
-const {PERSONAL_LABELS,GENERAL_LABELS}=require('./mailbox-labels.cjs');
+const {PERSONAL_LABELS,GENERAL_LABELS,ANNUAL_LABEL}=require('./mailbox-labels.cjs');
 const LABEL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/labels';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
@@ -577,8 +577,9 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const labelsAllowed=capabilities.gmail && (scopes.includes(LABEL_SCOPE)||scopes.includes(MODIFY_SCOPE));
           const isAdminMailbox=email===FIXED_AUTHORIZED_EMAIL;
           const registered=type==='personal'&&!isAdminMailbox?await store.getRegisteredUser(email):null;
-          const prepareLabels=isAdminMailbox||Boolean(registered&&modulesFor(registered).includes('pessoais'));
-          const labels=prepareLabels?await mailboxLabels(client,labelsAllowed,true,type==='personal'?PERSONAL_LABELS:GENERAL_LABELS):null;
+          const expectedLabels=type==='general'?(isAdminMailbox?GENERAL_LABELS:[ANNUAL_LABEL])
+            :isAdminMailbox||Boolean(registered&&modulesFor(registered).includes('pessoais'))?PERSONAL_LABELS:null;
+          const labels=expectedLabels?await mailboxLabels(client,labelsAllowed,true,expectedLabels):null;
           await saveConnection(owner,type,{email,capabilities,labelsAllowed,credentials:credentialsOf(client)});
           const id=random(),expiresAt=Date.now()+TTL*1000;
           await store.put(accountKey(type,id),{version:3,type,user:{id:owner,email},hostedDomain:identity.hd,auth:{accessToken:session.access_token,refreshToken:session.refresh_token,expiresAt:Date.now()+session.expires_in*1000},expiresAt},expiresAt);
@@ -588,7 +589,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           setCookie(res,'__Host-farol-portal','',0);
           const ready=capabilities.gmail&&capabilities.drive
             &&(type==='personal'?capabilities.classify:(capabilities.manageInstitutional&&capabilities.driveMetadata&&capabilities.driveRead))
-            &&(!prepareLabels||labels==='ready');
+            &&(!expectedLabels||labels==='ready');
           return finish(flow.route,type,ready?'connected':'partial');
         } catch(error) {
           return finish(flow.route,type,['wrong_account','login_required','invalid_state','access_setup_required','access_unavailable'].includes(error.message)?error.message:'failed');

@@ -1,6 +1,6 @@
 -- Executar somente no Supabase exclusivo FAROL GE, após google-sessions.sql.
--- Uma data limite por mensagem da conexão GERAL e por identidade proprietária.
--- payload contém mailbox (e-mail GERAL verificado) e dueDate (data civil de Brasília),
+-- Data limite e observações anuais por mensagem da conexão GERAL e por identidade proprietária.
+-- payload contém mailbox (e-mail GERAL verificado) e dueDate (data civil de Brasília) e observations (texto informado),
 -- criptografados no backend com AES-GCM. Não contém assunto/corpo/trechos/anexos.
 create table if not exists public.farol_institutional_demands (
   owner_id uuid not null references auth.users(id) on delete cascade,

@@ -188,7 +188,7 @@ GET `/api/google/overview?type=general|personal&mailbox=...` exige sessão do pr
 
 ## Distribuição confirmada com GE_ — substitui nomes anteriores
 
-PESSOAL: GE_ME DEVEM, GE_MINHAS, GE_DEVO, GE_Despachadas. GERAL: GE_Classificadas e GE_Arquivadas, mais INBOX padrão existente. A interface omite GE_ e os números antigos. Consultas/contagens/ações usam somente os novos nomes exatos; não adotam nem migram marcadores anteriores. Os tokens, proprietários, tabelas de acompanhamento e escopos continuam separados por tipo.
+PESSOAL: GE_ME DEVEM, GE_MINHAS, GE_DEVO, GE_Despachadas. GERAL: GE_Classificadas, GE_Arquivadas e GE_Anuais, mais INBOX padrão existente. A interface omite GE_ e os números antigos. Consultas/contagens/ações usam somente os novos nomes exatos; não adotam nem migram marcadores anteriores. Os tokens, proprietários, tabelas de acompanhamento e escopos continuam separados por tipo.
 
 Após publicação, reautorizar cada conexão (ou Preparar marcadores na GERAL já autorizada) para criar apenas os ausentes. Cada falha de criação é conferida por listagem e não impede tentar os demais nomes fixos; prontidão exige confirmar todos. Status/indicadores não criam marcadores. Sem SQL, variável ou escopo novo. Política revisão 14. Validar no Gmail que os nomes foram criados **pela aplicação** publicada e que as operações usam seus IDs, sem criação manual como substituto da validação. Roteiro completo e limites no README.
 

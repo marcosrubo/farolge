@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 24/11/2026, Marcos pediu Demandas Anuais na Geral. Verificar GE_Anuais ao conectar e criar só se ausente; Preparar marcadores também inclui esse nome. A caixa Demanda ANUAL na entrada abre observações e procedimentos antes de confirmar. O texto é obrigatório, aceita múltiplas linhas e é salvo no mesmo registro criptografado por proprietário e mensagem. O quadro mostra Caixa de Entrada, Classificadas, Anuais e Arquivadas. Arquivar retira GE_Anuais e mantém as observações. Sem migração, escopo ou variável nova; política revisão 35.
+
 - Em 19/11/2026, Marcos autorizou as opções administrativas de Configurações para quem tem o módulo marcado e uma sessão Pessoal institucional ou temporária válida, inclusive sem Geral. A lista, edição, permissões, primeiro acesso e reset de senha são protegidos pela mesma verificação no servidor. As duas conexões de Marcos também concedem acesso. Sem novo SQL; política revisão 33.
 
 - Em 19/11/2026, Marcos definiu que a Pessoal institucional @escola.pr.gov.br associa o e-mail Google verificado ao cadastro e libera seus módulos, com rechecagem no servidor a cada requisição. Sem cadastro, apenas conexão/status e BI SEED público. Demandas e totais Pessoais usam a conta da própria pessoa; origem escolar/Geral segue a fonte já usada para a Conexão temporária. Autoria usa e-mail verificado e nome cadastrado. Administração exige as duas conexões de Marcos. Sem novo SQL, variável ou escopo; política revisão 32.

@@ -140,6 +140,15 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .institutional-classify label{display:grid;gap:6px;font-size:12px;flex:1;min-width:140px}
 .institutional-classify input{min-height:42px;max-width:100%;border:1px solid #cbd8c8;border-radius:7px;padding:8px;font:inherit}
 .institutional-classify .button{align-self:end}
+.institutional-columns{grid-template-columns:repeat(4,minmax(0,1fr))}
+.institutional-card .demand-card-bottom{flex-wrap:wrap}
+.institutional-annual-check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--green);cursor:pointer}
+.institutional-annual-check input{accent-color:var(--green);margin:0}
+.institutional-card p.institutional-observations{white-space:pre-wrap;overflow-wrap:anywhere;color:#253d34;font-size:13px}
+#institutional-annual-form{display:grid;gap:12px}
+#institutional-annual-notes{width:100%;min-height:8rem;resize:vertical;border:1px solid #cbd8c8;border-radius:7px;padding:10px;font:inherit;color:inherit}
+#institutional-annual-notes:focus-visible{outline:3px solid #b18b32;outline-offset:3px}
+@media(max-width:1220px){.institutional-columns{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.institutional-columns .demand-column{display:block;margin-bottom:16px}}
 
 /* Visão GERAL: contagens verificadas por conexão e por marcador. */

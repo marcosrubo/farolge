@@ -41,7 +41,7 @@ test('HTML vira texto inerte, ignora anexos e não usa snippets incompletos',asy
  assert.equal(htmlText({...payload,filename:'anexo.html'}),'');
 });
 function harness(){
- const calls=[],rows=new Map(),messages=new Map(),labels=[{id:'C',name:'GE_Classificadas'},{id:'A',name:'GE_Arquivadas'}];
+ const calls=[],rows=new Map(),messages=new Map(),labels=[{id:'C',name:'GE_Classificadas'},{id:'A',name:'GE_Arquivadas'},{id:'Y',name:'GE_Anuais'}];
  let failStore=false,failModify=false,missingLabel=false;
  const message=(id,date=received,labels=['INBOX','UNREAD','CUSTOM'])=>({id,threadId:'t'+id,internalDate:String(date),labelIds:[...labels],payload:{mimeType:'text/plain',headers:[{name:'Subject',value:'Relatório '+id},{name:'From',value:'Pessoa <pessoa@example.com>'}],body:{data:Buffer.from('Enviar relatório até 20/11/2026.').toString('base64url')}}});
  messages.set('m1',message('m1'));messages.set('m2',message('m2',received-10000));
@@ -112,7 +112,7 @@ test('falha no Supabase impede movimentação; falha Gmail preserva prazo e perm
 test('valida identidade, escopo, destino, marcadores e versões; recusa spam/lixeira/arquivadas',async()=>{
  const h=harness();await assert.rejects(h.run({query:{mailbox:'other@example.com'}}),{message:'account_changed'});
  await assert.rejects(h.run({query:{page:'a'.repeat(2049)}}),{message:'invalid_page'});
- await assert.rejects(h.run({query:{column:3}}),{message:'invalid_column'});assert.equal(h.calls.length,0);
+ await assert.rejects(h.run({query:{column:4}}),{message:'invalid_column'});assert.equal(h.calls.length,0);
  await assert.rejects(h.run({action:'institutional-move',body:h.body(),canModify:false}),{message:'institutional_scope'});
  for(const change of [{type:'personal'},{owner:'other'},{messageId:'../evil'},{operation:'delete'}])await assert.rejects(h.move(change),{message:'invalid_institutional'});
  h.rows.set('owner-a.m1',{messageId:'m1',version:2,mailbox:'school@example.com',dueDate:'2026-11-21'});
@@ -128,7 +128,9 @@ test('prazo da mesma chave em outra identidade não aparece na Geral atual',asyn
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function ui(){
  const nodes=new Map(),requests=[];
- const make=()=>({textContent:'',innerHTML:'',listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},querySelectorAll(){return [];}});
+ const make=()=>({textContent:'',innerHTML:'',value:'',open:false,listeners:{},
+   showModal(){this.open=true;},close(){this.open=false;},setCustomValidity(message){this.validationMessage=message;},
+   reportValidity(){return !this.validationMessage;},addEventListener(name,fn){this.listeners[name]=fn;},querySelectorAll(){return [];}});
  const get=selector=>{
   if(!nodes.has(selector)){
    const node=make(),children=new Map();
@@ -150,17 +152,17 @@ function ui(){
  return {app:window.FarolInstitutional,root,get,requests,respond,window};
 }
 const makeItem=(id,date=received,dueDate=null)=>({id,threadId:'t'+id,subject:'Relatório '+id,from:'Pessoa',date,dueDate,version:dueDate?1:0,activities:[{activity:id,dueDate:'2026-11-20',evidence:'<script>não executar</script>',review:null}]});
-test('três colunas ficam visíveis sem conexão e respostas antigas não voltam após desconectar',async()=>{
- const h=ui();h.app.mount(h.root);assert.equal(h.requests.length,0);for(const name of ['Caixa de entrada','Classificadas','Arquivadas'])assert.ok(h.root.innerHTML.includes(name));
- h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});assert.equal(h.requests.length,3);
- h.app.connectionChanged(null);for(let i=0;i<3;i++)h.respond(i,[makeItem('secret')]);await settle();
- for(let i=0;i<3;i++){assert.equal(h.get('#institutional-count-'+i).textContent,'—');assert.ok(!h.get('#institutional-list-'+i).innerHTML.includes('secret'));}
+test('quatro colunas ficam visíveis sem conexão e respostas antigas não voltam após desconectar',async()=>{
+ const h=ui();h.app.mount(h.root);assert.equal(h.requests.length,0);assert.deepEqual([...h.root.innerHTML.matchAll(/<h2>(.*?) <span/g)].map(m=>m[1]),['Caixa de Entrada','Classificadas','Anuais','Arquivadas']);
+ h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});assert.equal(h.requests.length,4);
+ h.app.connectionChanged(null);for(let i=0;i<4;i++)h.respond(i,[makeItem('secret')]);await settle();
+ for(let i=0;i<4;i++){assert.equal(h.get('#institutional-count-'+i).textContent,'—');assert.ok(!h.get('#institutional-list-'+i).innerHTML.includes('secret'));}
 });
 test('tela ordena cada coluna, escapa texto e não preenche prazo com sugestão',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
  h.respond(0,[makeItem('old',received-1000),makeItem('new',received)]);
  h.respond(1,[makeItem('later',received,'2026-11-21'),makeItem('earlier',received,'2026-11-20'),makeItem('unknown')]);
- h.respond(2,[makeItem('oldarch',received-1000),makeItem('newarch')]);await settle();
+ h.respond(2,[makeItem('oldarch',received-1000),makeItem('newarch')]);h.respond(3);await settle();
  const html=h.get('#institutional-list-0').innerHTML;assert.ok(html.indexOf('Relatório new')<html.indexOf('Relatório old'));assert.ok(!html.includes('<script>'));assert.ok(html.includes('&lt;script&gt;'));
  assert.equal(h.get('#institutional-list-0').querySelectorAll('[data-due]')[0].value,'');
  const classed=h.get('#institutional-list-1').innerHTML;assert.ok(classed.indexOf('Relatório earlier')<classed.indexOf('Relatório later'));assert.ok(classed.indexOf('Relatório later')<classed.indexOf('Relatório unknown'));
@@ -169,11 +171,11 @@ test('tela ordena cada coluna, escapa texto e não preenche prazo com sugestão'
 });
 test('classificação exige data explícita e só remove origem após confirmação do servidor',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
- h.respond(0,[makeItem('m1')]);h.respond(1);h.respond(2);await settle();
+ h.respond(0,[makeItem('m1')]);h.respond(1);h.respond(2);h.respond(3);await settle();
  const list=h.get('#institutional-list-0'),form=list.querySelectorAll('[data-classify-form]')[0];
- form.listeners.submit({preventDefault(){}});assert.equal(h.requests.length,3);
- const input=form.querySelector('[data-due]');input.value='2026-11-20';input.listeners.input();
  form.listeners.submit({preventDefault(){}});assert.equal(h.requests.length,4);
+ const input=form.querySelector('[data-due]');input.value='2026-11-20';input.listeners.input();
+ form.listeners.submit({preventDefault(){}});assert.equal(h.requests.length,5);
  assert.ok(list.innerHTML.includes('Relatório m1'));
  const req=h.requests.at(-1),body=JSON.parse(req.options.body);
  assert.deepEqual(body,{type:'general',mailbox:'school@example.com',messageId:'m1',operation:'classify',dueDate:'2026-11-20',version:0});
@@ -183,7 +185,7 @@ test('classificação exige data explícita e só remove origem após confirmaç
 });
 test('arquivar usa operação dedicada; erro não anuncia sucesso nem remove a linha',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
- h.respond(0,[makeItem('m1')]);h.respond(1);h.respond(2);await settle();
+ h.respond(0,[makeItem('m1')]);h.respond(1);h.respond(2);h.respond(3);await settle();
  h.get('#institutional-list-0').querySelectorAll('[data-archive]')[0].listeners.click();
  const req=h.requests.at(-1);assert.equal(JSON.parse(req.options.body).operation,'archive');
  req.resolve({ok:false,json:async()=>({error:'institutional_scope'})});await settle();
@@ -196,19 +198,19 @@ test('também identifica prazo informado somente no assunto',()=>{
 
 test('botão prepara marcadores usando a GERAL autorizada e atualiza o quadro',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true,labels:'missing'});h.app.mount(h.root);
- for(let i=0;i<3;i++)h.respond(i,[],{missingLabels:true});await settle();
+ for(let i=0;i<4;i++)h.respond(i,[],{missingLabels:true});await settle();
  assert.equal(h.get('#institutional-prepare').hidden,false);
  h.get('#institutional-prepare').listeners.click();
  const req=h.requests.at(-1);assert.equal(req.url,'/api/google/institutional-labels');
  assert.deepEqual(JSON.parse(req.options.body),{type:'general',mailbox:'school@example.com'});
  req.resolve({ok:true,json:async()=>({mailbox:'school@example.com',labels:'ready',labelDetails:{status:'ready',missing:[],reason:null}})});await settle();
- for(let i=0;i<3;i++)h.respond(i);await settle();
+ for(let i=0;i<4;i++)h.respond(i);await settle();
  assert.equal(h.get('#institutional-prepare').hidden,true);assert.ok(h.get('#institutional-feedback').textContent.includes('prontas'));
  assert.equal(h.window.events[0],'farol-connections-refresh');
 });
 test('falha de preparação mantém bloqueio e exibe nomes não confirmados',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true,labels:'missing'});h.app.mount(h.root);
- for(let i=0;i<3;i++)h.respond(i,[],{missingLabels:true});await settle();h.get('#institutional-prepare').listeners.click();
+ for(let i=0;i<4;i++)h.respond(i,[],{missingLabels:true});await settle();h.get('#institutional-prepare').listeners.click();
  h.requests.at(-1).resolve({ok:true,json:async()=>({mailbox:'school@example.com',labels:'unavailable',labelDetails:{reason:'permission_denied',missing:['Arquivadas']}})});await settle();
  assert.equal(h.get('#institutional-prepare').hidden,false);assert.ok(h.get('#institutional-feedback').textContent.includes('Arquivadas'));
  assert.ok(!h.get('#institutional-feedback').textContent.includes('prontas'));assert.equal(h.window.events.length,0);
@@ -216,7 +218,7 @@ test('falha de preparação mantém bloqueio e exibe nomes não confirmados',asy
 
 test('arquivar a segunda mensagem mantém as restantes se a recarga da entrada falhar',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
- h.respond(0,[makeItem('m1'),makeItem('m2'),makeItem('m3')]);h.respond(1);h.respond(2);await settle();
+ h.respond(0,[makeItem('m1'),makeItem('m2'),makeItem('m3')]);h.respond(1);h.respond(2);h.respond(3);await settle();
  async function archive(id){
   h.get('#institutional-list-0').querySelectorAll('[data-archive]').find(b=>b.dataset.archive===id).listeners.click();
   const req=h.requests.at(-1);assert.equal(JSON.parse(req.options.body).messageId,id);
@@ -236,11 +238,67 @@ test('arquivar a segunda mensagem mantém as restantes se a recarga da entrada f
  assert.ok(h.get('#institutional-status-0').textContent.includes('lista anterior foi mantida'));
  assert.ok(h.get('#institutional-feedback').textContent.includes('movimentação foi confirmada'));
  // Updating again replaces the cached list instead of merging stale rows.
- h.get('#institutional-refresh').listeners.click();h.respond(0,[makeItem('m4')]);h.respond(1);h.respond(2,[makeItem('m1'),makeItem('m2')]);await settle();
+ h.get('#institutional-refresh').listeners.click();h.respond(0,[makeItem('m4')]);h.respond(1);h.respond(2,[makeItem('m1'),makeItem('m2')]);h.respond(3);await settle();
  assert.ok(!h.get('#institutional-list-0').innerHTML.includes('Relatório m3'));assert.ok(h.get('#institutional-list-0').innerHTML.includes('Relatório m4'));
 });
 test('erro na primeira leitura mostra indisponibilidade, sem indicar caixa vazia',async()=>{
  const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
- const req=h.requests.find(r=>new URL('https://farol.invalid'+r.url).searchParams.get('column')==='0');req.done=true;req.resolve({ok:false,json:async()=>({error:'unavailable'})});h.respond(1);h.respond(2);await settle();
+ const req=h.requests.find(r=>new URL('https://farol.invalid'+r.url).searchParams.get('column')==='0');req.done=true;req.resolve({ok:false,json:async()=>({error:'unavailable'})});h.respond(1);h.respond(2);h.respond(3);await settle();
  assert.equal(h.get('#institutional-count-0').textContent,'—');assert.ok(!h.get('#institutional-list-0').innerHTML.includes('Nenhum e-mail'));
+});
+
+test('Anuais salva observações antes de mover, permite recuperar falha e mantém as notas ao arquivar',async()=>{
+ const h=harness(),observations='1. Conferir o calendário\n2. Enviar o formulário';
+ const annual={operation:'annual',observations};
+ for(const value of ['', '   ', 3, 'x'.repeat(4001)])
+  await assert.rejects(h.move({...annual,observations:value}),{message:'invalid_institutional'});
+ const blocked=harness();blocked.failStore();
+ await assert.rejects(blocked.move(annual),{message:'setup_required'});
+ assert.ok(!blocked.calls.some(call=>call.method==='POST'));
+ h.failModify(true);
+ await assert.rejects(h.move(annual));
+ assert.equal(h.rows.get('owner-a.m1').observations,observations);
+ assert.ok(h.messages.get('m1').labelIds.includes('INBOX'));
+ h.failModify(false);
+ const moved=await h.move(annual);
+ assert.equal(moved.demand.observations,observations);
+ assert.equal(moved.demand.version,1);
+ assert.deepEqual(h.messages.get('m1').labelIds,['UNREAD','CUSTOM','Y']);
+ const configured=h.message('legacy',received+1000,['Y']);
+ h.messages.set(configured.id,configured);
+ const listed=await h.run({query:{column:3}});
+ assert.deepEqual(listed.items.map(m=>[m.id,m.observations]),[['legacy',null],['m1',observations]]);
+ assert.equal((await h.run({owner:'owner-b',query:{column:3}})).items[1].observations,null);
+ await assert.rejects(h.move(),{message:'not_inbox'});
+ await h.move({operation:'archive'});
+ assert.deepEqual(h.messages.get('m1').labelIds,['UNREAD','CUSTOM','A']);
+ assert.equal((await h.run({query:{column:2}})).items[0].observations,observations);
+ assert.deepEqual((await h.run({query:{column:3}})).items.map(m=>m.id),['legacy']);
+});
+
+test('a caixa de seleção abre as observações e só envia após confirmação',async()=>{
+ const h=ui();
+ h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});
+ h.app.mount(h.root);
+ h.respond(0,[makeItem('m1')]);h.respond(1);h.respond(2);h.respond(3);await settle();
+ const checkbox=h.get('#institutional-list-0').querySelectorAll('[data-annual]')[0];
+ const dialog=h.get('#institutional-annual-dialog'),notes=h.get('#institutional-annual-notes');
+ checkbox.checked=true;checkbox.listeners.change();
+ assert.equal(dialog.open,true);assert.equal(h.requests.length,4);
+ h.get('#institutional-annual-cancel').listeners.click();
+ assert.equal(dialog.open,false);assert.equal(h.requests.length,4);
+ checkbox.checked=true;checkbox.listeners.change();
+ const submit=()=>h.get('#institutional-annual-form').listeners.submit({preventDefault(){}});
+ notes.value='   ';submit();assert.equal(h.requests.length,4);
+ const observations='1. Conferir <prazo>\n2. Enviar';
+ notes.value=observations;notes.listeners.input();submit();
+ const post=h.requests.at(-1);
+ assert.deepEqual(JSON.parse(post.options.body),{type:'general',mailbox:'school@example.com',messageId:'m1',operation:'annual',observations,version:0});
+ post.resolve({ok:true,json:async()=>({mailbox:'school@example.com',messageId:'m1',operation:'annual',demand:{observations,version:1}})});
+ await settle();
+ const annual=h.get('#institutional-list-3').innerHTML;
+ assert.ok(annual.includes('Conferir &lt;prazo&gt;'));
+ assert.ok(annual.includes('data-archive="m1"'));
+ assert.ok(!h.get('#institutional-list-0').innerHTML.includes('Relatório m1'));
+ h.respond(0);await settle();h.respond(3,[{...makeItem('m1'),observations}]);await settle();
 });
