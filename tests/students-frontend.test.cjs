@@ -13,7 +13,7 @@ function ui(file,name){
  const context=vm.createContext({window,crypto,Intl,Date,URLSearchParams,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
  if(file==='students.js')vm.runInContext(fs.readFileSync('occurrences.js','utf8'),context);
  vm.runInContext(fs.readFileSync(file,'utf8'),context);
- return {app:window[name],root,get,requests,respond:(i,data,ok=true)=>requests[i].resolve({ok,json:async()=>data})};
+ return {app:window[name],window,root,get,requests,respond:(i,data,ok=true)=>requests[i].resolve({ok,json:async()=>data})};
 }
 const general={email:'school@example.com',driveMetadata:true,driveRead:true};
 const student={id:'a'.repeat(64),Nome:'ALUNA <TESTE>',Escola:'ESCOLA FICTICIA',CGM:'0000123',Serie:'8º Ano',Turma:'A',Turno:'Manhã'};
@@ -90,6 +90,7 @@ test('as abas preservam a busca e Consultar carrega a lista paginada com cartõe
  assert.match(cards.innerHTML,/8º A/);
  assert.match(cards.innerHTML,/Linha 1\nLinha &lt;2&gt;/);
  assert.match(cards.innerHTML,/Registrado por: Monitor Fictício/);
+ assert.doesNotMatch(cards.innerHTML,/Excluir/);
  h.get('#inspector-occurrences-more').listeners.click();
  assert.match(h.requests[2].url,/pageToken=next/);
  h.respond(2,{mailbox:general.email,items:[item,{...item,id:'a',time:'10:00:00',authorName:null}],nextPageToken:null});await settle();
@@ -106,4 +107,43 @@ test('as abas preservam a busca e Consultar carrega a lista paginada com cartõe
  h.app.personalConnectionChanged(null);
  h.respond(4,{mailbox:general.email,items:[item]});await settle();
  assert.equal(cards.innerHTML,'');
+});
+
+test('Consultar confirma a exclusão e remove somente a ocorrência confirmada pelo servidor',async()=>{
+ const h=ui('students.js','FarolStudents');
+ let confirm=false,question='';
+ h.window.confirm=message=>{question=message;return confirm;};
+ h.app.personalConnectionChanged({email:'marcos.rubo@gmail.com',name:'Marcos Rubo'});
+ h.app.connectionChanged(general);h.app.mount(h.root);
+ h.respond(0,{mailbox:general.email,students:[student]});await settle();
+ h.get('#inspector-tab-consult').listeners.click();
+ const item={id:'12345678-1234-4234-8234-123456789abc',date:'2026-11-24',time:'11:00:00',student:'Aluna fictícia',className:'8º A',text:'Ocorrência de teste',authorName:'Monitor fictício'};
+ const other={...item,id:'22345678-1234-4234-8234-123456789abc',text:'Outra ocorrência'};
+ h.respond(1,{mailbox:general.email,items:[item,other],canDelete:true});await settle();
+ const cards=h.get('#inspector-occurrences-cards'),rows=h.get('#inspector-occurrences-rows');
+ assert.equal((cards.innerHTML.match(/>Excluir</g)||[]).length,2);
+ assert.equal((rows.innerHTML.match(/>Excluir</g)||[]).length,2);
+ const event=click({deleteOccurrence:item.id});
+ cards.listeners.click(event);
+ assert.match(question,/definitivamente.*Aluna fictícia.*24\/11\/2026/);
+ assert.equal(h.requests.length,2);
+ confirm=true;
+ cards.listeners.click(event);rows.listeners.click(event);
+ assert.equal(h.requests.length,3);
+ assert.equal(h.requests[2].opts.method,'POST');
+ assert.equal(h.requests[2].opts.headers['X-Farol-Request'],'1');
+ assert.equal(h.requests[2].url,'/api/google/occurrence-delete');
+ assert.deepEqual(JSON.parse(h.requests[2].opts.body),{type:'general',mailbox:general.email,id:item.id});
+ h.respond(2,{error:'storage_unavailable'},false);await settle();
+ assert.match(cards.innerHTML,/Ocorrência de teste/);
+ assert.match(h.get('#inspector-occurrences-status').textContent,/Atualize a lista/);
+ rows.listeners.click(event);
+ h.respond(3,{mailbox:general.email,id:item.id,deleted:true});await settle();
+ assert.doesNotMatch(cards.innerHTML,/Ocorrência de teste/);
+ assert.match(cards.innerHTML,/Outra ocorrência/);
+ assert.equal(h.get('#inspector-occurrences-status').textContent,'Ocorrência excluída.');
+ cards.listeners.click(click({deleteOccurrence:other.id}));
+ h.respond(4,{error:'admin_required'},false);await settle();
+ assert.doesNotMatch(cards.innerHTML,/>Excluir</);
+ assert.match(cards.innerHTML,/Outra ocorrência/);
 });

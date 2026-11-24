@@ -512,6 +512,12 @@ Publicar com a política revisão 33. Sem novo SQL, variável ou escopo. Na Verc
 
 `GET /api/google/inspector-occurrences` exige a permissão Inspetores/Monitores. A Visão GERAL continua usando sua rota e sua própria permissão. A nova rota reaproveita a consulta escolar e o cursor existentes. A lista é carregada ao abrir a aba e pode ser atualizada manualmente. Para publicar, enviar o código junto com a política de privacidade revisão 34. A entrega usa o banco, as variáveis e os escopos Google existentes.
 
+### Exclusão de ocorrências (24/11/2026)
+
+Em **Inspetores/Monitores → CONSULTAR**, **Excluir** aparece em cada linha ou cartão quando as conexões Geral e Pessoal verificadas são de `marcos.rubo@gmail.com`. Após a confirmação, o servidor verifica novamente as sessões e remove somente a ocorrência selecionada da conta Geral. A lista é atualizada após a resposta do servidor. A Visão GERAL reflete a remoção na próxima consulta.
+
+A exclusão usa os filtros de proprietário e ID no Supabase e a autorização de escrita do servidor já configurada. Publicar com a Política de Privacidade revisão 38. Sem migração SQL ou mudança de escopos. [Filtros do Supabase](https://supabase.com/docs/reference/javascript/using-filters)
+
 ## Demandas Anuais (24/11/2026)
 
 Demandas INSTITUCIONAIS apresenta **Caixa de Entrada**, **Classificadas**, **Anuais** e **Arquivadas**, nessa ordem. Marcar **Demanda ANUAL** em uma mensagem da entrada abre um formulário de observações e procedimentos. Após a confirmação, o servidor grava o texto e aplica o marcador `GE_Anuais` à mensagem individual, retirando-a da Caixa de Entrada. Cancelar fecha o formulário sem movimentar a mensagem.

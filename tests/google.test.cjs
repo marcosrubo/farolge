@@ -789,12 +789,51 @@ test('consulta de Inspetores respeita a permissão do módulo e reutiliza o curs
  assert.deepEqual(reads,[]);
  const response=await h.request(action,{cookie,query});
  assert.equal(response.status,200);
- assert.deepEqual(response.json(),{mailbox:GENERAL_EMAIL,items:[],nextPageToken:null});
+ assert.deepEqual(response.json(),{mailbox:GENERAL_EMAIL,items:[],nextPageToken:null,canDelete:false});
  profile.permissions=['inicio'];
  assert.equal((await h.request(action,{cookie,query})).json().error,'module_forbidden');
  assert.equal((await h.request('occurrences',{cookie,query})).status,200);
- assert.equal((await h.request(action,{cookie:admin.cookie,query})).status,200);
+ assert.equal((await h.request(action,{cookie:admin.cookie,query})).json().canDelete,true);
  assert.deepEqual(reads,Array.from({length:3},()=>({id:owner,cursor:'next'})));
+});
+
+test('exclusão de ocorrência exige as duas sessões Google verificadas de Marcos e usa o proprietário da Geral',async()=>{
+ const {writeTemporarySession}=require('../server/temporary-access.cjs');
+ const h=harness(),admin=await h.admin();
+ const body={type:'general',mailbox:GENERAL_EMAIL,id:temporaryId};
+ const owner=h.userFor(GENERAL_EMAIL).id;
+ const otherEmail='inspetor@escola.pr.gov.br';
+ const profile={id:temporaryId,Nome:'Inspetor fictício',email:otherEmail,password_hash:'hash simulado',permissions:['inspetores-monitores']};
+ h.store.getRegisteredUser=async email=>email===otherEmail?profile:null;
+ h.store.getTemporaryOwner=async()=>owner;
+ h.store.getTemporaryUser=async()=>profile;
+ h.store.getOccurrences=async()=>({items:[],nextPageToken:null});
+ const temporary=await writeTemporarySession(h.store,profile);
+ const temporaryCookie='__Host-farol-temporary='+temporary;
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ const institutional=await h.login(otherEmail,'','personal');
+ const calls=[];
+ h.store.deleteOccurrence=async(...args)=>{calls.push(args);return calls.length===1;};
+ const request=(cookie,overrides={})=>h.request('occurrence-delete',{method:'POST',cookie,body,...overrides});
+ for(const cookie of ['',admin.general.cookie,admin.personal.cookie,
+  institutional.cookie,admin.general.cookie+'; '+institutional.cookie,admin.cookie+'; '+temporaryCookie]){
+  assert.equal((await request(cookie)).json().error,'admin_required');
+ }
+ const query='?mailbox='+GENERAL_EMAIL;
+ assert.equal((await h.request('inspector-occurrences',{cookie:institutional.cookie,query})).json().canDelete,false);
+ assert.equal((await h.request('occurrences',{cookie:admin.cookie,query})).json().canDelete,undefined);
+ assert.equal((await request(admin.cookie,{origin:'https://other.example'})).status,403);
+ assert.equal((await request(admin.cookie,{method:'GET'})).status,405);
+ assert.equal((await request(admin.cookie,{body:{...body,mailbox:otherEmail}})).status,409);
+ assert.equal((await request(admin.cookie,{body:{...body,id:['*']}})).status,400);
+ assert.equal((await request(admin.cookie,{body:{...body,owner_id:'other'}})).status,400);
+ assert.deepEqual(calls,[]);
+ assert.deepEqual((await request(admin.cookie)).json(),{mailbox:GENERAL_EMAIL,id:temporaryId,deleted:true});
+ assert.deepEqual((await request(admin.cookie)).json(),{mailbox:GENERAL_EMAIL,id:temporaryId,deleted:false});
+ assert.deepEqual(calls,[[owner,temporaryId],[owner,temporaryId]]);
+ await h.request('disconnect',{method:'POST',cookie:admin.cookie,body:{type:'personal'}});
+ assert.equal((await request(admin.cookie)).json().error,'admin_required');
+ assert.equal(calls.length,2);
 });
 
 test('listagem pública segue a ordem e expõe somente ID e nome',async()=>{

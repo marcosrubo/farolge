@@ -149,3 +149,23 @@ test('endpoint de ocorrências valida caixa antes de consultar e não depende do
  const result=await handleStudents({action:'occurrences',url:new URL('https://farol.invalid/?mailbox='+email+'&pageToken=next'),store,owner,email});assert.deepEqual(result,{mailbox:email,items:[],nextPageToken:null});
  await assert.rejects(handleStudents({action:'occurrences',url:new URL('https://farol.invalid/?mailbox=other'),store,owner,email}),{message:'account_changed'});assert.equal(calls,1);
 });
+
+test('exclusão usa somente a tabela de ocorrências e exige proprietário e ID na mesma linha',async()=>{
+ const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,6)};
+ let rows=[{owner,id},{owner:'other-owner',id},{owner,id:'22345678-1234-4234-8234-123456789abc'}];
+ const store=makeStudentStore(cfg,async(url,opts)=>{
+  const {pathname,searchParams}=new URL(url);
+  assert.equal(pathname,'/rest/v1/Ocorrencias');
+  assert.equal(opts.method,'DELETE');
+  assert.equal(opts.headers.Prefer,'return=representation');
+  assert.equal(searchParams.get('select'),'id');
+  const matches=row=>searchParams.get('owner_id')==='eq.'+row.owner&&searchParams.get('id')==='eq.'+row.id;
+  const deleted=rows.filter(matches).map(row=>({id:row.id}));
+  rows=rows.filter(row=>!matches(row));
+  return {ok:true,status:200,json:async()=>deleted};
+ },{seal,unseal});
+ assert.equal(await store.deleteOccurrence(owner,id),true);
+ assert.equal(await store.deleteOccurrence(owner,id),false);
+ assert.equal(rows.length,2);
+ assert.ok(rows.some(row=>row.owner==='other-owner'&&row.id===id));
+});

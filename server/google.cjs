@@ -274,7 +274,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     const temporaryPublic=['temporary-users','temporary-user','temporary-login','temporary-activate','temporary-password','temporary-logout'];
     if(!['status','access-denied','start','callback','disconnect','logout',...temporaryPublic].includes(action)
       &&!actionModules.has(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
+    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','occurrence-delete','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{
       configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured',
@@ -440,6 +440,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         try {
           const module=actionModules.get(action);
           const {admin,general,personal,profiles}=await moduleIdentity(temporary);
+          if(action==='occurrence-delete'&&!admin)return reply(403,{error:'admin_required'});
           const profile=profileForModule(profiles,module);
           if(!admin&&!profile){
             const error=temporary||profiles.general||(personal&&personal.user.email!==FIXED_AUTHORIZED_EMAIL)||schoolActions.has(action)||action==='overview'?'module_forbidden':'admin_required';
@@ -467,11 +468,19 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const owner=direct?.user.id??await store.getTemporaryOwner();
           const email=direct?.user.email??FIXED_AUTHORIZED_EMAIL;
           if(!owner)return reply(409,{error:'school_unavailable'});
+          if(action==='occurrence-delete'){
+            const {id}=body;
+            if(body.mailbox!==email)return reply(409,{error:'account_changed'});
+            if(body.type!=='general'||typeof id!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)
+              ||Object.keys(body).some(key=>!['type','mailbox','id'].includes(key)))return reply(400,{error:'invalid_occurrence'});
+            return reply(200,{mailbox:email,id,deleted:await store.deleteOccurrence(owner,id)});
+          }
           if(action==='attendance-analysis')return reply(200,await handleAttendanceAnalysis({url,store,owner,email}));
           if(schoolActions.has(action)){
             const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:admin?{name:'Marcos Rubo',email}:{name:profile.Nome,email:profile.email};
             const studentAction=action==='inspector-occurrences'?'occurrences':action;
-            return reply(200,await handleStudents({action:studentAction,url,body,store,owner,email,actor}));
+            const result=await handleStudents({action:studentAction,url,body,store,owner,email,actor});
+            return reply(200,action==='inspector-occurrences'?{...result,canDelete:Boolean(admin)}:result);
           }
           const connection=direct?.connection??await store.getConnection(owner,type);
           const capability=driveReadActions.has(action)?'driveRead':driveMetadataActions.has(action)?'driveMetadata':'gmail';

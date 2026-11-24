@@ -57,6 +57,11 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
       const nextPageToken=rows.length>20?Buffer.from(JSON.stringify({date:last.Data,time:last.Hora,id:last.id})).toString('base64url'):null;
       return {items,nextPageToken};
     },
+    async deleteOccurrence(owner,id){
+      const rows=await call('Ocorrencias','DELETE',`${ownerQuery(owner)}&id=eq.${encodeURIComponent(id)}&select=id`);
+      if(!Array.isArray(rows)||rows.length>1||(rows.length===1&&rows[0]?.id!==id.toLowerCase()))throw storageError('storage_unavailable');
+      return rows.length===1;
+    },
     async saveOccurrence(owner,id,value){
       const protectedFields=['Escola','CGM','Nome','Ocorrencia','EmailAutor','NomeAutor'];
       const encode=()=>Object.fromEntries(protectedFields.map(field=>[field,value[field]===null?null:seal(value[field],config.key,`occurrence.${owner}.${id}.${field}`)]));

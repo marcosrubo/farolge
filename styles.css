@@ -239,3 +239,7 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
   .inspector-occurrence-date,.inspector-occurrence-class,.inspector-occurrence-author{font-size:13px;color:#51664d}
   .inspector-occurrence-cards .occurrence-text{margin:10px 0;min-width:0;white-space:pre-wrap;font-size:15px;line-height:1.5}
 }
+
+#inspector-panel-consult .inspector-occurrence-delete{min-height:44px;color:#9a2828;border-color:#e5c2c2;background:#fff}
+#inspector-panel-consult .inspector-occurrence-delete:hover:not(:disabled){background:#fff2f2}
+.inspector-occurrence-cards .inspector-occurrence-delete{margin-top:10px}
