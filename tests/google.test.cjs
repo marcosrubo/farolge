@@ -8,7 +8,7 @@ const GENERAL_EMAIL='marcos.rubo@gmail.com';
 const digest=s=>crypto.createHash('sha256').update(s).digest('hex');
 const sessionCookie=(response,type='personal')=>(response.headers['set-cookie']||[]).find(c=>c.startsWith('__Host-farol-account-'+type+'=') && !c.includes('Max-Age=0'))?.split(';')[0];
 function harness(overrides={}){
- const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[];
+ const rows=new Map(),connections=new Map(),users=new Map(),labels=new Map(),labelRequests=[],inboxTotals=new Map();
  let labelFailure=null,labelRace=false;
  const labelError=status=>Object.assign(new Error('label_error'),{response:{status}});
  const store={async getRegisteredUser(){return null;},async cleanup(){},async get(id){return structuredClone(rows.get(id)||null);},async take(id){const value=await this.get(id);rows.delete(id);return value;},async put(id,value){rows.set(id,structuredClone(value));},async remove(id){rows.delete(id);},async getConnection(id,type){return structuredClone(connections.get(id+'.'+type)||null);},async putConnection(id,type,value){connections.set(id+'.'+type,structuredClone(value));},async getInstitutionalDemands(){return [];},async removeConnection(id,type){connections.delete(id+'.'+type);}};
@@ -31,7 +31,7 @@ function harness(overrides={}){
    }
    return {data:{labels:[...names].map(name=>({id:'id-'+digest(name).slice(0,12),name}))}};
  }
- if(url.includes('/gmail/v1/users/me/labels/'))return {data:{id:decodeURIComponent(url.split('/').at(-1)),messagesTotal:3}};
+ if(url.includes('/gmail/v1/users/me/labels/'))return {data:{id:decodeURIComponent(url.split('/').at(-1)),messagesTotal:url.endsWith('/INBOX')?(inboxTotals.get(value)??3):3}};
  if(url.includes('/drive/v3/files?'))return {data:{files:new URL(url).searchParams.get('q').includes("name = 'FarolGE'")?[{id:'folder-1',name:'FarolGE'}]:new URL(url).searchParams.get('q').includes("name = 'FaltasSemanais'")?[{id:'folder-weekly',name:'FaltasSemanais'}]:[{id:'file-1',name:'Ata da escola'}]}};
  return {data:url.includes('drive/v3')?{user:{emailAddress:value}}:{emailAddress:value}};}});
  const handler=makeHandler({env:{...env,...overrides},storeFactory:()=>store,authFactory:()=>auth,clientFactory});
@@ -52,7 +52,7 @@ function harness(overrides={}){
   const personal=await login(GENERAL_EMAIL,general.cookie,'personal');
   return {cookie:general.cookie+'; '+personal.cookie,general,personal};
  }
- return {store,admin,labels,labelRequests,failLabels:(status,method,name)=>labelFailure=status?{status,method,name}:null,raceLabels:()=>labelRace=true,rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503,reason=null)=>{failedEmail=value;failedStatus=status;failedReason=reason;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
+ return {store,admin,labels,labelRequests,inboxTotals,failLabels:(status,method,name)=>labelFailure=status?{status,method,name}:null,raceLabels:()=>labelRace=true,rows,connections,users,auth,request,start,callback,login,setEmail:value=>email=value,setIdentity:value=>identityOverride=value,setScopes:value=>scopes=value,expireAuth:()=>authUnavailable=true,revokeAuth:value=>revokedAuthEmail=value,failAccount:(value,status=503,reason=null)=>{failedEmail=value;failedStatus=status;failedReason=reason;},denyGmail:()=>gmailDenied=true,calls:()=>calls,userFor};
 }
 test('conexões não dependem de variável de endereço Google',()=>{
  assert.ok(configuration(env));
@@ -733,7 +733,7 @@ test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API
   assert.equal((await h.request('occurrences',{cookie,query})).status,overview?200:403);
   const totals=await h.request('overview',{cookie,query:query+'&type=general'});
   assert.equal(totals.status,overview?200:403);
-  if(overview)assert.deepEqual(totals.json().items.map(item=>item.total),[3,3,3]);
+  if(overview)assert.deepEqual(totals.json().items.map(item=>item.total),[3,3,3,3]);
   const analysis=query+'&start=2026-11-01&end=2026-11-17';
   assert.equal((await h.request('attendance-analysis',{cookie,query:analysis})).status,radar?200:403);
   assert.equal((await h.request('students',{cookie,query})).status,200);
@@ -965,4 +965,34 @@ test('concede módulos pela Geral ou Pessoal, dá prioridade à Geral e isola a 
  assert.equal((await h.request('institutional',{cookie,query:query(GENERAL_EMAIL)})).json().error,'module_forbidden');
  assert.deepEqual((await h.request('status',{cookie})).json().modules,[]);
  assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
+});
+
+test('Visão GERAL usa cada conta ativa para seu total, preservando a fonte escolar das ocorrências',async()=>{
+ const h=harness(),admin=await h.admin(),schoolEmail='geral@escola.pr.gov.br';
+ const profile={id:temporaryId,Nome:'Geral do colégio',email:schoolEmail,permissions:['inicio','institucionais']};
+ const schoolOwner=h.userFor(GENERAL_EMAIL).id;
+ h.store.getRegisteredUser=async email=>email===schoolEmail?profile:null;
+ h.store.getTemporaryOwner=async()=>schoolOwner;
+ h.store.getOccurrences=async owner=>{
+  assert.equal(owner,schoolOwner);
+  return {items:[],nextPageToken:null};
+ };
+ h.inboxTotals.set(schoolEmail,17);
+ h.inboxTotals.set(GENERAL_EMAIL,32683);
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ const general=await h.login(schoolEmail,'','general');
+ const cookie=general.cookie+'; '+admin.personal.cookie;
+ const totals=(type,email)=>h.request('overview',{cookie,query:'?'+new URLSearchParams({type,mailbox:email})});
+ const generalTotals=await totals('general',schoolEmail);
+ assert.equal(generalTotals.status,200);
+ assert.deepEqual(generalTotals.json().items.map(item=>item.name),['INBOX','GE_Classificadas','GE_Anuais','GE_Arquivadas']);
+ assert.equal(generalTotals.json().items[0].total,17);
+ assert.equal(h.labelRequests.at(-1).email,schoolEmail);
+ assert.equal((await totals('personal',GENERAL_EMAIL)).json().items[3].total,32683);
+ assert.equal(h.labelRequests.at(-1).email,GENERAL_EMAIL);
+ assert.equal((await totals('general',GENERAL_EMAIL)).status,409);
+ assert.equal((await totals('personal',schoolEmail)).status,409);
+ assert.equal((await h.request('occurrences',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
+ profile.permissions=['institucionais'];
+ assert.equal((await totals('general',schoolEmail)).status,403);
 });

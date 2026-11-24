@@ -461,8 +461,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           }
           const type=action==='overview'?url.searchParams.get('type'):actionMailbox(action);
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
-          const direct=admin?.[type]||(type==='personal'?personal
-            :module==='institucionais'&&allowsModule(profiles.general,module)?general:null);
+          const useConnectedGeneral=action==='overview'||(module==='institucionais'&&allowsModule(profiles.general,module));
+          const direct=admin?.[type]||(type==='personal'?personal:useConnectedGeneral?general:null);
           if(type==='personal'&&!temporary&&!direct)return reply(403,{error:'login_required',type});
           const owner=direct?.user.id??await store.getTemporaryOwner();
           const email=direct?.user.email??FIXED_AUTHORIZED_EMAIL;

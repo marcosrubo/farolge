@@ -527,6 +527,13 @@ Publicar com a Política de Privacidade revisão 35. Na Vercel, conferir a prepa
 
 Para cada módulo, o FAROL consulta primeiro a permissão do cadastro vinculado ao e-mail Google verificado da Geral e depois a da Pessoal. Uma permissão marcada em qualquer dos dois cadastros libera o módulo. Se nenhuma liberar, o menu exibe **Módulo indisponível**. A autorização é conferida no servidor a cada requisição protegida. As duas contas de Marcos continuam concedendo o acesso administrativo previsto anteriormente. A Conexão temporária continua usando seu cadastro, e o BI SEED mantém o acesso público.
 
-Se o cadastro da Geral libera Demandas INSTITUCIONAIS, o quadro consulta e movimenta mensagens na caixa dessa Geral, e prazos e observações ficam associados à mesma identidade. O botão **Preparar marcadores** cria somente os ausentes nessa caixa. Quando a permissão para Demandas INSTITUCIONAIS vem apenas da Pessoal ou da Conexão temporária, o quadro usa a fonte escolar configurada anteriormente. Nas sessões Google, Demandas PESSOAIS utiliza a caixa Pessoal conectada. Visão GERAL, Radar, Manutenção e Inspetores/Monitores continuam usando a fonte escolar existente para os dados da Geral. Em Configurações e na autoria de ocorrências, vale o cadastro que concedeu a permissão, com prioridade da Geral.
+Se o cadastro da Geral libera Demandas INSTITUCIONAIS, o quadro consulta e movimenta mensagens na caixa dessa Geral, e prazos e observações ficam associados à mesma identidade. O botão **Preparar marcadores** cria somente os ausentes nessa caixa. Quando a permissão para Demandas INSTITUCIONAIS vem apenas da Pessoal ou da Conexão temporária, o quadro usa a fonte escolar configurada anteriormente. Nas sessões Google, Demandas PESSOAIS utiliza a caixa Pessoal conectada. As ocorrências da Visão GERAL e os dados escolares de Radar, Manutenção e Inspetores/Monitores continuam usando a fonte escolar existente. Em Configurações e na autoria de ocorrências, vale o cadastro que concedeu a permissão, com prioridade da Geral.
 
 Publicar com a Política de Privacidade revisão 36. Sem migração SQL, escopo ou variável novos.
+
+
+## Contas e totais da Visão GERAL (24/11/2026)
+
+Em uma sessão Google com Visão GERAL habilitada, o quadro **E-mails da ESCOLA** usa a conta conectada como Geral e o quadro **E-mails PESSOAIS** usa a conta conectada como Pessoal. Se não houver uma Geral ativa, permanece disponível a fonte escolar configurada para o acesso autorizado. Uma falha ao verificar a Geral ativa é sinalizada sem substituí-la por outra caixa. A Conexão temporária mantém sua fonte escolar, assim como o quadro de ocorrências.
+
+O quadro da escola mostra **Caixa de Entrada**, **Classificadas**, **Anuais** e **Arquivadas**. O total de Anuais vem de `messagesTotal` para `GE_Anuais`, da mesma conta Geral que fornece os demais indicadores. Marcadores ausentes aparecem com traço. Publicar com a política de privacidade revisão 37. Sem novo SQL, variável ou escopo.

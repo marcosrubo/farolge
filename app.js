@@ -230,7 +230,10 @@ function setupEmailConnections(){
         :result.settingsUser||result.institutionalUser||result.connections?.general;
       window.FarolAuthorizedUsers?.connectionChanged(access('configuracoes',settings));
       window.FarolAttendanceAnalysis?.connectionChanged(access('radar',school));
-      for(const type of types)window.FarolOverview?.connectionChanged(type,access('inicio',connections?.[type]),access('inicio',school));
+      for(const type of types){
+        const mailbox=result.connections?.[type]||(result.errors?.[type]?null:connections?.[type]);
+        window.FarolOverview?.connectionChanged(type,access('inicio',mailbox),access('inicio',school));
+      }
       for(const type of types){
         const connection=result.connections?.[type];
         const email=connection?.email;

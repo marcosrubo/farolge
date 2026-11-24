@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 24/11/2026, Marcos pediu que Visão GERAL separe os totais pelas conexões ativas: E-mails da ESCOLA usa Geral e E-mails PESSOAIS usa Pessoal. Quadro da Escola na ordem Caixa de Entrada, Classificadas, Anuais e Arquivadas, com messagesTotal em GE_Anuais. A fonte escolar anterior vale na Conexão temporária e nos acessos autorizados sem Geral conectada. Ocorrências continuam na fonte escolar existente. Sem novo SQL ou escopo; política revisão 37.
+
 - Em 24/11/2026, Marcos pediu autorização por módulo pelo cadastro da Geral verificada primeiro e da Pessoal verificada em seguida. Sem permissão em ambas, mostrar Módulo indisponível. Conferir no servidor. Se a Geral libera Demandas INSTITUCIONAIS, usar a caixa Gmail dessa Geral, incluindo marcadores e acompanhamento; se só a Pessoal libera, manter a fonte escolar anterior. Demais dados escolares, Conexão temporária, BI público e as duas conexões de Marcos seguem o modelo existente. Sem novo SQL ou escopo; política revisão 36.
 
 - Em 24/11/2026, Marcos pediu Demandas Anuais na Geral. Verificar GE_Anuais ao conectar e criar só se ausente; Preparar marcadores também inclui esse nome. A caixa Demanda ANUAL na entrada abre observações e procedimentos antes de confirmar. O texto é obrigatório, aceita múltiplas linhas e é salvo no mesmo registro criptografado por proprietário e mensagem. O quadro mostra Caixa de Entrada, Classificadas, Anuais e Arquivadas. Arquivar retira GE_Anuais e mantém as observações. Sem migração, escopo ou variável nova; política revisão 35.

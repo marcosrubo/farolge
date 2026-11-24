@@ -1,6 +1,6 @@
 'use strict';
 window.FarolOverview=(()=>{
-  const groups={general:{title:'E-mails da ESCOLA',labels:[['INBOX','Caixa de Entrada'],['GE_Classificadas','Classificadas'],['GE_Arquivadas','Arquivadas']]},personal:{title:'E-mails PESSOAIS',labels:[['GE_ME DEVEM','ME DEVEM'],['GE_MINHAS','MINHAS'],['GE_DEVO','DEVO'],['INBOX','Caixa de Entrada'],['GE_Despachadas','Despachadas']]}};
+  const groups={general:{title:'E-mails da ESCOLA',labels:[['INBOX','Caixa de Entrada'],['GE_Classificadas','Classificadas'],['GE_Anuais','Anuais'],['GE_Arquivadas','Arquivadas']]},personal:{title:'E-mails PESSOAIS',labels:[['GE_ME DEVEM','ME DEVEM'],['GE_MINHAS','MINHAS'],['GE_DEVO','DEVO'],['INBOX','Caixa de Entrada'],['GE_Despachadas','Despachadas']]}};
   const types=Object.keys(groups),escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const occurrences=window.FarolOccurrences?.create({id:'overview-occurrences',action:'occurrences'});
   const number=new Intl.NumberFormat('pt-BR');
@@ -20,7 +20,7 @@ window.FarolOverview=(()=>{
     if(!root)return;
     const s=states[type],group=groups[type],connected=s.connection?.gmail;
     root.querySelector('#overview-identity-'+type).textContent=s.connection?.email||'Conta '+(type==='general'?'GERAL':'PESSOAL')+' não conectada';
-    const messages={login_required:'A consulta ao Gmail precisa ser verificada.',missing_scope:'A consulta ao Gmail precisa de autorização de Marcos.',account_changed:'A conta mudou. Atualize os totais.',unavailable:'Não foi possível consultar os totais. Tente atualizar.'};
+    const messages={login_required:'A consulta ao Gmail precisa ser verificada.',missing_scope:'A consulta ao Gmail precisa de autorização para esta conta.',account_changed:'A conta mudou. Atualize os totais.',unavailable:'Não foi possível consultar os totais. Tente atualizar.'};
     root.querySelector('#overview-status-'+type).textContent=s.busy?'Atualizando totais…':s.error?(messages[s.error]||messages.unavailable)+(s.items.length?' Dados anteriores mantidos.':''):!connected?'A consulta ao Gmail desta conexão está indisponível.':'';
     root.querySelector('#overview-cards-'+type).innerHTML=group.labels.map(([name,title])=>{
       const item=s.items.find(item=>item.name===name),ready=connected&&item?.status==='ready'&&Number.isSafeInteger(item.total)&&item.total>=0;

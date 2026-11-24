@@ -380,3 +380,19 @@ test('menu atualiza permissões e abre Demandas INSTITUCIONAIS com a Geral cadas
  assert.ok(h.get('#main').innerHTML.includes('Esta opção não está habilitada para o seu acesso.'));
  assert.equal(received.at(-1),null);
 });
+
+test('Visão GERAL usa conexões ativas nos quadros de e-mail e a fonte escolar nas ocorrências',async()=>{
+ const general={email:'geral@escola.pr.gov.br',gmail:true},personal={email:adminEmail,gmail:true},school={email:adminEmail};
+ const calls=[];
+ const status={configured:true,modules:['inicio'],connections:{general,personal},generalUser:{id:'escola',email:general.email,name:'Geral do colégio'},
+  school,sharedConnections:{general:personal,personal}};
+ const h=ui(status,'',{FarolOverview:{mount(){},unmount(){},connectionChanged:(type,account,source)=>calls.push({type,account,source})}});
+ await settle();
+ assert.deepEqual(calls.at(-2),{type:'general',account:general,source:school});
+ assert.deepEqual(calls.at(-1),{type:'personal',account:personal,source:school});
+ status.connections.general=null;
+ status.errors={general:'unavailable'};
+ await h.window.FarolRefreshConnections();
+ assert.deepEqual(calls.at(-2),{type:'general',account:null,source:school});
+ assert.deepEqual(calls.at(-1),{type:'personal',account:personal,source:school});
+});
