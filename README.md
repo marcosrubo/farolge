@@ -501,7 +501,7 @@ Sem novo SQL, escopo ou variável. Publicar código e política revisão 33 e va
 
 Ao conectar uma Pessoal `@escola.pr.gov.br`, o backend busca o e-mail verificado em EmailsAutorizados e usa as permissões do cadastro em cada requisição. Com o e-mail ausente do cadastro, a conta pode conferir a conexão e acessar o BI SEED público. Alterar ou excluir o cadastro muda a liberação nas consultas seguintes. Com Configurações habilitada, a pessoa pode administrar cadastros, permissões e senhas sem Geral.
 
-Demandas PESSOAIS e os totais pessoais da Visão GERAL usam a caixa institucional do próprio usuário e exigem as permissões Gmail correspondentes. Demandas PESSOAIS habilitada permite preparar os marcadores dessa caixa ao conectar ou revisar a autorização. Dados escolares e a fonte Geral dos módulos seguem o acervo e a autorização já usados na Conexão temporária. A Geral institucional por si só não atribui permissões. Ocorrências usam o nome cadastrado e o e-mail Pessoal verificado na autoria.
+Demandas PESSOAIS e os totais pessoais da Visão GERAL usam a caixa institucional do próprio usuário e exigem as permissões Gmail correspondentes. Demandas PESSOAIS habilitada permite preparar os marcadores dessa caixa ao conectar ou revisar a autorização. Dados escolares e a fonte Geral dos módulos seguem o acervo e a autorização já usados na Conexão temporária. Desde 24/11/2026, a Geral institucional também pode atribuir permissões conforme a regra de acesso por módulo descrita ao final. Ocorrências usam o nome cadastrado e o e-mail Pessoal verificado na autoria.
 
 Publicar com a política revisão 33. Sem novo SQL, variável ou escopo. Na Vercel, conferir perfil cadastrado, perfil sem cadastro, remoção de permissão, acesso por URL e resposta quando Gmail ainda não estiver autorizado.
 
@@ -521,3 +521,12 @@ As observações são obrigatórias, aceitam várias linhas e têm limite de 4.0
 A conexão Geral verifica e cria `GE_Anuais` se estiver ausente. Em uma conexão Geral já autorizada para Demandas INSTITUCIONAIS, **Preparar marcadores** também cria o marcador, caso esteja ausente. A preparação usa o escopo Gmail já concedido; a tabela existente recebe as observações no campo criptografado, sem migração de SQL.
 
 Publicar com a Política de Privacidade revisão 35. Na Vercel, conferir a preparação de `GE_Anuais`, registrar uma demanda de teste e atualizar o quadro para conferir as observações. Arquivar a mesma demanda e conferir as observações e os marcadores no Gmail e no FAROL.
+
+
+## Acesso por módulo pelas conexões Geral e Pessoal (24/11/2026)
+
+Para cada módulo, o FAROL consulta primeiro a permissão do cadastro vinculado ao e-mail Google verificado da Geral e depois a da Pessoal. Uma permissão marcada em qualquer dos dois cadastros libera o módulo. Se nenhuma liberar, o menu exibe **Módulo indisponível**. A autorização é conferida no servidor a cada requisição protegida. As duas contas de Marcos continuam concedendo o acesso administrativo previsto anteriormente. A Conexão temporária continua usando seu cadastro, e o BI SEED mantém o acesso público.
+
+Se o cadastro da Geral libera Demandas INSTITUCIONAIS, o quadro consulta e movimenta mensagens na caixa dessa Geral, e prazos e observações ficam associados à mesma identidade. O botão **Preparar marcadores** cria somente os ausentes nessa caixa. Quando a permissão para Demandas INSTITUCIONAIS vem apenas da Pessoal ou da Conexão temporária, o quadro usa a fonte escolar configurada anteriormente. Nas sessões Google, Demandas PESSOAIS utiliza a caixa Pessoal conectada. Visão GERAL, Radar, Manutenção e Inspetores/Monitores continuam usando a fonte escolar existente para os dados da Geral. Em Configurações e na autoria de ocorrências, vale o cadastro que concedeu a permissão, com prioridade da Geral.
+
+Publicar com a Política de Privacidade revisão 36. Sem migração SQL, escopo ou variável novos.

@@ -362,3 +362,21 @@ test('Pessoal institucional aplica o cadastro e entrega a própria caixa ao mód
  assert.equal(received.settings.at(-2).email,email);
  assert.equal(received.settings.at(-1),'mount');
 });
+
+test('menu atualiza permissões e abre Demandas INSTITUCIONAIS com a Geral cadastrada',async()=>{
+ const email='geral@escola.pr.gov.br',general={email,gmail:true,manageInstitutional:true},received=[];
+ const status={configured:true,connections:{general,personal:null},modules:[],generalUser:{id:'colegio',email,name:'Colégio'}};
+ const h=ui(status,'',{FarolInstitutional:{mount(){},unmount(){},connectionChanged:value=>received.push(value)}});
+ await settle();
+ status.modules=['institucionais'];status.institutionalConnection=general;
+ h.context.location.hash='#institucionais';h.window.listeners.hashchange();
+ await settle();
+ assert.ok(h.get('#main').innerHTML.includes('institutional-board'));
+ assert.equal(received.at(-1).email,email);
+ status.modules=[];delete status.institutionalConnection;
+ h.get('#navigation').listeners.click({target:{closest:selector=>selector==='a[href^="#"]'?{getAttribute:()=> '#institucionais'}:null}});
+ await settle();
+ assert.ok(h.get('#main').innerHTML.includes('Módulo indisponível'));
+ assert.ok(h.get('#main').innerHTML.includes('Esta opção não está habilitada para o seu acesso.'));
+ assert.equal(received.at(-1),null);
+});

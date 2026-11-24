@@ -16,7 +16,7 @@ const {
   SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,
   temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,resetTemporaryPassword,authenticateTemporary
 }=require('./temporary-access.cjs');
-const {ADMIN_EMAIL:FIXED_AUTHORIZED_EMAIL,actionModules,settingsActions,modulesFor}=require('./module-access.cjs');
+const {ADMIN_EMAIL:FIXED_AUTHORIZED_EMAIL,MODULES,actionModules,settingsActions,modulesFor}=require('./module-access.cjs');
 const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
@@ -344,47 +344,51 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(validId(token))await store.remove(temporarySessionKey(token));
       setCookie(res,SESSION_COOKIE,'',0);
     }
-    async function verifyAdmin(verifiedPersonal){
-      const personal=verifiedPersonal===undefined?await account('personal'):verifiedPersonal;
-      if(personal?.user.email!==FIXED_AUTHORIZED_EMAIL)return null;
-      const general=await account('general');
-      if(general?.user.email!==FIXED_AUTHORIZED_EMAIL||general.user.id!==personal.user.id)return null;
-      const [generalConnection,personalConnection]=await Promise.all(TYPES.map(type=>store.getConnection(general.user.id,type)));
-      if([generalConnection,personalConnection].some(connection=>connection?.email!==FIXED_AUTHORIZED_EMAIL))return null;
-      return {general,personal,connections:{general:generalConnection,personal:personalConnection}};
+    const allowsModule=(profile,module)=>Boolean(profile&&modulesFor(profile).includes(module));
+    const profileForModule=(profiles,module)=>allowsModule(profiles.general,module)?profiles.general
+      :allowsModule(profiles.personal,module)?profiles.personal:null;
+    const publicProfile=profile=>profile?{id:profile.id,name:profile.Nome,email:profile.email}:null;
+    async function verifiedConnection(type){
+      const current=await account(type).catch(error=>{error.type=type;throw error;});
+      if(!current)return null;
+      const connection=await store.getConnection(current.user.id,type);
+      return connection?.email===current.user.email?{user:current.user,connection}:null;
     }
     async function moduleIdentity(temporary){
-      if(temporary)return {profile:temporary.profile};
-      const current=await account('personal');
-      const admin=await verifyAdmin(current);
-      if(admin)return {admin};
-      if(!current||current.user.email===FIXED_AUTHORIZED_EMAIL)return {};
-      const connection=await store.getConnection(current.user.id,'personal');
-      if(connection?.email!==current.user.email)return {};
-      return {personal:current,personalConnection:connection,profile:await store.getRegisteredUser(current.user.email)};
+      if(temporary)return {profiles:{general:null,personal:temporary.profile}};
+      const [general,personal]=await Promise.all(TYPES.map(verifiedConnection));
+      if(general?.user.email===FIXED_AUTHORIZED_EMAIL&&personal?.user.id===general.user.id&&personal.user.email===FIXED_AUTHORIZED_EMAIL){
+        return {admin:{general,personal},profiles:{}};
+      }
+      const [generalProfile,personalProfile]=await Promise.all([
+        general?store.getRegisteredUser(general.user.email):null,
+        personal?(personal.user.email===general?.user.email?null:store.getRegisteredUser(personal.user.email)):null
+      ]);
+      return {general,personal,profiles:{
+        general:generalProfile,
+        personal:personal?.user.email===general?.user.email?generalProfile:personalProfile
+      }};
     }
     async function canManageSettings(temporary){
-      const {admin,profile}=await moduleIdentity(temporary);
-      return Boolean(admin||(profile&&modulesFor(profile).includes('configuracoes')));
+      const {admin,profiles}=await moduleIdentity(temporary);
+      return Boolean(admin||profileForModule(profiles,'configuracoes'));
     }
-    async function moduleConnections(profile,ownPersonal){
-      const modules=modulesFor(profile);
-      const needed={general:['inicio','institucionais','manutencao-sistema'],personal:['inicio','pessoais']};
-      const needsConnection=type=>needed[type].some(module=>modules.includes(module));
-      const needsSchool=needsConnection('general')||modules.includes('radar')||modules.includes('inspetores-monitores')
-        ||(!ownPersonal&&needsConnection('personal'));
+    async function moduleConnections(profiles,connections={},temporary=false){
+      const modules=temporary?modulesFor(profiles.personal):MODULES.filter(module=>profileForModule(profiles,module));
+      const institutionalConnection=allowsModule(profiles.general,'institucionais')?connections.general:null;
+      const needsSharedGeneral=modules.includes('inicio')||modules.includes('manutencao-sistema')
+        ||(modules.includes('institucionais')&&!institutionalConnection);
+      const needsPersonal=modules.includes('inicio')||modules.includes('pessoais');
+      const needsSchool=needsSharedGeneral||modules.includes('radar')||modules.includes('inspetores-monitores')||(temporary&&needsPersonal);
       const owner=needsSchool?await store.getTemporaryOwner():null;
       const school=owner?{email:FIXED_AUTHORIZED_EMAIL}:null;
-      const sharedConnections={general:null,personal:null};
-      await Promise.all(TYPES.filter(needsConnection).map(async type=>{
-        if(type==='personal'&&ownPersonal){
-          sharedConnections.personal=ownPersonal;
-        }else if(owner){
-          const connection=await store.getConnection(owner,type);
-          if(connection?.email===FIXED_AUTHORIZED_EMAIL)sharedConnections[type]={email:connection.email,...connection.capabilities};
-        }
+      const sharedConnections={general:null,personal:needsPersonal?connections.personal||null:null};
+      await Promise.all(TYPES.filter(type=>type==='general'?needsSharedGeneral:temporary&&needsPersonal).map(async type=>{
+        if(!owner)return;
+        const connection=await store.getConnection(owner,type);
+        if(connection?.email===FIXED_AUTHORIZED_EMAIL)sharedConnections[type]={email:connection.email,...connection.capabilities};
       }));
-      return {modules,school,sharedConnections};
+      return {modules,school,sharedConnections,...(institutionalConnection?{institutionalConnection}:{})};
     }
     try {
       if(action==='access-denied'){
@@ -426,7 +430,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(temporary&&action==='status'){
         const {profile}=temporary;
         return reply(200,{configured:true,mode:'temporary',connections:{general:null,personal:null},
-          temporary:{id:profile.id,name:profile.Nome,expiresAt:temporary.expiresAt},...await moduleConnections(profile)});
+          temporary:{id:profile.id,name:profile.Nome,expiresAt:temporary.expiresAt},...await moduleConnections({personal:profile},{},true)});
       }
       if(temporary&&['start','callback','disconnect'].includes(action)){
         if(action==='callback')return finish('inicio','personal','temporary_active');
@@ -435,9 +439,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       if(actionModules.has(action)) {
         try {
           const module=actionModules.get(action);
-          const {admin,personal,personalConnection,profile}=await moduleIdentity(temporary);
-          if(!admin&&(!profile||!modulesFor(profile).includes(module))){
-            const error=temporary||personal||schoolActions.has(action)||action==='overview'?'module_forbidden':'admin_required';
+          const {admin,general,personal,profiles}=await moduleIdentity(temporary);
+          const profile=profileForModule(profiles,module);
+          if(!admin&&!profile){
+            const error=temporary||profiles.general||(personal&&personal.user.email!==FIXED_AUTHORIZED_EMAIL)||schoolActions.has(action)||action==='overview'?'module_forbidden':'admin_required';
             return reply(403,{error});
           }
           if(settingsActions.has(action)){
@@ -451,22 +456,24 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
               await resetTemporaryPassword(store,body);
               return reply(200,{passwordSaved:true});
             }
-            const email=admin?FIXED_AUTHORIZED_EMAIL:personal?.user.email||profile.id;
+            const email=admin?FIXED_AUTHORIZED_EMAIL:temporary?profile.id:profile.email;
             return reply(200,await handleAuthorizedUsers({action,url,body,store,email}));
           }
           const type=action==='overview'?url.searchParams.get('type'):actionMailbox(action);
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
-          const ownPersonal=personal&&type==='personal';
-          const owner=admin?admin.general.user.id:ownPersonal?personal.user.id:await store.getTemporaryOwner();
-          const email=ownPersonal?personal.user.email:FIXED_AUTHORIZED_EMAIL;
+          const direct=admin?.[type]||(type==='personal'?personal
+            :module==='institucionais'&&allowsModule(profiles.general,module)?general:null);
+          if(type==='personal'&&!temporary&&!direct)return reply(403,{error:'login_required',type});
+          const owner=direct?.user.id??await store.getTemporaryOwner();
+          const email=direct?.user.email??FIXED_AUTHORIZED_EMAIL;
           if(!owner)return reply(409,{error:'school_unavailable'});
           if(action==='attendance-analysis')return reply(200,await handleAttendanceAnalysis({url,store,owner,email}));
           if(schoolActions.has(action)){
-            const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:personal?{name:profile.Nome,email:personal.user.email}:{name:'Marcos Rubo',email};
+            const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:admin?{name:'Marcos Rubo',email}:{name:profile.Nome,email:profile.email};
             const studentAction=action==='inspector-occurrences'?'occurrences':action;
             return reply(200,await handleStudents({action:studentAction,url,body,store,owner,email,actor}));
           }
-          const connection=admin?admin.connections[type]:ownPersonal?personalConnection:await store.getConnection(owner,type);
+          const connection=direct?.connection??await store.getConnection(owner,type);
           const capability=driveReadActions.has(action)?'driveRead':driveMetadataActions.has(action)?'driveMetadata':'gmail';
           if(connection?.email!==email||!connection.capabilities[capability])return reply(403,{error:'missing_scope'});
           const client=clientFactory(config);client.setCredentials(connection.credentials);
@@ -576,9 +583,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const owner=user.id;
           const labelsAllowed=capabilities.gmail && (scopes.includes(LABEL_SCOPE)||scopes.includes(MODIFY_SCOPE));
           const isAdminMailbox=email===FIXED_AUTHORIZED_EMAIL;
-          const registered=type==='personal'&&!isAdminMailbox?await store.getRegisteredUser(email):null;
-          const expectedLabels=type==='general'?(isAdminMailbox?GENERAL_LABELS:[ANNUAL_LABEL])
-            :isAdminMailbox||Boolean(registered&&modulesFor(registered).includes('pessoais'))?PERSONAL_LABELS:null;
+          const registered=isAdminMailbox?null:await store.getRegisteredUser(email);
+          const general=type==='personal'&&!isAdminMailbox&&!allowsModule(registered,'pessoais')?await verifiedConnection('general'):null;
+          const generalProfile=general?await store.getRegisteredUser(general.user.email):null;
+          const expectedLabels=type==='general'
+            ?isAdminMailbox||allowsModule(registered,'institucionais')?GENERAL_LABELS:[ANNUAL_LABEL]
+            :isAdminMailbox||allowsModule(registered,'pessoais')||allowsModule(generalProfile,'pessoais')?PERSONAL_LABELS:null;
           const labels=expectedLabels?await mailboxLabels(client,labelsAllowed,true,expectedLabels):null;
           await saveConnection(owner,type,{email,capabilities,labelsAllowed,credentials:credentialsOf(client)});
           const id=random(),expiresAt=Date.now()+TTL*1000;
@@ -608,7 +618,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         return reply(200,{disconnected:true});
       }
       const connections={general:null,personal:null},errors={},denied={};
-      let personalProfile=null;
+      const profiles={general:null,personal:null};
       for(const type of TYPES) {
         let current;
         try {
@@ -626,14 +636,16 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             if(emailOf(data.user?.emailAddress)!==connection.email)throw new Error('wrong_account');
           }
           const isAdminMailbox=connection.email===FIXED_AUTHORIZED_EMAIL;
-          const registered=type==='personal'&&!isAdminMailbox?await store.getRegisteredUser(connection.email):null;
-          const canListLabels=isAdminMailbox||Boolean(registered&&modulesFor(registered).includes('pessoais'));
-          const labelDetails=isAdminMailbox&&type==='general'?await mailboxLabels(client,connection.labelsAllowed===true,false,GENERAL_LABELS,true):null;
+          const lookup=store.getRegisteredUser(connection.email);
+          const registered=isAdminMailbox?await lookup.catch(()=>null):await lookup;
+          const canListLabels=isAdminMailbox||(type==='general'?allowsModule(registered,'institucionais')
+            :allowsModule(registered,'pessoais')||allowsModule(profiles.general,'pessoais'));
+          const labelDetails=canListLabels&&type==='general'?await mailboxLabels(client,connection.labelsAllowed===true,false,GENERAL_LABELS,true):null;
           const labels=canListLabels?(labelDetails?.status||await mailboxLabels(client,connection.labelsAllowed===true)):'pending_policy';
           connection.credentials=credentialsOf(client);
           await store.putConnection(current.user.id,type,connection);
           connections[type]={email:connection.email,...connection.capabilities,labels,...(labelDetails?{labelDetails}:{})};
-          if(type==='personal')personalProfile=registered;
+          profiles[type]=registered;
         } catch(error) {
           if(error.message==='access_denied'){errors[type]='access_denied';denied[type]=error.email;continue;}
           if(['access_setup_required','access_unavailable'].includes(error.message)){errors[type]=error.message;continue;}
@@ -645,8 +657,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         }
       }
       const mode=connections.general?(connections.personal?'both':'general'):(connections.personal?'personal':'none');
-      const access=personalProfile
-        ?{institutionalUser:{id:personalProfile.id,name:personalProfile.Nome,email:personalProfile.email},...await moduleConnections(personalProfile,connections.personal)}
+      const bothAdmin=TYPES.every(type=>connections[type]?.email===FIXED_AUTHORIZED_EMAIL);
+      const access=!bothAdmin&&(profiles.general||profiles.personal)
+        ?{generalUser:publicProfile(profiles.general),...(profiles.personal?{institutionalUser:publicProfile(profiles.personal)}:{}),
+          settingsUser:publicProfile(profileForModule(profiles,'configuracoes')),
+          occurrencesUser:publicProfile(profileForModule(profiles,'inspetores-monitores')),
+          ...await moduleConnections(profiles,connections)}
         :{modules:modulesFor(null,connections)};
       return reply(200,{configured:true,mode,connections,errors,...access,...(Object.keys(denied).length?{denied}:{})});
     } catch(error) {
