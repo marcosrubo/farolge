@@ -666,11 +666,17 @@ test('primeiras senhas são cadastradas em sequência com as duas conexões de M
  const firstLogin=await post('temporary-login',{id,password});
  const firstSession=extractCookie(firstLogin,'__Host-farol-temporary');
  assert.ok(firstSession);
+ const temporaryCookies=response=>response.headers['set-cookie'].filter(value=>value.startsWith('__Host-farol-temporary='));
+ assert.equal(temporaryCookies(firstLogin).length,1);
+ assert.match(temporaryCookies(firstLogin)[0],/Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000$/);
  const info=(await h.request('status',{cookie:firstSession})).json();
  assert.deepEqual(info.modules,['inspetores-monitores','bi-seed','inicio','radar']);
  assert.equal(info.temporary.name,'Adriana');
  assert.deepEqual(info.connections,{general:null,personal:null});
  assert.equal(info.sharedConnections.general.gmail,true);
+ const reopened=await h.request('status',{cookie:firstSession});
+ assert.deepEqual(reopened.json().temporary,info.temporary);
+ assert.equal(reopened.headers['set-cookie'],undefined);
  const secondLogin=await post('temporary-login',{id,password});
  const secondSession=extractCookie(secondLogin,'__Host-farol-temporary');
  assert.ok(secondSession);
@@ -678,10 +684,15 @@ test('primeiras senhas são cadastradas em sequência com as duas conexões de M
  const changed=await post('temporary-password',{currentPassword:password,password:newPassword,confirmation:newPassword},secondSession);
  const session=extractCookie(changed,'__Host-farol-temporary');
  assert.ok(session);
+ assert.equal(temporaryCookies(changed).length,1);
+ assert.match(temporaryCookies(changed)[0],/Max-Age=31536000$/);
+ assert.equal((await h.request('status',{cookie:secondSession})).json().mode,'none');
  assert.equal((await h.request('status',{cookie:firstSession})).json().mode,'none');
  assert.equal((await post('temporary-login',{id,password})).status,401);
  assert.equal((await post('temporary-login',{id,password:newPassword})).status,200);
- assert.equal((await post('temporary-logout',{},session)).status,200);
+ const ended=await post('temporary-logout',{},session);
+ assert.equal(ended.status,200);
+ assert.match(temporaryCookies(ended)[0],/Max-Age=0$/);
  assert.equal((await h.request('status',{cookie:session})).json().mode,'none');
 
  const otherHash=profiles.get(otherId).password_hash;
@@ -767,6 +778,69 @@ test('permissões temporárias seguem o nome exato no cadastro e bloqueiam a API
  assert.deepEqual((await h.request('students',{cookie,query})).json(),{error:'storage_access_denied'});
  profile=null;
  assert.equal((await h.request('students',{cookie,query})).json().error,'module_forbidden');
+});
+
+test('Conexão temporária mantém o acesso entre turnos, renova com o uso e respeita o encerramento',async t=>{
+ const {temporarySessionKey,writeTemporarySession,SESSION_SECONDS}=require('../server/temporary-access.cjs');
+ const h=harness();
+ const profile={id:temporaryId,Nome:'Monitor fictício',password_hash:'hash simulado',permissions:['inspetores-monitores']};
+ h.store.getTemporaryUser=async()=>profile;
+ h.store.getTemporaryOwner=async()=>h.userFor(GENERAL_EMAIL).id;
+ let extensions=0,closeBeforeRenewal=false;
+ h.store.extendTemporarySession=async(key,previousExpiry,value)=>{
+  if(closeBeforeRenewal)await h.store.remove(key);
+  const current=h.rows.get(key);
+  if(!current||current.expiresAt!==previousExpiry||current.expiresAt<=Date.now())return false;
+  h.rows.set(key,value);extensions++;return true;
+ };
+ const start=Date.now(),hour=3600000,day=24*hour;
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const token=await writeTemporarySession(h.store,profile);
+ const key=temporarySessionKey(token);
+ const cookie='__Host-farol-temporary='+token;
+ const status=()=>h.request('status',{cookie});
+ // Uma sessão ainda válida emitida antes da atualização recebe o novo prazo.
+ h.rows.get(key).expiresAt=start+8*hour;
+ const legacy=await status();
+ assert.equal(legacy.json().temporary.expiresAt,start+SESSION_SECONDS*1000);
+ assert.match(legacy.headers['set-cookie'].join(''),/Max-Age=31536000$/);
+ t.mock.timers.tick(12*hour);
+ assert.equal((await status()).json().mode,'temporary');
+ assert.equal(extensions,1);
+ t.mock.timers.tick(day);
+ const renewed=await status();
+ const expiresAt=Date.now()+SESSION_SECONDS*1000;
+ assert.equal(renewed.json().temporary.expiresAt,expiresAt);
+ assert.match(renewed.headers['set-cookie'].join(''),/Max-Age=31536000$/);
+ assert.equal(extensions,2);
+ t.mock.timers.tick(day);
+ closeBeforeRenewal=true;
+ const closed=await status();
+ assert.equal(closed.json().mode,'none');
+ assert.equal(closed.headers['set-cookie'],undefined);
+ assert.equal(h.rows.has(key),false);
+ const expired='__Host-farol-temporary='+await writeTemporarySession(h.store,profile);
+ t.mock.timers.tick(SESSION_SECONDS*1000+1);
+ assert.equal((await h.request('status',{cookie:expired})).json().mode,'none');
+ assert.equal(extensions,2);
+});
+
+test('renovação no Supabase atualiza somente uma sessão existente com a validade esperada',async()=>{
+ const config=configuration(env);
+ const key='temporary.'+'a'.repeat(64),previousExpiry=Date.now()+1000,expiresAt=previousExpiry+365*86400000;
+ const value={id:temporaryId,expiresAt};
+ const store=makeStore(config,async(url,options)=>{
+  const {searchParams}=new URL(url);
+  assert.equal(options.method,'PATCH');
+  assert.equal(searchParams.get('id'),'eq.'+key);
+  assert.equal(searchParams.get('expires_at'),'eq.'+new Date(previousExpiry).toISOString());
+  assert.equal(searchParams.get('and'),'(expires_at.gt.now)');
+  const body=JSON.parse(options.body);
+  assert.equal(body.expires_at,new Date(expiresAt).toISOString());
+  assert.deepEqual(unseal(body.payload,config.key,key),value);
+  return {ok:true,status:200,json:async()=>[{id:key}]};
+ });
+ assert.equal(await store.extendTemporarySession(key,previousExpiry,value,expiresAt),true);
 });
 
 test('consulta de Inspetores respeita a permissão do módulo e reutiliza o cursor da Visão GERAL',async()=>{

@@ -5,7 +5,8 @@ const {promisify}=require('node:util');
 const {validUserId}=require('./authorized-users.cjs');
 
 const SESSION_COOKIE='__Host-farol-temporary';
-const SESSION_SECONDS=8*3600;
+const DAY_SECONDS=24*3600;
+const SESSION_SECONDS=365*DAY_SECONDS;
 const ENROLLMENT_COOKIE='__Host-farol-enrollment';
 const ENROLLMENT_SECONDS=600;
 const SECRET_PATTERN=/^[A-Za-z0-9_-]{43}$/;
@@ -51,6 +52,14 @@ async function writeTemporarySession(store,profile){
   const expiresAt=Date.now()+SESSION_SECONDS*1000;
   await store.put(temporarySessionKey(token),{id:profile.id,passwordVersion:digest(profile.password_hash),expiresAt},expiresAt);
   return token;
+}
+async function renewTemporarySession(store,token,session){
+  const expiresAt=Date.now()+SESSION_SECONDS*1000;
+  if(expiresAt-session.expiresAt<DAY_SECONDS*1000)return session;
+  const {profile}=session;
+  const updated=await store.extendTemporarySession(temporarySessionKey(token),session.expiresAt,
+    {id:profile.id,passwordVersion:digest(profile.password_hash),expiresAt},expiresAt);
+  return updated?{profile,expiresAt}:readTemporarySession(store,token);
 }
 async function confirmEnrollment(store,id){
   if(!validUserId(id))fail('invalid_temporary_user',400);
@@ -106,5 +115,5 @@ async function authenticateTemporary({action,store,body,current,request,key,enro
 
 module.exports={
   SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,
-  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,resetTemporaryPassword,authenticateTemporary
+  temporarySessionKey,readTemporarySession,writeTemporarySession,renewTemporarySession,confirmEnrollment,canEnroll,resetTemporaryPassword,authenticateTemporary
 };

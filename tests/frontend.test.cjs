@@ -10,12 +10,13 @@ function ui(status={configured:false,connections:{general:null,personal:null}},s
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,make());return nodes.get(selector);};
  const connect=['general','personal'].map(type=>Object.assign(get(`[data-connect-email="${type}"]`),{dataset:{connectEmail:type}}));
  const disconnect=['general','personal'].map(type=>Object.assign(get(`[data-disconnect-email="${type}"]`),{dataset:{disconnectEmail:type}}));
- const requests=[];
+ const requests=[],timers=new Map();
+ let nextTimer=0;
  const window={FAROL_CONFIG:{schoolName:'Escola',schoolInitials:'E'},listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},location:{assign(url){window.destination=url;}},history:{replaceState(){}},scrollTo(){}};
  Object.assign(window,modules);
- const context=vm.createContext({window,document:{querySelector:get,querySelectorAll:s=>s==='[data-connect-email]'?connect:s==='[data-disconnect-email]'?disconnect:[]},location:{hash:'#radar',search,pathname:'/'},URL,URLSearchParams,setTimeout:()=>1,clearTimeout(){},fetch:async(url,opts)=>{requests.push({url,opts});return {ok:true,json:async()=>url.endsWith('/start')?{url:'https://accounts.google.com/o/oauth2/v2/auth?state=fake'}:url.endsWith('/access-denied')?{email:status.claimEmail}:status};}});
+ const context=vm.createContext({window,document:{querySelector:get,querySelectorAll:s=>s==='[data-connect-email]'?connect:s==='[data-disconnect-email]'?disconnect:[]},location:{hash:'#radar',search,pathname:'/'},URL,URLSearchParams,setTimeout:(callback,delay)=>{timers.set(++nextTimer,{callback,delay});return nextTimer;},clearTimeout:id=>timers.delete(id),fetch:async(url,opts)=>{requests.push({url,opts});if(url.endsWith('/status')&&typeof status==='function')return status();return {ok:true,json:async()=>url.endsWith('/start')?{url:'https://accounts.google.com/o/oauth2/v2/auth?state=fake'}:url.endsWith('/access-denied')?{email:status.claimEmail}:status};}});
  vm.runInContext(fs.readFileSync('app.js','utf8'),context);
- return {get,connect,disconnect,requests,window,context};
+ return {get,connect,disconnect,requests,window,context,timers};
 }
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 test('sem conexão há dois botões independentes e nenhum login separado',async()=>{
@@ -132,6 +133,44 @@ test('menu posiciona Inspetores antes de Radar e monta módulo de alunos',async(
  const nav=h.get('#navigation').innerHTML;assert.ok(nav.indexOf('href="#inspetores-monitores"')<nav.indexOf('href="#radar"'));
  let mounted=false;h.window.FarolStudents={unmount(){},mount(){mounted=true;}};
  h.context.location.hash='#inspetores-monitores';h.window.listeners.hashchange();assert.equal(mounted,true);assert.ok(h.get('#main').innerHTML.includes('students-board'));
+});
+
+test('ao reabrir, uma falha transitória é seguida de nova verificação da sessão temporária',async()=>{
+ const temporary={id:'u',name:'Pessoa fictícia',expiresAt:Date.now()+20000};
+ const status={configured:true,connections:{general:null,personal:null},temporary,modules:['radar','bi-seed']};
+ const applied=[];
+ let fail=true;
+ const h=ui(()=>({ok:!fail,json:async()=>fail?{error:'unavailable'}:status}),'',
+  {FarolTemporaryAccess:{update:(user,configured)=>applied.push({user,configured})}});
+ await settle();
+ assert.deepEqual(applied.at(-1),{user:null,configured:false});
+ assert.match(h.get('#temporary-status').textContent,/verificar/);
+ assert.equal(h.requests.length,1);
+ const retry=[...h.timers.values()].find(timer=>timer.delay===1500);
+ assert.ok(retry);
+ fail=false;
+ retry.callback();await settle();
+ assert.deepEqual(applied.at(-1),{user:temporary,configured:true});
+ assert.equal(h.requests.length,2);
+ assert.equal(h.get('#temporary-status').textContent,'');
+ assert.ok(h.requests.every(request=>request.url.endsWith('/status')&&request.opts.method==='GET'&&request.opts.credentials==='same-origin'));
+ await h.window.listeners.online();
+ h.window.listeners.pageshow({persisted:false});
+ assert.equal(h.requests.length,3);
+ h.window.listeners.pageshow({persisted:true});await settle();
+ assert.equal(h.requests.length,4);
+ assert.deepEqual(applied.at(-1),{user:temporary,configured:true});
+});
+
+test('validade longa da Conexão temporária não excede o limite do temporizador do navegador',async()=>{
+ const temporary={id:'u',name:'Monitor fictício',expiresAt:Date.now()+365*86400000};
+ const h=ui({configured:true,connections:{general:null,personal:null},temporary,modules:['radar','bi-seed']});
+ await settle();
+ const timer=[...h.timers.values()].at(-1);
+ assert.equal(timer.delay,2**31-1);
+ timer.callback();await settle();
+ assert.equal(h.requests.length,1);
+ assert.equal([...h.timers.values()].at(-1).delay,2**31-1);
 });
 
 test('conta negada mostra mensagem e WhatsApp com e-mail verificado, sem abrir conversa automaticamente',async()=>{

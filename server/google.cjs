@@ -14,7 +14,7 @@ const {gmailFailure}=require('./gmail-errors.cjs');
 const {handleInstitutional}=require('./institutional.cjs');
 const {
   SESSION_COOKIE,SESSION_SECONDS,ENROLLMENT_COOKIE,ENROLLMENT_SECONDS,
-  temporarySessionKey,readTemporarySession,writeTemporarySession,confirmEnrollment,canEnroll,resetTemporaryPassword,authenticateTemporary
+  temporarySessionKey,readTemporarySession,writeTemporarySession,renewTemporarySession,confirmEnrollment,canEnroll,resetTemporaryPassword,authenticateTemporary
 }=require('./temporary-access.cjs');
 const {ADMIN_EMAIL:FIXED_AUTHORIZED_EMAIL,MODULES,actionModules,settingsActions,modulesFor}=require('./module-access.cjs');
 const {OAuth2Client} = require('google-auth-library');
@@ -166,6 +166,12 @@ function makeStore(config,fetcher=fetch) {
     async get(id) {const rows=await sessions('GET',`id=eq.${id}&select=id,payload,expires_at`,null,'return=representation');return decode(rows[0]);},
     async take(id) {const rows=await sessions('DELETE',`id=eq.${id}`,null,'return=representation');return decode(rows[0]);},
     async put(id,value,expiresAt) {await sessions('POST','on_conflict=id',{id,payload:seal(value,config.key,id),expires_at:new Date(expiresAt).toISOString()},'resolution=merge-duplicates,return=minimal');},
+    async extendTemporarySession(id,previousExpiry,value,expiresAt) {
+      const previous=encodeURIComponent(new Date(previousExpiry).toISOString());
+      const rows=await sessions('PATCH',`id=eq.${id}&expires_at=eq.${previous}&and=(expires_at.gt.now)&select=id`,
+        {payload:seal(value,config.key,id),expires_at:new Date(expiresAt).toISOString()},'return=representation');
+      return rows.length===1;
+    },
     async remove(id) {await sessions('DELETE',`id=eq.${id}`);},
     async cleanup() {await sessions('DELETE',`expires_at=lt.${encodeURIComponent(new Date().toISOString())}`);},
     async getConnection(owner,type) {
@@ -339,9 +345,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         setCookie(res,cookieName('flow',type),'',0);
       }
     }
-    async function clearTemporary(){
+    async function revokeTemporary(){
       const token=jar[SESSION_COOKIE];
       if(validId(token))await store.remove(temporarySessionKey(token));
+    }
+    async function clearTemporary(){
+      await revokeTemporary();
       setCookie(res,SESSION_COOKIE,'',0);
     }
     const allowsModule=(profile,module)=>Boolean(profile&&modulesFor(profile).includes(module));
@@ -414,18 +423,26 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         await clearTemporary();
         return reply(200,{signedOut:true});
       }
-      const temporary=await readTemporarySession(store,jar[SESSION_COOKIE]);
+      let temporary=await readTemporarySession(store,jar[SESSION_COOKIE]);
       if(['temporary-login','temporary-activate','temporary-password'].includes(action)){
         if(action==='temporary-activate'&&!await canManageSettings(temporary))return reply(403,{error:'temporary_confirmation_required'});
         const profile=await authenticateTemporary({action,store,body,current:temporary,request:req,key:config.key,enrollment:jar[ENROLLMENT_COOKIE]});
         setCookie(res,ENROLLMENT_COOKIE,'',0);
         if(action==='temporary-activate')return reply(200,{passwordSaved:true});
         await clearLocalGoogle();
-        await clearTemporary();
+        await revokeTemporary();
         try{await store.cleanup();}catch{}
         const token=await writeTemporarySession(store,profile);
         setCookie(res,SESSION_COOKIE,token,SESSION_SECONDS);
         return reply(200,{signedIn:true});
+      }
+      if(temporary&&action==='status'){
+        const previousExpiry=temporary.expiresAt;
+        temporary=await renewTemporarySession(store,jar[SESSION_COOKIE],temporary);
+        if(temporary?.expiresAt>previousExpiry){
+          const remaining=Math.max(1,Math.ceil((temporary.expiresAt-Date.now())/1000));
+          setCookie(res,SESSION_COOKIE,jar[SESSION_COOKIE],remaining);
+        }
       }
       if(temporary&&action==='status'){
         const {profile}=temporary;

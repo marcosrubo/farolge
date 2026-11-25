@@ -136,6 +136,8 @@ function setupEmailConnections(){
   const availability=document.querySelector('#email-connection-availability');
   const continueButton=document.querySelector('#email-connection-continue');
   const feedback=document.querySelector('#email-connection-feedback');
+  const temporaryStatus=document.querySelector('#temporary-status');
+  const statusUnavailable='Não foi possível verificar a conexão. A sessão será consultada novamente quando a rede voltar.';
   let configured=false;
   let selectedType='personal';
   let statusVersion=0,temporaryExpiry=null;
@@ -159,6 +161,12 @@ function setupEmailConnections(){
     document.querySelector('[data-disconnect-email="'+type+'"]').hidden=true;
     document.querySelector('[data-connect-email="'+type+'"]').textContent='Conectar';
   }
+  function scheduleTemporaryExpiry(expiresAt){
+    const remaining=expiresAt-Date.now()+250;
+    const maxDelay=2**31-1;
+    temporaryExpiry=setTimeout(remaining>maxDelay?()=>scheduleTemporaryExpiry(expiresAt):refresh,
+      Math.min(maxDelay,Math.max(250,remaining)));
+  }
   function updateAccess(result){
     const user=result?.temporary||null;
     const googleUsers=[result?.generalUser,result?.institutionalUser];
@@ -171,7 +179,8 @@ function setupEmailConnections(){
     allowedModules=next;temporaryUser=user;moduleUserKey=identityKey;
     window.FarolTemporaryAccess?.update(user,configured);
     if(temporaryExpiry!==null)clearTimeout(temporaryExpiry);
-    temporaryExpiry=user?.expiresAt?setTimeout(refresh,Math.max(250,user.expiresAt-Date.now()+250)):null;
+    temporaryExpiry=null;
+    if(user?.expiresAt)scheduleTemporaryExpiry(user.expiresAt);
     if(changed){
       window.FarolDemands?.connectionChanged(null);
       window.FarolInstitutional?.connectionChanged(null);
@@ -207,12 +216,14 @@ function setupEmailConnections(){
       :connectionMessages.not_configured;
     continueButton.hidden=!configured;
   }
-  async function refresh(){
+  const refresh=()=>refreshStatus(true);
+  async function refreshStatus(retry){
     const version=++statusVersion;
     try {
       const result=await api('status');
       if(version!==statusVersion)return;
       configured=result.configured===true;
+      if(temporaryStatus.textContent===statusUnavailable)temporaryStatus.textContent='';
       updateAccess(result);
       const registered=Boolean(result.temporary||result.generalUser||result.institutionalUser);
       const connections=registered?result.sharedConnections:result.connections;
@@ -281,6 +292,8 @@ function setupEmailConnections(){
       }
       availability.textContent=connectionMessages.unavailable;
       continueButton.hidden=true;
+      temporaryStatus.textContent=statusUnavailable;
+      if(retry)setTimeout(()=>{if(version===statusVersion)refreshStatus(false);},1500);
     }
   }
   function openConnection(type){
@@ -337,6 +350,8 @@ function setupEmailConnections(){
   window.FarolRefreshConnections=refresh;
   window.addEventListener('farol-connections-refresh',refresh);
   window.addEventListener('focus',refresh);
+  window.addEventListener('online',refresh);
+  window.addEventListener('pageshow',event=>{if(event.persisted)refresh();});
   refresh();
 }
 

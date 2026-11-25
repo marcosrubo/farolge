@@ -474,7 +474,11 @@ Executar `database/module-access.sql` após `database/temporary-access.sql`. A m
 
 Em **Configurações → Cadastro de usuários**, **Resetar senha** aparece nos cadastros que já têm senha. Quem tem acesso a Configurações define e confirma a nova senha. Ao salvar, o servidor substitui a senha e invalida as sessões temporárias da pessoa. Fechar o formulário antes de salvar preserva a senha atual.
 
-A senha tem pelo menos 6 caracteres, aceita qualquer tipo de caractere e é armazenada como hash scrypt com salt aleatório. O Supabase limita tentativas por cadastro e pela origem da requisição. Sessões temporárias expiram em oito horas. A troca de senha invalida as sessões antigas. A exclusão do cadastro revoga o acesso e preserva as ocorrências já gravadas. A autoria temporária vem do nome do cadastro validado no servidor, inclusive para usuários sem e-mail. [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+A senha tem pelo menos 6 caracteres, aceita qualquer tipo de caractere e é armazenada como hash scrypt com salt aleatório. O Supabase limita tentativas por cadastro e pela origem da requisição. A troca de senha invalida as sessões antigas. A exclusão do cadastro revoga o acesso e preserva as ocorrências já gravadas. A autoria temporária vem do nome do cadastro validado no servidor, inclusive para usuários sem e-mail. [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+
+### Reabertura do FAROL GE
+
+A Conexão temporária é retomada ao reabrir ou atualizar o FAROL GE no mesmo navegador e endereço, com validade renovável de até 365 dias. A verificação ao abrir o FAROL renova o prazo quando já se passaram pelo menos 24 horas desde a última renovação. Sessões anteriores ainda válidas passam para o novo prazo ao abrir o FAROL. O navegador conserva apenas o cookie protegido, e o servidor confirma a sessão e as permissões. Se a primeira verificação falhar, a página tenta novamente e também verifica quando a rede volta. É preciso entrar novamente se a sessão vencer por falta de uso, se o navegador apagar o cookie ou se a pessoa escolher **Encerrar conexão temporária**. Publicar com a Política de Privacidade revisão 39. A renovação usa a tabela de sessões existente, sem migração SQL.
 
 ### Ativação na Vercel
 
