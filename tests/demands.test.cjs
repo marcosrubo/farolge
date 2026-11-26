@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const {handleDemands,validDate,plainText}=require('../server/demands.cjs');
-const LABELS=['GE_ME DEVEM','GE_MINHAS','GE_DEVO','GE_Despachadas'];
+const LABELS=['GE_ME DEVEM','GE_MINHAS','GE_DEVO','GE_Despachadas','GE_ArquivoMorto_Pessoal'];
 function harness(){
  const rows=new Map(),threads=new Map(),messages=new Map(),calls=[];
  const email='person@gmail.com',owner='owner-a';
@@ -36,7 +36,7 @@ function harness(){
     return {data:structuredClone(message)};
   }
   if(path==='labels')return {data:{labels:LABELS.map((name,index)=>({name,id:'L'+index}))}};
-  if(path==='threads')return {data:{threads:parsed.searchParams.get('labelIds')==='L2'?[]:[{id:'thread1'}],nextPageToken:parsed.searchParams.has('pageToken')?undefined:'next'}};
+  if(path==='threads')return {data:{threads:[...threads.values()].filter(thread=>thread.messages.some(message=>message.labelIds.includes(parsed.searchParams.get('labelIds')))).map(thread=>({id:thread.id})),nextPageToken:parsed.searchParams.has('pageToken')?undefined:'next'}};
   return {data:structuredClone(threads.get(path))};
  }};
  async function run(action,{query={},body,who=owner,mailbox=email,canClassify=true}={}){
@@ -123,6 +123,14 @@ function interactive(fetcher){
   get innerHTML(){return this._html;}
   querySelector(selector){if(!this.nodes.has(selector))this.nodes.set(selector,new Node());return this.nodes.get(selector);}
   querySelectorAll(selector){
+   if(selector==='[data-archive-thread]'){
+    this.archiveThreads=[...this.querySelector('#demand-columns').innerHTML.matchAll(/data-archive-thread="([\w-]+)" data-column="([0-2])"/g)].map(match=>{const b=new Node();b.dataset={archiveThread:match[1],column:match[2]};return b;});
+    return this.archiveThreads;
+   }
+   if(selector==='[data-detail-archive]'){
+    this.archiveDetails=[...this.innerHTML.matchAll(/data-detail-archive="([\w-]+)"/g)].map(match=>{const b=new Node();b.dataset={detailArchive:match[1]};return b;});
+    return this.archiveDetails;
+   }
    if(selector==='[data-thread]'){
     this.threadButtons=[...this.querySelector('#demand-columns').innerHTML.matchAll(/<button[^>]*data-thread="([\w-]+)" data-column="([0-2])"/g)].map(match=>{const b=new Node();b.dataset={thread:match[1],column:match[2]};return b;});return this.threadButtons;
    }
@@ -354,5 +362,66 @@ test('classificação na entrada aparece também na lista final de classificados
  await ui.root.classifyButtons.find(b=>b.dataset.message==='inbox2'&&b.dataset.classify==='1').listeners.click();
  assert.ok(ui.root.querySelector('#classified-list').innerHTML.includes('data-message="inbox2"'));
  assert.ok(!ui.root.querySelector('#inbox-list').innerHTML.includes('data-message="inbox2"'));
+ ui.api.unmount();
+});
+
+
+test('Arquivo Morto pessoal move uma única mensagem com várias categorias e mantém a outra no quadro',async()=>{
+ const h=harness(),body={type:'personal',mailbox:h.email,messageId:'message1'};
+ await h.run('demand',{body:h.body()});
+ const reply=h.message('reply',['L1','UNREAD']);
+ const thread=h.threads.get('thread1');
+ thread.messages.push(reply);h.messages.set(reply.id,reply);
+ h.messages.get('message1').labelIds.push('L2','L3');
+ await h.run('personal-archive',{body});
+ assert.deepEqual(h.messages.get('message1').labelIds,['UNREAD','CUSTOM','L4']);
+ assert.deepEqual(reply.labelIds,['L1','UNREAD']);
+ assert.equal(h.rows.get(h.owner+'.thread1').version,1);
+ assert.deepEqual((await h.run('board',{query:{column:0}})).items,[]);
+ const detail=(await h.run('thread',{query:{id:thread.id}})).thread;
+ assert.deepEqual(detail.labels,['MINHAS']);
+ assert.deepEqual(detail.messages.map(message=>message.id),[reply.id]);
+ assert.ok(!(await h.run('inbox')).items.some(item=>item.id==='message1'));
+ assert.ok(!(await h.run('classified')).items.some(item=>item.id==='message1'));
+ await h.run('personal-archive',{body});
+ assert.equal(h.calls.filter(call=>call.method==='POST').length,1);
+});
+
+test('Arquivo Morto pessoal confere escrita, conta e marcadores antes de mover',async()=>{
+ const h=harness(),body={type:'personal',mailbox:h.email,messageId:'message1'};
+ await assert.rejects(h.run('personal-archive',{body,canClassify:false}),{message:'classify_scope'});
+ await assert.rejects(h.run('personal-archive',{body:{...body,mailbox:'other@gmail.com'}}),{message:'account_changed'});
+ await assert.rejects(h.run('personal-archive',{body:{...body,removeLabelIds:['CUSTOM']}}),{message:'invalid_archive'});
+ h.messages.get('message1').labelIds=['SPAM','INBOX'];
+ await assert.rejects(h.run('personal-archive',{body}),{message:'not_inbox'});
+ assert.ok(h.calls.every(call=>call.method==='GET'));
+});
+
+
+test('botões do Arquivo Morto na Pessoal permitem escolher uma mensagem da conversa',async()=>{
+ const h=harness(),posted=[];
+ h.messages.get('message1').labelIds.push('L2','L3');
+ const reply=h.message('reply',['L1']);
+ h.threads.get('thread1').messages.push(reply);h.messages.set(reply.id,reply);
+ const ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1),body=options.body?JSON.parse(options.body):undefined;
+  if(body)posted.push(body);
+  const result=await h.run(action,{body,query:Object.fromEntries(parsed.searchParams)});
+  return {ok:true,json:async()=>result};
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ assert.match(ui.root.querySelector('#inbox-list').innerHTML,/data-inbox-archive="message1"/);
+ assert.match(ui.root.querySelector('#classified-list').innerHTML,/data-classified-archive="message1"/);
+ assert.deepEqual(ui.root.archiveThreads.map(button=>button.dataset.column),['0','1','2']);
+ await ui.root.archiveThreads.find(button=>button.dataset.column==='0').listeners.click();
+ assert.equal(posted.length,0);
+ const content=ui.document.querySelector('#demand-detail');
+ const choice=content.archiveDetails.find(button=>button.dataset.detailArchive==='message1');
+ await choice.listeners.click();
+ assert.deepEqual(posted,[{type:'personal',mailbox:h.email,messageId:'message1'}]);
+ assert.ok(!ui.root.querySelector('#inbox-list').innerHTML.includes('data-inbox-archive="message1"'));
+ assert.ok(!ui.root.querySelector('#classified-list').innerHTML.includes('data-classified-archive="message1"'));
+ assert.deepEqual(ui.root.archiveThreads.map(button=>button.dataset.column),['1']);
+ assert.match(ui.root.querySelector('#demand-notice').textContent,/movida para o Arquivo Morto/);
  ui.api.unmount();
 });

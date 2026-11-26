@@ -41,7 +41,7 @@ test('HTML vira texto inerte, ignora anexos e não usa snippets incompletos',asy
  assert.equal(htmlText({...payload,filename:'anexo.html'}),'');
 });
 function harness(){
- const calls=[],rows=new Map(),messages=new Map(),labels=[{id:'C',name:'GE_Classificadas'},{id:'A',name:'GE_Arquivadas'},{id:'Y',name:'GE_Anuais'}];
+ const calls=[],rows=new Map(),messages=new Map(),labels=[{id:'C',name:'GE_Classificadas'},{id:'A',name:'GE_Arquivadas'},{id:'Y',name:'GE_Anuais'},{id:'M',name:'GE_ArquivoMorto_Geral'}];
  let failStore=false,failModify=false,missingLabel=false;
  const message=(id,date=received,labels=['INBOX','UNREAD','CUSTOM'])=>({id,threadId:'t'+id,internalDate:String(date),labelIds:[...labels],payload:{mimeType:'text/plain',headers:[{name:'Subject',value:'Relatório '+id},{name:'From',value:'Pessoa <pessoa@example.com>'}],body:{data:Buffer.from('Enviar relatório até 20/11/2026.').toString('base64url')}}});
  messages.set('m1',message('m1'));messages.set('m2',message('m2',received-10000));
@@ -205,7 +205,7 @@ test('botão prepara marcadores usando a GERAL autorizada e atualiza o quadro',a
  assert.deepEqual(JSON.parse(req.options.body),{type:'general',mailbox:'school@example.com'});
  req.resolve({ok:true,json:async()=>({mailbox:'school@example.com',labels:'ready',labelDetails:{status:'ready',missing:[],reason:null}})});await settle();
  for(let i=0;i<4;i++)h.respond(i);await settle();
- assert.equal(h.get('#institutional-prepare').hidden,true);assert.ok(h.get('#institutional-feedback').textContent.includes('prontas'));
+ assert.equal(h.get('#institutional-prepare').hidden,true);assert.ok(h.get('#institutional-feedback').textContent.includes('prontos'));
  assert.equal(h.window.events[0],'farol-connections-refresh');
 });
 test('falha de preparação mantém bloqueio e exibe nomes não confirmados',async()=>{
@@ -213,7 +213,7 @@ test('falha de preparação mantém bloqueio e exibe nomes não confirmados',asy
  for(let i=0;i<4;i++)h.respond(i,[],{missingLabels:true});await settle();h.get('#institutional-prepare').listeners.click();
  h.requests.at(-1).resolve({ok:true,json:async()=>({mailbox:'school@example.com',labels:'unavailable',labelDetails:{reason:'permission_denied',missing:['Arquivadas']}})});await settle();
  assert.equal(h.get('#institutional-prepare').hidden,false);assert.ok(h.get('#institutional-feedback').textContent.includes('Arquivadas'));
- assert.ok(!h.get('#institutional-feedback').textContent.includes('prontas'));assert.equal(h.window.events.length,0);
+ assert.ok(!h.get('#institutional-feedback').textContent.includes('prontos'));assert.equal(h.window.events.length,0);
 });
 
 test('arquivar a segunda mensagem mantém as restantes se a recarga da entrada falhar',async()=>{
@@ -301,4 +301,35 @@ test('a caixa de seleção abre as observações e só envia após confirmação
  assert.ok(annual.includes('data-archive="m1"'));
  assert.ok(!h.get('#institutional-list-0').innerHTML.includes('Relatório m1'));
  h.respond(0);await settle();h.respond(3,[{...makeItem('m1'),observations}]);await settle();
+});
+
+
+test('Arquivo Morto institucional funciona nas quatro origens e preserva o acompanhamento',async()=>{
+ for(const origin of ['INBOX','C','Y','A']){
+  const h=harness();
+  h.messages.get('m1').labelIds=[origin,'UNREAD','CUSTOM'];
+  await h.store.saveInstitutionalDemand('owner-a','m1',{mailbox:'school@example.com',dueDate:'2026-11-20',observations:'Revisar anualmente'},0);
+  const body={type:'general',mailbox:'school@example.com',messageId:'m1',operation:'dead-archive'};
+  const move=()=>h.run({action:'institutional-move',body});
+  await move();
+  assert.deepEqual(h.messages.get('m1').labelIds,['UNREAD','CUSTOM','M']);
+  assert.equal(h.rows.get('owner-a.m1').observations,'Revisar anualmente');
+  await move();
+  assert.equal(h.calls.filter(call=>call.method==='POST').length,1);
+  for(let column=0;column<4;column++)assert.ok(!(await h.run({query:{column}})).items.some(item=>item.id==='m1'));
+ }
+});
+
+test('Arquivo Morto aparece nas quatro listas e remove o cartão só após sucesso',async()=>{
+ const h=ui();h.app.connectionChanged({email:'school@example.com',gmail:true,manageInstitutional:true});h.app.mount(h.root);
+ for(let i=0;i<4;i++)h.respond(i,[makeItem('m1')]);await settle();
+ for(let i=0;i<4;i++)assert.equal(h.get('#institutional-list-'+i).querySelectorAll('[data-dead-archive]').length,1);
+ const list=h.get('#institutional-list-2');
+ list.querySelectorAll('[data-dead-archive]')[0].listeners.click();
+ const req=h.requests.at(-1);
+ assert.equal(JSON.parse(req.options.body).operation,'dead-archive');
+ assert.ok(list.innerHTML.includes('Relatório m1'));
+ req.resolve({ok:true,json:async()=>({mailbox:'school@example.com',messageId:'m1',operation:'dead-archive'})});await settle();
+ for(const i of [0,1,3,2]){assert.ok(!h.get('#institutional-list-'+i).innerHTML.includes('Relatório m1'));h.respond(i);await settle();}
+ assert.match(h.get('#institutional-feedback').textContent,/movida para o Arquivo Morto/);
 });

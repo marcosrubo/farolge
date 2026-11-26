@@ -190,20 +190,20 @@ test('fluxos OAuth Geral e Pessoal podem ficar pendentes simultaneamente',async(
  assert.equal(data.connections.personal.email,'marcos.rubo@gmail.com');
 });
 
-test('Pessoal cria somente as quatro labels ausentes e reconectar não duplica',async()=>{
+test('Pessoal cria somente os marcadores ausentes e reconectar não duplica',async()=>{
  const h=harness();h.labels.set('marcos.rubo@gmail.com',new Set(['Outra',PERSONAL_LABELS[0]]));
  const first=await h.login('marcos.rubo@gmail.com');
  assert.match(first.response.headers.location,/connected/);
  assert.deepEqual([...h.labels.get('marcos.rubo@gmail.com')].sort(),['Outra',...PERSONAL_LABELS].sort());
  assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),PERSONAL_LABELS.slice(1));
  const second=await h.login('marcos.rubo@gmail.com',first.cookie);
- assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,3);
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,PERSONAL_LABELS.length-1);
  assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.personal.labels,'ready');
  h.labels.get('marcos.rubo@gmail.com').delete(PERSONAL_LABELS[0]);
  assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.personal.labels,'missing');
- assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,3,'status must never create');
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,PERSONAL_LABELS.length-1,'status must never create');
 });
-test('Geral prepara somente seus dois marcadores e Pessoal mantém os próprios',async()=>{
+test('Geral prepara somente seus marcadores e Pessoal mantém os próprios',async()=>{
  const h=harness(),general=await h.login('marcos.rubo@gmail.com','','general');
  assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),GENERAL_LABELS);
  const writes=h.labelRequests.filter(r=>r.method==='POST').length;
@@ -226,11 +226,11 @@ test('falha nas labels não perde conexão e nova autorização completa o prepa
  h.failLabels(403);assert.equal((await h.request('status',{cookie:first.cookie})).json().connections.personal.labels,'unavailable');
  h.failLabels(null);const next=await h.login('marcos.rubo@gmail.com',first.cookie);
  assert.match(next.response.headers.location,/connected/);
- assert.equal(h.labels.get('marcos.rubo@gmail.com').size,4);
+ assert.equal(h.labels.get('marcos.rubo@gmail.com').size,PERSONAL_LABELS.length);
 });
 test('criação concorrente aceita conflito apenas após confirmar o nome existente',async()=>{
  const h=harness();h.raceLabels();const account=await h.login();
- assert.match(account.response.headers.location,/connected/);assert.equal(h.labels.get('marcos.rubo@gmail.com').size,4);
+ assert.match(account.response.headers.location,/connected/);assert.equal(h.labels.get('marcos.rubo@gmail.com').size,PERSONAL_LABELS.length);
  const bad=harness();bad.failLabels(400,'POST');const failed=await bad.login();
  assert.match(failed.response.headers.location,/partial/);assert.equal(bad.labels.get('marcos.rubo@gmail.com').size,0);
 });
@@ -238,7 +238,7 @@ test('identidade inválida nunca cria labels e desconectar não apaga marcadores
  const bad=harness();bad.setIdentity({email_verified:false});await bad.login();assert.equal(bad.labelRequests.length,0);
  const h=harness(),account=await h.login();
  await h.request('disconnect',{method:'POST',body:{type:'personal'},cookie:account.cookie});
- assert.equal(h.labels.get('marcos.rubo@gmail.com').size,4);
+ assert.equal(h.labels.get('marcos.rubo@gmail.com').size,PERSONAL_LABELS.length);
  assert.ok(h.labelRequests.every(r=>['GET','POST'].includes(r.method)));
 });
 
@@ -308,11 +308,11 @@ test('Institucionais exige as duas sessões Google, permissão de leitura e caix
 test('GERAL cria somente ausentes, reconecta sem duplicar e status nunca cria',async()=>{
  const h=harness();h.labels.set('marcos.rubo@gmail.com',new Set(['Outra','GE_Classificadas','GE_Anuais']));
  const first=await h.login('marcos.rubo@gmail.com','','general');assert.match(first.response.headers.location,/connected/);
- assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['GE_Arquivadas']);
- const second=await h.login('marcos.rubo@gmail.com',first.cookie,'general');assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,1);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),['GE_Arquivadas','GE_ArquivoMorto_Geral']);
+ const second=await h.login('marcos.rubo@gmail.com',first.cookie,'general');assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,2);
  h.labels.get('marcos.rubo@gmail.com').delete('GE_Arquivadas');
  assert.equal((await h.request('status',{cookie:second.cookie})).json().connections.general.labels,'missing');
- assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,1);
+ assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,2);
 });
 test('GERAL sem modify mantém consulta e não cria marcadores; falha de preparação preserva conta',async()=>{
  const h=harness();h.setScopes(SCOPES.join(' '));const readonly=await h.login('marcos.rubo@gmail.com','','general');
@@ -387,8 +387,8 @@ test('status identifica os nomes ausentes e preparação informa recusa sem deta
 });
 
 test('nomes definidos por conexão permanecem separados na mesma conta após apagar marcadores',async()=>{
- assert.deepEqual(PERSONAL_LABELS,['GE_ME DEVEM','GE_MINHAS','GE_DEVO','GE_Despachadas']);
- assert.deepEqual(GENERAL_LABELS,['GE_Classificadas','GE_Arquivadas','GE_Anuais']);
+ assert.deepEqual(PERSONAL_LABELS,['GE_ME DEVEM','GE_MINHAS','GE_DEVO','GE_Despachadas','GE_ArquivoMorto_Pessoal']);
+ assert.deepEqual(GENERAL_LABELS,['GE_Classificadas','GE_Arquivadas','GE_Anuais','GE_ArquivoMorto_Geral']);
  const h=harness(),email=GENERAL_EMAIL;
  const personal=await h.login(email),general=await h.login(email,personal.cookie,'general');
  assert.deepEqual([...h.labels.get(email)].sort(),[...PERSONAL_LABELS,...GENERAL_LABELS].sort());
@@ -397,10 +397,10 @@ test('nomes definidos por conexão permanecem separados na mesma conta após apa
  assert.equal(status.connections.personal.labels,'missing');assert.equal(status.connections.general.labels,'missing');
  assert.equal(h.labelRequests.filter(r=>r.method==='POST').length,writes,'status must not recreate labels');
  const nextPersonal=await h.login(email,personal.cookie+'; '+general.cookie);
- assert.deepEqual([...h.labels.get(email)],PERSONAL_LABELS,'Pessoal recreates only its four labels');
+ assert.deepEqual([...h.labels.get(email)],PERSONAL_LABELS,'Pessoal recreates only its own labels');
  assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').slice(writes).map(r=>r.data.name),PERSONAL_LABELS);
  const nextGeneral=await h.login(email,nextPersonal.cookie+'; '+general.cookie,'general');
- assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').slice(writes+4).map(r=>r.data.name),GENERAL_LABELS);
+ assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').slice(writes+PERSONAL_LABELS.length).map(r=>r.data.name),GENERAL_LABELS);
  const complete=(await h.request('status',{cookie:nextPersonal.cookie+'; '+nextGeneral.cookie})).json();
  assert.equal(complete.connections.personal.labels,'ready');assert.equal(complete.connections.general.labels,'ready');
  const finalWrites=h.labelRequests.filter(r=>r.method==='POST');
@@ -412,7 +412,7 @@ test('falha em um marcador GERAL não impede tentar GE_Arquivadas e reconexão c
  const h=harness();h.failLabels(400,'POST','GE_Classificadas');
  const first=await h.login('marcos.rubo@gmail.com','','general');
  assert.match(first.response.headers.location,/partial/);
- assert.deepEqual([...h.labels.get('marcos.rubo@gmail.com')],['GE_Arquivadas','GE_Anuais']);
+ assert.deepEqual([...h.labels.get('marcos.rubo@gmail.com')],['GE_Arquivadas','GE_Anuais','GE_ArquivoMorto_Geral']);
  assert.deepEqual(h.labelRequests.filter(r=>r.method==='POST').map(r=>r.data.name),GENERAL_LABELS);
  h.failLabels(null);const next=await h.login('marcos.rubo@gmail.com',first.cookie,'general');
  assert.match(next.response.headers.location,/connected/);
@@ -543,8 +543,9 @@ test('contas Workspace @escola conectam nas duas opções com autorização apen
  assert.equal(data.connections.personal.labels,'pending_policy');
  assert.deepEqual(data.modules,['bi-seed']);
  assert.equal(h.labelRequests.length,writesBefore);
- assert.ok(h.labelRequests.every(item=>[GENERAL_EMAIL,firstEmail].includes(item.email)));
- assert.deepEqual(h.labelRequests.filter(item=>item.email===firstEmail&&item.method==='POST').map(item=>item.data.name),['GE_Anuais']);
+ assert.ok(h.labelRequests.every(item=>[GENERAL_EMAIL,firstEmail,secondEmail].includes(item.email)));
+ assert.deepEqual(h.labelRequests.filter(item=>item.email===firstEmail&&item.method==='POST').map(item=>item.data.name),['GE_Anuais','GE_ArquivoMorto_Geral']);
+ assert.deepEqual(h.labelRequests.filter(item=>item.email===secondEmail&&item.method==='POST').map(item=>item.data.name),['GE_ArquivoMorto_Pessoal']);
  for(const action of ['overview','maintenance','authorized-emails','institutional','board'])
   assert.equal((await h.request(action,{cookie,query:'?mailbox='+GENERAL_EMAIL+'&type=general'})).status,403);
  assert.equal((await h.request('status',{cookie:admin.general.cookie+'; '+personal.cookie})).json().modules.length,1);
@@ -1108,4 +1109,17 @@ test('Visão GERAL usa cada conta ativa para seu total, preservando a fonte esco
  assert.equal((await h.request('occurrences',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
  profile.permissions=['institucionais'];
  assert.equal((await totals('general',schoolEmail)).status,403);
+});
+
+
+test('rota de Arquivo Morto pessoal exige POST, mesma origem e o módulo Pessoal',async()=>{
+ const h=harness(),admin=await h.admin();
+ const body={type:'personal',mailbox:GENERAL_EMAIL,messageId:'message1'};
+ assert.equal((await h.request('personal-archive',{cookie:admin.cookie})).status,405);
+ assert.equal((await h.request('personal-archive',{method:'POST',body,cookie:admin.cookie,origin:'https://other.example'})).status,403);
+ assert.equal((await h.request('personal-archive',{method:'POST',body,cookie:admin.general.cookie})).status,403);
+ h.labels.get(GENERAL_EMAIL).delete('GE_ArquivoMorto_Pessoal');
+ const result=await h.request('personal-archive',{method:'POST',body,cookie:admin.cookie});
+ assert.equal(result.status,409);
+ assert.equal(result.json().error,'archive_label_missing');
 });

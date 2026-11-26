@@ -21,7 +21,7 @@ const {OAuth2Client} = require('google-auth-library');
 const READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 const MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 const LABEL_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
-const {PERSONAL_LABELS,GENERAL_LABELS,ANNUAL_LABEL}=require('./mailbox-labels.cjs');
+const {PERSONAL_LABELS,GENERAL_LABELS,ANNUAL_LABEL,GENERAL_ARCHIVE_LABEL,PERSONAL_ARCHIVE_LABEL}=require('./mailbox-labels.cjs');
 const LABEL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/labels';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
@@ -30,7 +30,7 @@ const SCHOOL_DOMAIN='escola.pr.gov.br';
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
 const ROUTES = new Set(['inicio','analise-faltas','radar','institucionais','pessoais','bi-seed','inspetores-monitores','manutencao-sistema','configuracoes']);
 const TYPES = ['general','personal'];
-const personalActions=new Set(['board','thread','demand','inbox','classified','classify']);
+const personalActions=new Set(['board','thread','demand','inbox','classified','classify','personal-archive']);
 const driveReadActions=new Set(['student-import','attendance-import']);
 const driveMetadataActions=new Set(['maintenance','student-files','attendance-files']);
 const schoolActions=new Set(['students','occurrence','occurrences','inspector-occurrences','attendance-analysis']);
@@ -280,7 +280,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     const temporaryPublic=['temporary-users','temporary-user','temporary-login','temporary-activate','temporary-password','temporary-logout'];
     if(!['status','access-denied','start','callback','disconnect','logout',...temporaryPublic].includes(action)
       &&!actionModules.has(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','institutional-move','institutional-labels','occurrence','occurrence-delete','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
+    const expected=['start','disconnect','logout','demand','classify','personal-archive','institutional-move','institutional-labels','occurrence','occurrence-delete','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{
       configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured',
@@ -525,7 +525,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         } catch(error) {
           if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||actionMailbox(action)});
           if(['access_setup_required','access_unavailable'].includes(error.message))return reply(503,{error:error.message});
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit','invalid_temporary_user','temporary_activation_unavailable','temporary_reset_unavailable','temporary_password_length','temporary_password_confirmation'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','invalid_archive','archive_label_missing','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit','invalid_temporary_user','temporary_activation_unavailable','temporary_reset_unavailable','temporary_password_length','temporary_password_confirmation'];
           if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
@@ -539,9 +539,10 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             }
             return reply(503,{error:'unavailable'});
           }
-          const failure=action.startsWith('institutional')?gmailFailure(error):null;
-          if(failure)return reply(failure.status,{error:failure.code==='missing_scope'&&action==='institutional-move'?'institutional_scope':failure.code});
-          if(error.response?.status===403)return reply(403,{error:action==='classify'?'classify_scope':action==='institutional-move'?'institutional_scope':'missing_scope'});
+          const failure=(action.startsWith('institutional')||action==='personal-archive')?gmailFailure(error):null;
+          const scopeError={classify:'classify_scope','personal-archive':'classify_scope','institutional-move':'institutional_scope'}[action]||'missing_scope';
+          if(failure)return reply(failure.status,{error:failure.code==='missing_scope'?scopeError:failure.code});
+          if(error.response?.status===403)return reply(403,{error:scopeError});
           if(error.response?.status===404)return reply(404,{error:'not_found'});
           return reply(503,{error:'unavailable'});
         }
@@ -613,9 +614,9 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const general=type==='personal'&&!isAdminMailbox&&!allowsModule(registered,'pessoais')?await verifiedConnection('general'):null;
           const generalProfile=general?await store.getRegisteredUser(general.user.email):null;
           const expectedLabels=type==='general'
-            ?isAdminMailbox||allowsModule(registered,'institucionais')?GENERAL_LABELS:[ANNUAL_LABEL]
-            :isAdminMailbox||allowsModule(registered,'pessoais')||allowsModule(generalProfile,'pessoais')?PERSONAL_LABELS:null;
-          const labels=expectedLabels?await mailboxLabels(client,labelsAllowed,true,expectedLabels):null;
+            ?isAdminMailbox||allowsModule(registered,'institucionais')?GENERAL_LABELS:[ANNUAL_LABEL,GENERAL_ARCHIVE_LABEL]
+            :isAdminMailbox||allowsModule(registered,'pessoais')||allowsModule(generalProfile,'pessoais')?PERSONAL_LABELS:[PERSONAL_ARCHIVE_LABEL];
+          const labels=await mailboxLabels(client,labelsAllowed,true,expectedLabels);
           await saveConnection(owner,type,{email,capabilities,labelsAllowed,credentials:credentialsOf(client)});
           const id=random(),expiresAt=Date.now()+TTL*1000;
           await store.put(accountKey(type,id),{version:3,type,user:{id:owner,email},hostedDomain:identity.hd,auth:{accessToken:session.access_token,refreshToken:session.refresh_token,expiresAt:Date.now()+session.expires_in*1000},expiresAt},expiresAt);
@@ -625,7 +626,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           setCookie(res,'__Host-farol-portal','',0);
           const ready=capabilities.gmail&&capabilities.drive
             &&(type==='personal'?capabilities.classify:(capabilities.manageInstitutional&&capabilities.driveMetadata&&capabilities.driveRead))
-            &&(!expectedLabels||labels==='ready');
+            &&labels==='ready';
           return finish(flow.route,type,ready?'connected':'partial');
         } catch(error) {
           return finish(flow.route,type,['wrong_account','login_required','invalid_state','access_setup_required','access_unavailable'].includes(error.message)?error.message:'failed');

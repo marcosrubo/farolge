@@ -547,3 +547,12 @@ Publicar com a Política de Privacidade revisão 36. Sem migração SQL, escopo 
 Em uma sessão Google com Visão GERAL habilitada, o quadro **E-mails da ESCOLA** usa a conta conectada como Geral e o quadro **E-mails PESSOAIS** usa a conta conectada como Pessoal. Se não houver uma Geral ativa, permanece disponível a fonte escolar configurada para o acesso autorizado. Uma falha ao verificar a Geral ativa é sinalizada sem substituí-la por outra caixa. A Conexão temporária mantém sua fonte escolar, assim como o quadro de ocorrências.
 
 O quadro da escola mostra **Caixa de Entrada**, **Classificadas**, **Anuais** e **Arquivadas**. O total de Anuais vem de `messagesTotal` para `GE_Anuais`, da mesma conta Geral que fornece os demais indicadores. Marcadores ausentes aparecem com traço. Publicar com a política de privacidade revisão 37. Sem novo SQL, variável ou escopo.
+
+## Arquivo Morto nas demandas (26/11/2026)
+
+Ao conectar ou revisar a autorização, a Geral verifica `GE_ArquivoMorto_Geral` e a Pessoal verifica `GE_ArquivoMorto_Pessoal`. Cada conexão cria seu marcador somente quando ele está ausente e a permissão Gmail correspondente foi concedida. **Preparar marcadores** também prepara o Arquivo Morto da caixa usada por Demandas INSTITUCIONAIS. Consultar status e abrir as listas são operações de leitura.
+
+- **Demandas INSTITUCIONAIS:** **Arquivo Morto** aparece na Caixa de Entrada, em Classificadas, Anuais e Arquivadas. Aplica `GE_ArquivoMorto_Geral` e retira os marcadores dessas quatro listas da mensagem escolhida.
+- **Demandas PESSOAIS:** **Arquivo Morto** aparece em ME DEVEM, MINHAS, DEVO, Caixa de entrada e Despachadas. Nas três categorias, o botão abre a conversa para escolher a mensagem. Aplica `GE_ArquivoMorto_Pessoal` e retira INBOX, Despachadas e as três categorias da mensagem escolhida. As demais mensagens mantêm suas etiquetas.
+
+Os e-mails movidos ficam disponíveis no marcador correspondente no Gmail. As duas operações preservam o estado de leitura, os demais marcadores e os dados de acompanhamento no FAROL. Usam as permissões e fontes de caixa já definidas por módulo. Publicar com a Política de Privacidade revisão 40. Sem alteração de SQL, escopos ou variáveis. Na Vercel, usar **Revisar autorização** nas conexões já abertas e conferir o destino de uma mensagem de teste de cada lista no Gmail.

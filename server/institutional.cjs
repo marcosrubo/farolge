@@ -1,6 +1,6 @@
 'use strict';
 const {plainText,validDate}=require('./demands.cjs');
-const {GENERAL_LABELS}=require('./mailbox-labels.cjs');
+const {GENERAL_FOLDERS,GENERAL_ARCHIVE_LABEL}=require('./mailbox-labels.cjs');
 const {readGmail}=require('./gmail-errors.cjs');
 const BASE='https://gmail.googleapis.com/gmail/v1/users/me';
 const validId=value=>typeof value==='string'&&/^[\w-]{1,128}$/.test(value);
@@ -76,15 +76,16 @@ function extractActivities(text,subject,receivedAt){
   return activities.length?activities:[{activity:subject||'(Sem assunto)',dueDate:null,evidence:'',review:'Prazo não identificado no texto disponível.'}];
 }
 // Keep existing column IDs stable for clients with a previous release cached.
-const FOLDERS=['INBOX',...GENERAL_LABELS];
+const FOLDERS=['INBOX',...GENERAL_FOLDERS];
 async function handleInstitutional({action='institutional',url,body={},client,store,owner,email,canModify=false}){
   const moving=action==='institutional-move';
+  const deadArchive=body.operation==='dead-archive';
   const annual=body.operation==='annual',classifying=body.operation==='classify';
   const observations=typeof body.observations==='string'?body.observations.trim():'';
   if((moving?body.mailbox:url.searchParams.get('mailbox'))!==email)fail('account_changed',409);
   const request=async path=>(await readGmail(client,{url:BASE+path,timeout:10000})).data;
   if(moving){
-    if(body.type!=='general'||!validId(body.messageId)||!['classify','annual','archive'].includes(body.operation)||Object.keys(body).some(key=>!['type','mailbox','messageId','operation','dueDate','version',...(annual?['observations']:[])].includes(key)))fail('invalid_institutional',400);
+    if(body.type!=='general'||!validId(body.messageId)||!['classify','annual','archive','dead-archive'].includes(body.operation)||Object.keys(body).some(key=>!['type','mailbox','messageId','operation',...(!deadArchive?['dueDate','version']:[]),...(annual?['observations']:[])].includes(key)))fail('invalid_institutional',400);
     if((classifying||annual)&&(!Number.isSafeInteger(body.version)||body.version<0))fail('invalid_institutional',400);
     if(classifying&&(!body.dueDate||!validDate(body.dueDate)))fail('invalid_institutional',400);
     if(annual&&(!observations||body.observations.length>4000))fail('invalid_institutional',400);
@@ -95,16 +96,19 @@ async function handleInstitutional({action='institutional',url,body={},client,st
   if(!moving&&(!/^[0-3]$/.test(url.searchParams.get('column')||'0')))fail('invalid_column',400);
   if(!moving&&page.length>2048)fail('invalid_page',400);
   const {labels=[]}=await request('/labels');
+  const archiveId=labels.find(label=>label.name===GENERAL_ARCHIVE_LABEL)?.id;
   const ids=FOLDERS.map((name,i)=>i===0?'INBOX':labels.find(label=>label.name===name)?.id||null);
   if(moving){
     const [inbox,classified,archived,annualLabel]=ids;
-    if(!classified||!archived||(annual&&!annualLabel))fail('labels_missing',409);
+    if(deadArchive&&!archiveId)fail('archive_label_missing',409);
+    if(!deadArchive&&(!classified||!archived||(annual&&!annualLabel)))fail('labels_missing',409);
     const id=body.messageId;
     let message=await request('/messages/'+id+'?format=metadata');
     if(message?.id!==id)fail('invalid_provider',502);
     const eligible=m=>{
       const current=m.labelIds||[];
       if(current.some(l=>['SPAM','TRASH','DRAFT'].includes(l)))return false;
+      if(current.includes(archiveId))return deadArchive;
       if(annual)return current.includes(inbox)&&![classified,archived,annualLabel].some(l=>current.includes(l));
       if(classifying)return ![archived,annualLabel].some(l=>current.includes(l))&&[inbox,classified].some(l=>current.includes(l));
       return ids.some(l=>l&&current.includes(l));
@@ -125,9 +129,12 @@ async function handleInstitutional({action='institutional',url,body={},client,st
       message=await request('/messages/'+id+'?format=metadata');
       if(message?.id!==id||!eligible(message))fail('not_inbox',409);
     }
-    const target=annual?annualLabel:classifying?classified:archived;
-    const remove=annual||classifying?[inbox]:[inbox,classified,annualLabel].filter(Boolean);
-    const {data:result}=await client.request({url:BASE+'/messages/'+id+'/modify',method:'POST',data:{addLabelIds:[target],removeLabelIds:remove},timeout:10000});
+    const target=deadArchive?archiveId:annual?annualLabel:classifying?classified:archived;
+    const remove=deadArchive?ids.filter(Boolean):annual||classifying?[inbox]:[inbox,classified,annualLabel].filter(Boolean);
+    let result=message;
+    if(!deadArchive||!message.labelIds?.includes(target)||remove.some(label=>message.labelIds?.includes(label))){
+      ({data:result}=await client.request({url:BASE+'/messages/'+id+'/modify',method:'POST',data:{addLabelIds:[target],removeLabelIds:remove},timeout:10000,...(deadArchive?{retry:false}:{})}));
+    }
     if(result?.id!==id||!(result.labelIds||[]).includes(target)||remove.some(l=>(result.labelIds||[]).includes(l)))fail('classification_unconfirmed',502);
     return {mailbox:email,messageId:id,operation:body.operation,demand:saved?{dueDate:saved.dueDate,observations:saved.observations||null,version:saved.version}:null};
   }
@@ -163,7 +170,7 @@ async function handleInstitutional({action='institutional',url,body={},client,st
         const message=await request('/messages/'+id+'?format=full');
         if(message.id!==id||!validId(message.threadId))fail('invalid_provider',502);
         const labels=message.labelIds||[];
-        if(!labels.includes(ids[column])||labels.some(l=>['TRASH','SPAM','DRAFT'].includes(l)))continue;
+        if(!labels.includes(ids[column])||labels.some(l=>['TRASH','SPAM','DRAFT',archiveId].includes(l)))continue;
         const headers=Object.fromEntries((message.payload?.headers||[]).map(h=>[h.name.toLowerCase(),String(h.value||'')]));
         const subject=headers.subject||'(Sem assunto)',date=Number(message.internalDate)||0;
         const text=plainText(message.payload)||htmlText(message.payload),demand=demands.get(id);
@@ -173,6 +180,6 @@ async function handleInstitutional({action='institutional',url,body={},client,st
   }));
   const result=items.filter(Boolean);
   if(column!==1)result.sort((a,b)=>b.date-a.date||a.id.localeCompare(b.id));
-  return {mailbox:email,column,items:result,nextPage,canModify,missingLabels:!ids[1]||!ids[2]};
+  return {mailbox:email,column,items:result,nextPage,canModify,missingLabels:!ids[1]||!ids[2],archiveMissing:!archiveId};
 }
 module.exports={handleInstitutional,extractActivities,htmlText,currentText,FOLDERS};

@@ -11,7 +11,7 @@ const actionModules=new Map([
   ['overview','inicio'],['occurrences','inicio'],['attendance-analysis','radar'],
   ...['maintenance','student-files','student-import','attendance-files','attendance-import'].map(action=>[action,'manutencao-sistema']),
   ...['institutional','institutional-move','institutional-labels'].map(action=>[action,'institucionais']),
-  ...['board','thread','demand','inbox','classified','classify'].map(action=>[action,'pessoais']),
+  ...['board','thread','demand','inbox','classified','classify','personal-archive'].map(action=>[action,'pessoais']),
   ...[...settingsActions].map(action=>[action,'configuracoes'])
 ]);
 

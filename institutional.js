@@ -7,7 +7,7 @@ window.FarolInstitutional=(()=>{
   const day=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const displayDate=value=>value.split('-').reverse().join('/');
   const received=value=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(value));
-  const errors={gmail_rate_limit:'O Google limitou temporariamente as consultas. Aguarde e use Atualizar quadro.',gmail_domain_policy:'A organização bloqueou o acesso do aplicativo ao Gmail. Consulte a administração da conta.',login_required:'Conecte novamente a conta GERAL.',missing_scope:'Use GERAL → Revisar autorização para permitir a consulta ao Gmail.',institutional_scope:'Use GERAL → Revisar autorização para movimentar as demandas.',labels_missing:'Clique em Preparar marcadores para verificar e criar os ausentes GE_Classificadas, GE_Anuais e GE_Arquivadas.',setup_required:'Execute database/institutional-demands.sql no Supabase exclusivo FAROL GE para preparar os registros institucionais.',account_changed:'A conta GERAL mudou. Atualize o quadro.',invalid_page:'Atualize o quadro para reiniciar a paginação.',conflict:'O registro foi alterado em outra janela. Atualize o quadro antes de tentar novamente.',not_inbox:'A mensagem foi movida ou não está mais disponível para esta operação. Atualize o quadro.',invalid_institutional:'Confira a data limite ou as observações antes de confirmar.',classification_unconfirmed:'O Gmail não confirmou a movimentação. Atualize o quadro antes de tentar novamente.',listing_limit:'Classificadas excede o limite de 10 mil mensagens. A ordenação completa não pôde ser feita.',unavailable:'Não foi possível concluir a operação. O prazo ou as observações podem ter sido salvos antes da movimentação. Atualize para conferir e tente novamente.'};
+  const errors={gmail_rate_limit:'O Google limitou temporariamente as consultas. Aguarde e use Atualizar quadro.',gmail_domain_policy:'A organização bloqueou o acesso do aplicativo ao Gmail. Consulte a administração da conta.',login_required:'Conecte novamente a conta GERAL.',missing_scope:'Use GERAL → Revisar autorização para permitir a consulta ao Gmail.',institutional_scope:'Use GERAL → Revisar autorização para movimentar as demandas.',archive_label_missing:'Use Preparar marcadores para criar GE_ArquivoMorto_Geral.',labels_missing:'Clique em Preparar marcadores para verificar e criar os ausentes GE_Classificadas, GE_Anuais e GE_Arquivadas.',setup_required:'Execute database/institutional-demands.sql no Supabase exclusivo FAROL GE para preparar os registros institucionais.',account_changed:'A conta GERAL mudou. Atualize o quadro.',invalid_page:'Atualize o quadro para reiniciar a paginação.',conflict:'O registro foi alterado em outra janela. Atualize o quadro antes de tentar novamente.',not_inbox:'A mensagem foi movida ou não está mais disponível para esta operação. Atualize o quadro.',invalid_institutional:'Confira a data limite ou as observações antes de confirmar.',classification_unconfirmed:'O Gmail não confirmou a movimentação. Atualize o quadro antes de tentar novamente.',listing_limit:'Classificadas excede o limite de 10 mil mensagens. A ordenação completa não pôde ser feita.',unavailable:'Não foi possível concluir a operação. O prazo ou as observações podem ter sido salvos antes da movimentação. Atualize para conferir e tente novamente.'};
   let root=null,connection=null,columns=[],moving=false,feedback='',search='',epoch=0,drafts=new Map(),annualDrafts=new Map(),annualMessageId=null;
   function reset(){
     ++epoch;
@@ -35,14 +35,15 @@ window.FarolInstitutional=(()=>{
     const suggestions=m.activities.filter(a=>a.evidence);
     const notes=m.observations?`<details open><summary>Observações da demanda anual</summary><p class="institutional-observations">${escape(m.observations)}</p></details>`:'';
     const annualDisabled=disabled||columns[annualColumn].missingLabels;
-    return `<article class="demand-card institutional-card ${m.unread?'is-unread':''}"><div class="institutional-card-content"><span class="deadline ${!due?'none':due<today?'late':due===today?'today':''}">${escape(status)}</span><h3>${escape(m.subject)}</h3><p class="demand-person">${escape(m.from)}</p><p class="demand-card-meta">${escape(received(m.date))}${m.unread?' · Não lida':''}</p>${suggestions.length?`<details><summary>Atividades e possíveis prazos</summary>${suggestions.map(a=>`<blockquote class="institutional-evidence">${escape(a.evidence)}</blockquote><p class="demand-footnote">${a.dueDate?'Possível prazo: '+escape(displayDate(a.dueDate))+'. ':''}${escape(a.review||'Confira o trecho antes de definir a data limite.')}</p>`).join('')}</details>`:'<p class="demand-footnote">Prazo não identificado no texto.</p>'}${m.limitedText?'<p class="demand-footnote">Texto indisponível ou limitado. Confira o conteúdo e os anexos no Gmail.</p>':''}${notes}<a href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connection.email)}#all/${encodeURIComponent(m.threadId)}" target="_blank" rel="noopener noreferrer">Abrir no Gmail</a></div>${index===0?`<form class="institutional-classify" data-classify-form="${escape(m.id)}"><label>Data limite para execução<input type="date" required min="1900-01-01" max="9999-12-31" data-due="${escape(m.id)}" aria-label="Data limite para ${escape(m.subject)}" value="${escape(drafts.get(m.id)??m.dueDate??'')}" ${disabled?'disabled':''}></label><button class="button" ${disabled?'disabled':''}>Classificar</button></form>`:''}${index!==2?`<div class="demand-card-bottom">${index===0?`<label class="institutional-annual-check"><input type="checkbox" data-annual="${escape(m.id)}" ${annualDisabled?'disabled':''}> Demanda ANUAL</label>`:''}<button class="button" type="button" data-archive="${escape(m.id)}" ${disabled?'disabled':''}>Arquivar</button></div>`:''}</article>`;
+    const archiveDisabled=moving||columns.some(c=>c.busy)||!connection?.manageInstitutional||Boolean(columns[index].error);
+    return `<article class="demand-card institutional-card ${m.unread?'is-unread':''}"><div class="institutional-card-content"><span class="deadline ${!due?'none':due<today?'late':due===today?'today':''}">${escape(status)}</span><h3>${escape(m.subject)}</h3><p class="demand-person">${escape(m.from)}</p><p class="demand-card-meta">${escape(received(m.date))}${m.unread?' · Não lida':''}</p>${suggestions.length?`<details><summary>Atividades e possíveis prazos</summary>${suggestions.map(a=>`<blockquote class="institutional-evidence">${escape(a.evidence)}</blockquote><p class="demand-footnote">${a.dueDate?'Possível prazo: '+escape(displayDate(a.dueDate))+'. ':''}${escape(a.review||'Confira o trecho antes de definir a data limite.')}</p>`).join('')}</details>`:'<p class="demand-footnote">Prazo não identificado no texto.</p>'}${m.limitedText?'<p class="demand-footnote">Texto indisponível ou limitado. Confira o conteúdo e os anexos no Gmail.</p>':''}${notes}<a href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connection.email)}#all/${encodeURIComponent(m.threadId)}" target="_blank" rel="noopener noreferrer">Abrir no Gmail</a></div>${index===0?`<form class="institutional-classify" data-classify-form="${escape(m.id)}"><label>Data limite para execução<input type="date" required min="1900-01-01" max="9999-12-31" data-due="${escape(m.id)}" aria-label="Data limite para ${escape(m.subject)}" value="${escape(drafts.get(m.id)??m.dueDate??'')}" ${disabled?'disabled':''}></label><button class="button" ${disabled?'disabled':''}>Classificar</button></form>`:''}<div class="demand-card-bottom">${index===0?`<label class="institutional-annual-check"><input type="checkbox" data-annual="${escape(m.id)}" ${annualDisabled?'disabled':''}> Demanda ANUAL</label>`:''}${index!==2?`<button class="button" type="button" data-archive="${escape(m.id)}" ${disabled?'disabled':''}>Arquivar</button>`:''}<button class="button" type="button" data-dead-archive="${escape(m.id)}" ${archiveDisabled?'disabled':''}>Arquivo Morto</button></div></article>`;
   }
   function draw(){
     if(!root)return;
     root.querySelector('#institutional-feedback').textContent=feedback||(!connection?.gmail?'Conecte a conta GERAL para consultar os e-mails.':!connection.manageInstitutional?'Para movimentar demandas, use GERAL → Revisar autorização.':'');
     root.querySelector('#institutional-refresh').disabled=moving||columns.some(c=>c.busy)||!connection?.gmail;
     const prepare=root.querySelector('#institutional-prepare');
-    prepare.hidden=!connection?.gmail||!connection.manageInstitutional||(connection.labels==='ready'&&!columns.some(c=>c.missingLabels));
+    prepare.hidden=!connection?.gmail||!connection.manageInstitutional||(connection.labels==='ready'&&!columns.some(c=>c.missingLabels||c.archiveMissing));
     prepare.disabled=moving||columns.some(c=>c.busy);
     columns.forEach((state,index)=>{
       const items=shown(index);
@@ -65,6 +66,7 @@ window.FarolInstitutional=(()=>{
         root.querySelector('#institutional-annual-dialog').showModal();
       }));
       list.querySelectorAll('[data-archive]').forEach(button=>button.addEventListener('click',()=>move(button.dataset.archive,index,'archive')));
+      list.querySelectorAll('[data-dead-archive]').forEach(button=>button.addEventListener('click',()=>move(button.dataset.deadArchive,index,'dead-archive')));
       const more=root.querySelector('#institutional-more-'+index);more.hidden=!state.nextPage;more.disabled=moving||state.busy||!connection?.gmail||Boolean(state.error);
     });
   }
@@ -78,7 +80,7 @@ window.FarolInstitutional=(()=>{
       const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==epoch)return;if(result.mailbox!==mailbox||result.column!==index)throw new Error('account_changed');
       state.items=[...new Map([...(append?state.items:[]),...result.items].map(item=>[item.id,item])).values()];
-      state.nextPage=result.nextPage;state.loaded=true;state.missingLabels=result.missingLabels;
+      state.nextPage=result.nextPage;state.loaded=true;state.missingLabels=result.missingLabels;state.archiveMissing=result.archiveMissing;
     }catch(cause){if(ticket===epoch){
       if(cause.message==='account_changed'||cause.message==='login_required'){reset();connection=null;draw();return;}
       state.error=cause.message;
@@ -93,13 +95,13 @@ window.FarolInstitutional=(()=>{
       const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==epoch)return;if(result.mailbox!==mailbox)throw new Error('account_changed');
       if(result.labels!=='ready'){
-        const reasons={permission_denied:'O Google recusou a criação. Revise a autorização da GERAL.',name_rejected:'O Google recusou um nome de marcador. Confira no Gmail os nomes GE_Classificadas, GE_Anuais e GE_Arquivadas.',provider_unavailable:'Não foi possível confirmar os marcadores no Google. Tente novamente.'};
+        const reasons={permission_denied:'O Google recusou a criação. Revise a autorização da GERAL.',name_rejected:'O Google recusou um nome de marcador. Confira no Gmail os marcadores indicados.',provider_unavailable:'Não foi possível confirmar os marcadores no Google. Tente novamente.'};
         feedback=(reasons[result.labelDetails?.reason]||'Os marcadores ainda não foram confirmados.')+(result.labelDetails?.missing?.length?' Faltam confirmar: '+result.labelDetails.missing.join(', ')+'.':'');
         return;
       }
       connection={...connection,labels:'ready',labelDetails:result.labelDetails};moving=false;
       feedback='Marcadores institucionais confirmados. Atualizando o quadro…';await refresh();
-      if(ticket===epoch){feedback='Classificadas, Anuais e Arquivadas prontas.';window.dispatchEvent(new Event('farol-connections-refresh'));}
+      if(ticket===epoch){feedback='Marcadores institucionais prontos.';window.dispatchEvent(new Event('farol-connections-refresh'));}
     }catch(cause){if(ticket===epoch)feedback=errors[cause.message]||errors.unavailable;}
     finally{if(ticket===epoch){moving=false;draw();}}
   }
@@ -112,26 +114,32 @@ window.FarolInstitutional=(()=>{
   async function move(id,index,operation,value){
     if(moving||columns.some(c=>c.busy)||!connection?.manageInstitutional||columns[index].error)return;
     const message=columns[index].items.find(m=>m.id===id);if(!message)return;
-    const ticket=epoch,mailbox=connection.email;moving=true;feedback=operation==='classify'?'Salvando prazo e classificando…':operation==='annual'?'Salvando observações e movendo para Anuais…':'Arquivando…';draw();
+    const deadArchive=operation==='dead-archive';
+    const ticket=epoch,mailbox=connection.email;moving=true;feedback=deadArchive?'Movendo para o Arquivo Morto…':operation==='classify'?'Salvando prazo e classificando…':operation==='annual'?'Salvando observações e movendo para Anuais…':'Arquivando…';draw();
     try{
       const body={type:'general',mailbox,messageId:id,operation,...(operation==='classify'?{dueDate:value,version:message.version}:operation==='annual'?{observations:value,version:message.version}:{})};
       const response=await fetch('/api/google/institutional-move',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify(body)});
       const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==epoch)return;if(result.mailbox!==mailbox||result.messageId!==id||result.operation!==operation)throw new Error('account_changed');
-      feedback=operation==='classify'?'Data limite salva. E-mail movido para Classificadas.':operation==='annual'?'Observações salvas. Demanda movida para Anuais.':'Demanda movida para Arquivadas.';drafts.delete(id);annualDrafts.delete(id);
+      feedback=deadArchive?'Mensagem movida para o Arquivo Morto.':operation==='classify'?'Data limite salva. E-mail movido para Classificadas.':operation==='annual'?'Observações salvas. Demanda movida para Anuais.':'Demanda movida para Arquivadas.';drafts.delete(id);annualDrafts.delete(id);
       // Clear source rows immediately after confirmed success, even if refresh fails.
       for(const state of columns)state.items=state.items.filter(m=>m.id!==id);
       const target=operation==='classify'?1:operation==='annual'?annualColumn:2;
-      columns[target].items.push({...message,dueDate:result.demand?.dueDate||message.dueDate,observations:result.demand?.observations||message.observations,version:result.demand?.version||message.version});
-      columns[target].loaded=true;columns[target].missingLabels=false;
-      moving=false;draw();await refresh([...new Set([index,target])],true);
+      if(!deadArchive){
+        columns[target].items.push({...message,dueDate:result.demand?.dueDate||message.dueDate,observations:result.demand?.observations||message.observations,version:result.demand?.version||message.version});
+        columns[target].loaded=true;columns[target].missingLabels=false;
+      }
+      moving=false;draw();await refresh(deadArchive?columnOrder:[...new Set([index,target])],true);
       if(ticket===epoch&&columns.some(state=>state.error))feedback+=' A movimentação foi confirmada, mas uma lista não pôde ser atualizada; os dados anteriores foram mantidos.';
-    }catch(cause){if(ticket===epoch)feedback=errors[cause.message]||errors.unavailable;}
+    }catch(cause){if(ticket===epoch){
+      if(cause.message==='archive_label_missing')columns[index].archiveMissing=true;
+      feedback=(cause.message!=='unavailable'&&errors[cause.message])||(deadArchive?'Não foi possível confirmar a movimentação para o Arquivo Morto. Atualize o quadro para conferir.':errors.unavailable);
+    }}
     finally{if(ticket===epoch){moving=false;draw();}}
   }
   function mount(element){
     root=element;search='';reset();
-    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nos e-mails carregados<input id="institutional-search" type="search" placeholder="Assunto, remetente, trecho ou observação"></label><button class="button" id="institutional-refresh">Atualizar quadro</button><button class="button" id="institutional-prepare" hidden>Preparar marcadores</button></div><p class="demand-footnote">Defina uma data limite e clique em Classificar para mover da entrada para Classificadas. Marque Demanda ANUAL e informe as observações antes de mover para Anuais. Os prazos encontrados no texto são sugestões e não são salvos automaticamente. Arquivar move somente a mensagem escolhida para Arquivadas. As ações preservam os demais marcadores e o estado de leitura.</p><p class="demand-footnote">Entrada, Anuais e Arquivadas: mensagens mais recentes primeiro. Classificadas: data limite mais antiga primeiro, com ordenação de todas as mensagens do marcador antes da paginação; mensagens sem prazo salvo aparecem ao final. Páginas de 20 mensagens. Busca e contagens consideram os e-mails carregados. Calendário de Brasília.</p><p id="institutional-feedback" class="demand-notice" role="status"></p><div class="demand-columns institutional-columns">${columnOrder.map(index=>`<section class="demand-column"><h2>${titles[index]} <span id="institutional-count-${index}">0</span></h2><p class="demand-notice" role="status" id="institutional-status-${index}"></p><div class="demand-cards" id="institutional-list-${index}"></div><button class="button demand-more" id="institutional-more-${index}" hidden>Carregar mais</button></section>`).join('')}</div>
+    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nos e-mails carregados<input id="institutional-search" type="search" placeholder="Assunto, remetente, trecho ou observação"></label><button class="button" id="institutional-refresh">Atualizar quadro</button><button class="button" id="institutional-prepare" hidden>Preparar marcadores</button></div><p class="demand-footnote">Defina uma data limite e clique em Classificar para mover da entrada para Classificadas. Marque Demanda ANUAL e informe as observações antes de mover para Anuais. Os prazos encontrados no texto são sugestões e não são salvos automaticamente. Arquivar move a mensagem para Arquivadas. Arquivo Morto retira a mensagem do quadro e deixa o e-mail disponível no marcador GE_ArquivoMorto_Geral no Gmail. As duas ações mantêm o acompanhamento salvo e o estado de leitura.</p><p class="demand-footnote">Entrada, Anuais e Arquivadas: mensagens mais recentes primeiro. Classificadas: data limite mais antiga primeiro, com ordenação de todas as mensagens do marcador antes da paginação; mensagens sem prazo salvo aparecem ao final. Páginas de 20 mensagens. Busca e contagens consideram os e-mails carregados. Calendário de Brasília.</p><p id="institutional-feedback" class="demand-notice" role="status"></p><div class="demand-columns institutional-columns">${columnOrder.map(index=>`<section class="demand-column"><h2>${titles[index]} <span id="institutional-count-${index}">0</span></h2><p class="demand-notice" role="status" id="institutional-status-${index}"></p><div class="demand-cards" id="institutional-list-${index}"></div><button class="button demand-more" id="institutional-more-${index}" hidden>Carregar mais</button></section>`).join('')}</div>
       <dialog id="institutional-annual-dialog" aria-labelledby="institutional-annual-title">
         <h2 id="institutional-annual-title">Demanda ANUAL</h2>
         <p id="institutional-annual-subject"></p>

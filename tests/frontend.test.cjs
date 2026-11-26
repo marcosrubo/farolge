@@ -95,7 +95,7 @@ test('diálogo separa marcadores da Pessoal e da Geral',async()=>{
  h.connect[0].listeners.click();assert.equal(h.get('#email-connection-labels').hidden,true);
  assert.ok(fs.readFileSync('index.html','utf8').includes('GE_MINHAS'));
 });
-for(const [labels,expected] of [['ready','labels prontas (4/4)'],['missing','labels incompletas'],['permission_required','autorize o gerenciamento'],['unavailable','não foi possível verificar']])test('situação real das labels: '+labels,async()=>{
+for(const [labels,expected] of [['ready','Marcadores prontos'],['missing','Marcadores incompletos'],['permission_required','Autorize o gerenciamento'],['unavailable','Não foi possível verificar']])test('situação real das labels: '+labels,async()=>{
  const h=ui({configured:true,connections:{personal:{email:'person@gmail.com',gmail:true,drive:true,labels}}});await settle();
  assert.ok(h.get('#email-personal-status').textContent.includes(expected));
 });
@@ -103,10 +103,11 @@ for(const [labels,expected] of [['ready','labels prontas (4/4)'],['missing','lab
 test('diálogo GERAL explica marcadores e alcance da escrita antes do consentimento',async()=>{
  const h=ui({configured:true,connections:{general:{email:'school@example.com',gmail:true,drive:true,manageInstitutional:true,labels:'ready'},personal:null}});await settle();
  h.connect[0].listeners.click();assert.equal(h.get('#email-general-labels').hidden,false);assert.equal(h.get('#email-connection-labels').hidden,true);
- assert.ok(h.get('#email-general-status').textContent.includes('Classificadas, Anuais e Arquivadas prontas'));
+ assert.ok(h.get('#email-general-status').textContent.includes('Marcadores prontos'));
  assert.ok(h.get('#email-general-status').textContent.includes('Classificação: autorizada'));
  h.connect[1].listeners.click();assert.equal(h.get('#email-general-labels').hidden,true);assert.equal(h.get('#email-connection-labels').hidden,false);
- const html=fs.readFileSync('index.html','utf8');assert.ok(html.includes('verificamos GE_Anuais e criamos o marcador se estiver ausente'));
+ const html=fs.readFileSync('index.html','utf8');assert.ok(html.includes('verificamos GE_Anuais e GE_ArquivoMorto_Geral e criamos os que faltarem'));
+ assert.ok(html.includes('A conexão Pessoal verifica GE_ArquivoMorto_Pessoal'));
  assert.ok(html.includes('guarda o prazo ou as observações e o e-mail da conta GERAL de forma criptografada'));
 });
 
