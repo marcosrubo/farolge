@@ -53,20 +53,23 @@
   }
 
   function setupDictation(button,feedback,field){
-    const Recognition=[window.SpeechRecognition,window.webkitSpeechRecognition].find(api=>
-      typeof api?.available==='function'&&'processLocally' in api.prototype);
+    const supported=[window.SpeechRecognition,window.webkitSpeechRecognition].filter(api=>typeof api==='function');
+    const [Recognition]=supported;
+    const LocalRecognition=supported.find(api=>typeof api.available==='function'&&'processLocally' in api.prototype);
     const options={langs:['pt-BR'],processLocally:true};
-    let recognition=null,disposed=false,busy=false,needsInstall=false;
+    let recognition=null,disposed=false,busy=false;
     const hint=message=>{feedback.textContent=message;};
-    if(!Recognition){
+    if(Recognition){
+      hint('Você também pode usar o microfone do teclado. Quando o ditado local está indisponível, o navegador pode processar o áudio em um serviço externo.');
+    }else{
       button.disabled=true;
-      hint('O ditado no dispositivo está indisponível neste navegador. Você pode digitar a ação.');
+      hint('Para ditar, toque no campo Ação e use o microfone do teclado, se disponível.');
     }
 
-    function start(){
-      const session=new Recognition();
+    function start(useLocal){
+      const session=useLocal?new LocalRecognition():new Recognition();
       session.lang='pt-BR';
-      session.processLocally=true;
+      if(useLocal)session.processLocally=true;
       session.continuous=true;
       recognition=session;
       let failed=false,received=false,limitReached=false;
@@ -102,8 +105,8 @@
           'not-allowed':'O acesso ao microfone não foi liberado.',
           'audio-capture':'O navegador não encontrou um microfone disponível.',
           'no-speech':'Nenhuma fala foi detectada. Clique em Falar para tentar novamente.',
-          'language-not-supported':'O ditado local em português não está disponível neste dispositivo.'
-        }[event.error]||'O ditado foi interrompido. Você pode tentar novamente ou digitar a ação.');
+          'language-not-supported':'O navegador não conseguiu ditar em português. Use o microfone do teclado, se disponível.'
+        }[event.error]||'O ditado foi interrompido. Tente novamente ou use o microfone do teclado, se disponível.');
       };
       session.onend=()=>{
         if(recognition!==session)return;
@@ -117,7 +120,7 @@
       catch{
         recognition=null;
         button.textContent='Falar';
-        hint('Não foi possível ativar o ditado. Você pode tentar novamente ou digitar a ação.');
+        hint('Não foi possível ativar o ditado. Use o microfone do teclado, se disponível.');
       }
     }
 
@@ -131,26 +134,14 @@
       busy=true;
       button.disabled=true;
       try{
-        if(needsInstall){
-          hint('Preparando o ditado em português…');
-          if(await Recognition.install(options)){
-            needsInstall=false;
-            button.textContent='Falar';
-            hint('Ditado disponível. Clique em Falar para começar.');
-          }else hint('Não foi possível baixar o pacote de português. Você pode digitar a ação.');
-          return;
+        let local=false;
+        if(LocalRecognition){
+          try{local=(await LocalRecognition.available(options))==='available';}
+          catch{/* Continue with the browser's standard recognition. */}
         }
-        const availability=await Recognition.available(options);
-        if(disposed)return;
-        if(availability==='available')start();
-        else if(availability==='downloadable'&&typeof Recognition.install==='function'){
-          needsInstall=true;
-          button.textContent='Baixar português';
-          hint('Baixe o pacote de português do navegador para usar o ditado no dispositivo.');
-        }else if(availability==='downloading')hint('O pacote de português está sendo baixado. Tente novamente em instantes.');
-        else hint('O ditado local em português está indisponível neste dispositivo. Você pode digitar a ação.');
+        if(!disposed)start(local);
       }catch{
-        hint('Não foi possível preparar o ditado em português. Você pode digitar a ação.');
+        if(!disposed)hint('Não foi possível iniciar o ditado. Use o microfone do teclado, se disponível.');
       }finally{
         busy=false;
         button.disabled=false;

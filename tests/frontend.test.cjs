@@ -472,7 +472,8 @@ test('Busca ATIVA tem Registrar no fluxograma e abre o formulário como subtela 
  assert.deepEqual(mounts,[h.get('#active-search-board')]);
 });
 
-test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado e permite editar antes de salvar',async()=>{
+for(const mode of ['local','padrão sem pacote local','padrão via WebKit','teclado']){
+test('Busca Ativa preserva o fluxo de registro com ditado '+mode,async()=>{
  const nodes=new Map(),requests=[],window={};
  const get=selector=>{
   if(!nodes.has(selector))nodes.set(selector,{
@@ -493,18 +494,23 @@ test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado 
  form.querySelector=get;
  form.reportValidity=()=>true;
  let session;
- window.SpeechRecognition=class{
-  static async available({langs,processLocally}){
-   assert.equal(langs.join(),'pt-BR');
-   assert.equal(processLocally,true);
-   return 'available';
-  }
-  get processLocally(){return this.local;}
-  set processLocally(value){this.local=value;}
+ class StandardRecognition{
   start(){session=this;this.onstart();}
   stop(){this.onend();}
   abort(){}
- };
+ }
+ if(mode==='padrão via WebKit')window.webkitSpeechRecognition=StandardRecognition;
+ else if(mode!=='teclado'){
+  window.SpeechRecognition=class extends StandardRecognition{
+   static async available({langs,processLocally}){
+    assert.equal(langs.join(),'pt-BR');
+    assert.equal(processLocally,true);
+    return mode==='local'?'available':'downloadable';
+   }
+   get processLocally(){return this.local??false;}
+   set processLocally(value){this.local=value;}
+  };
+ }
  const author='docente@escola.pr.gov.br',id='12345678-1234-4234-8234-123456789abc';
  class FixedDate extends Date{constructor(){super('2026-11-27T01:35:30Z');}}
  vm.runInNewContext(fs.readFileSync('active-search.js','utf8'),{
@@ -539,14 +545,23 @@ test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado 
  searchTime.value='14:30';
  actionText.value='Tentativa pela manhã.';
  const speak=get('[data-dictate]');
- await speak.listeners.click();
- assert.equal(session.processLocally,true);
- assert.equal(session.lang,'pt-BR');
- const final=Object.assign([{transcript:'Contato à tarde.'}],{isFinal:true});
- session.onresult({resultIndex:0,results:[final]});
- await form.listeners.submit({preventDefault(){}});
- assert.equal(requests.length,1);
- await speak.listeners.click();
+ const voiceStatus=get('#active-search-voice-status');
+ if(mode==='teclado'){
+  assert.equal(speak.disabled,true);
+  assert.match(voiceStatus.textContent,/microfone do teclado/);
+  actionText.value+=' Contato à tarde.';
+ }else{
+  assert.notEqual(speak.disabled,true);
+  assert.match(voiceStatus.textContent,/serviço externo/);
+  await speak.listeners.click();
+  assert.equal(Boolean(session.processLocally),mode==='local');
+  assert.equal(session.lang,'pt-BR');
+  const final=Object.assign([{transcript:'Contato à tarde.'}],{isFinal:true});
+  session.onresult({resultIndex:0,results:[final]});
+  await form.listeners.submit({preventDefault(){}});
+  assert.equal(requests.length,1);
+  await speak.listeners.click();
+ }
  assert.equal(actionText.value,'Tentativa pela manhã. Contato à tarde.');
  actionText.value+=' Retorno combinado.';
  await form.listeners.submit({preventDefault(){}});
@@ -557,6 +572,7 @@ test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado 
  assert.equal(dialog.open,false);
  assert.match(get('[data-student-status]').textContent,/Busca ativa registrada em 26\/11\/2026/);
 });
+}
 
 test('Pessoal de Marcos tem atalho para consultar buscas sem abrir os demais recursos do Radar',async()=>{
  const calls=[];
