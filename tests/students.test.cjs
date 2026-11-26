@@ -274,3 +274,51 @@ test('Busca Ativa cifra os dados e confirma um reenvio sem substituir a hora ori
  assert.equal(new URL(calls[2].url).searchParams.get('owner_id'),'eq.'+owner);
  await assert.rejects(run('2026-11-18T02:40:00Z',{searchTime:'09:41'}),{message:'conflict'});
 });
+
+test('consulta de Busca Ativa pagina os registros e protege edição e exclusão por proprietário',async()=>{
+ const config={storage:'https://test.invalid',serviceKey:'fake',key:Buffer.alloc(32,5)};
+ const author='autora@escola.pr.gov.br',editor={emails:[author]},requests=[];
+ const revision='73bef854-9e59-4a38-9b90-1c30e294f188';
+ const record={id,cgm_key:student.id,DataRegistro:'2026-11-26',HoraRegistro:'15:00:00',
+  DataBusca:'2026-11-24',HoraBusca:'12:00:00',edit_revision:revision,
+  Usuario:seal(author,config.key,`active-search.${owner}.${id}.Usuario`),
+  Acao:seal('Texto original.',config.key,`active-search.${owner}.${id}.Acao`),
+  Alunos:Object.fromEntries(['Nome','Serie','Turma','Turno'].map(field=>
+   [field,seal(student[field],config.key,`student.${owner}.${student.id}.${field}`)]))
+ };
+ let migrationReady=true;
+ const store=makeStudentStore(config,async(url,options)=>{
+  const params=new URL(url).searchParams;
+  requests.push({params,method:options.method});
+  assert.equal(params.get('owner_id'),'eq.'+owner);
+  if(options.method==='DELETE')return {ok:true,json:async()=>[{id}]};
+  if(options.method==='PATCH'){
+   const patch=JSON.parse(options.body);
+   assert.deepEqual(Object.keys(patch).sort(),['Acao','edit_revision']);
+   assert.equal(params.get('edit_revision'),'eq.'+revision);
+   assert.equal(unseal(patch.Acao,config.key,`active-search.${owner}.${id}.Acao`),'Nova ação.');
+   return {ok:true,json:async()=>[{id,edit_revision:patch.edit_revision}]};
+  }
+  if(!migrationReady&&params.get('select').includes('edit_revision'))return {ok:false,json:async()=>({code:'42703'})};
+  const results=params.get('limit')==='21'&&!params.has('or')?Array(21).fill(record):[record];
+  return {ok:true,json:async()=>results};
+ },{seal,unseal});
+ const page=await store.getActiveSearches(owner,'',editor);
+ assert.equal(page.items.length,20);
+ assert.equal(page.items[0].editVersion,revision);
+ assert.equal(page.items[0].student,student.Nome);
+ assert.equal(page.items[0].searchDate,record.DataBusca);
+ const second=await store.getActiveSearches(owner,page.nextPageToken,{emails:['outra@escola.pr.gov.br']});
+ assert.match(requests[1].params.get('or'),/DataRegistro.eq.2026-11-26,HoraRegistro.eq.15:00:00,id.lt/);
+ assert.equal(second.items[0].editVersion,undefined);
+ await assert.rejects(store.editActiveSearch(owner,id,{emails:['outra@escola.pr.gov.br']},'Nova ação.',revision),{message:'active_search_edit_forbidden'});
+ await assert.rejects(store.editActiveSearch(owner,id,editor,'Nova ação.',id),{message:'conflict'});
+ assert.equal((await store.editActiveSearch(owner,id,editor,'Nova ação.',revision)).text,'Nova ação.');
+ assert.equal(await store.deleteActiveSearch(owner,id),true);
+ assert.equal(requests.at(-1).params.get('id'),'eq.'+id);
+ migrationReady=false;
+ const legacy=await store.getActiveSearches(owner,'',editor);
+ assert.equal(legacy.editingUnavailable,true);
+ assert.equal(legacy.items[0].text,'Texto original.');
+ assert.equal(legacy.items[0].editVersion,undefined);
+});

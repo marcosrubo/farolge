@@ -34,7 +34,7 @@ const TYPES = ['general','personal'];
 const personalActions=new Set(['board','thread','demand','inbox','classified','classify','personal-archive','archived','personal-restore','personal-archive-next']);
 const driveReadActions=new Set(['student-import','attendance-import']);
 const driveMetadataActions=new Set(['maintenance','student-files','attendance-files']);
-const schoolActions=new Set(['students','occurrence','occurrence-edit','occurrences','inspector-occurrences','attendance-analysis','active-search-students','active-search-register']);
+const schoolActions=new Set(['students','occurrence','occurrence-edit','occurrences','inspector-occurrences','attendance-analysis','active-search-students','active-search-register','active-search-records','active-search-edit','active-search-delete']);
 const actionMailbox=action=>personalActions.has(action)?'personal':'general';
 const TTL = 30 * 24 * 3600;
 const random = () => crypto.randomBytes(32).toString('base64url');
@@ -281,7 +281,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     const temporaryPublic=['temporary-users','temporary-user','temporary-login','temporary-activate','temporary-password','temporary-logout'];
     if(!['status','access-denied','start','callback','disconnect','logout',...temporaryPublic].includes(action)
       &&!actionModules.has(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','personal-archive','personal-restore','personal-archive-next','institutional-move','institutional-labels','occurrence','occurrence-delete','occurrence-edit','active-search-register','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
+    const expected=['start','disconnect','logout','demand','classify','personal-archive','personal-restore','personal-archive-next','institutional-move','institutional-labels','occurrence','occurrence-delete','occurrence-edit','active-search-register','active-search-edit','active-search-delete','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{
       configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured',
@@ -461,11 +461,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         try {
           const module=actionModules.get(action);
           const {admin,general,personal,profiles}=await moduleIdentity(temporary);
-          if(action==='occurrence-delete'&&!admin)return reply(403,{error:'admin_required'});
+          if(['occurrence-delete','active-search-delete'].includes(action)&&!admin)return reply(403,{error:'admin_required'});
           const profile=profileForModule(profiles,module);
           const canEditAll=(admin?.personal||personal)?.user.email===FIXED_AUTHORIZED_EMAIL;
           const occurrenceEditing=['inspector-occurrences','occurrence-edit'].includes(action);
-          if(!admin&&!profile&&!(canEditAll&&occurrenceEditing)){
+          const activeSearchEditing=['active-search-records','active-search-edit'].includes(action);
+          if(!admin&&!profile&&!(canEditAll&&(occurrenceEditing||activeSearchEditing))){
             const error=temporary||profiles.general||(personal&&personal.user.email!==FIXED_AUTHORIZED_EMAIL)||schoolActions.has(action)||action==='overview'?'module_forbidden':'admin_required';
             return reply(403,{error});
           }
@@ -486,7 +487,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const type=action==='overview'?url.searchParams.get('type'):actionMailbox(action);
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
           const useConnectedGeneral=action==='overview'||(module==='institucionais'&&allowsModule(profiles.general,module));
-          const direct=admin?.[type]||(type==='personal'||(canEditAll&&occurrenceEditing)?personal:useConnectedGeneral?general:null);
+          const direct=admin?.[type]||(type==='personal'||(canEditAll&&(occurrenceEditing||activeSearchEditing))?personal:useConnectedGeneral?general:null);
           if(type==='personal'&&!direct&&(!temporary||action==='personal-archive-next'))return reply(403,{error:'login_required',type});
           const owner=direct?.user.id??await store.getTemporaryOwner();
           const email=direct?.user.email??FIXED_AUTHORIZED_EMAIL;
@@ -499,11 +500,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             return reply(200,{mailbox:email,id,deleted:await store.deleteOccurrence(owner,id)});
           }
           if(action==='attendance-analysis')return reply(200,await handleAttendanceAnalysis({url,store,owner,email}));
-          if(action==='active-search-students'||action==='active-search-register'){
+          if(action.startsWith('active-search-')){
             const identity=allowsModule(profiles.general,module)?general:personal;
             const verifiedEmail=identity?.user.email;
             const author=verifiedEmail?.endsWith('@'+SCHOOL_DOMAIN)?verifiedEmail:null;
-            return reply(200,await handleActiveSearch({action,url,body,store,owner,email,author}));
+            const editor=canEditAll?{all:true}:temporary?null:{emails:[general?.user.email,personal?.user.email].filter(Boolean)};
+            return reply(200,await handleActiveSearch({action,url,body,store,owner,email,author,editor,canDelete:Boolean(admin)}));
           }
           if(schoolActions.has(action)){
             const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:admin?{name:'Marcos Rubo',email}:profile?{name:profile.Nome,email:profile.email}:null;
@@ -539,7 +541,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         } catch(error) {
           if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||actionMailbox(action)});
           if(['access_setup_required','access_unavailable'].includes(error.message))return reply(503,{error:error.message});
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','invalid_archive','archive_label_missing','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','invalid_active_search','active_search_author_required','occurrence_missing','occurrence_edit_forbidden','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit','invalid_temporary_user','temporary_activation_unavailable','temporary_reset_unavailable','temporary_password_length','temporary_password_confirmation'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','invalid_archive','archive_label_missing','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','invalid_active_search','active_search_author_required','active_search_missing','active_search_edit_forbidden','occurrence_missing','occurrence_edit_forbidden','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit','invalid_temporary_user','temporary_activation_unavailable','temporary_reset_unavailable','temporary_password_length','temporary_password_confirmation'];
           if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
@@ -706,7 +708,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           occurrencesUser:publicProfile(profileForModule(profiles,'inspetores-monitores')),
           ...await moduleConnections(profiles,connections,false,occurrencesOnly)}
         :{modules:modulesFor(null,connections)};
-      return reply(200,{configured:true,mode,connections,errors,...access,...(Object.keys(denied).length?{denied}:{})});
+      const activeSearchConsultOnly=!bothAdmin&&connections.personal?.email===FIXED_AUTHORIZED_EMAIL&&!profileForModule(profiles,'radar');
+      return reply(200,{configured:true,mode,connections,errors,...access,...(activeSearchConsultOnly?{activeSearchConsultOnly:true}:{}),...(Object.keys(denied).length?{denied}:{})});
     } catch(error) {
       // Do not log OAuth exceptions; they may contain credentials, codes or tokens.
       if(action==='callback')return finish('inicio','personal','unavailable');

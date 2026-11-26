@@ -2,6 +2,7 @@
 
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
 const requestId=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const studentKey=/^[a-f0-9]{64}$/;
 const timeOfDay=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const civilDate=/^[1-9]\d{3}-\d{2}-\d{2}$/;
@@ -10,16 +11,38 @@ const format=new Intl.DateTimeFormat('en-CA',{
   hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
 });
 
-async function handleActiveSearch({action,url,body,store,owner,email,author,now=new Date()}){
+async function handleActiveSearch({action,url,body,store,owner,email,author,editor,canDelete,now=new Date()}){
+  const reading=action==='active-search-students'||action==='active-search-records';
+  if((reading?url.searchParams.get('mailbox'):body.mailbox)!==email)fail('account_changed',409);
+  if(action==='active-search-records'){
+    const records=await store.getActiveSearches(owner,url.searchParams.get('pageToken')||'',editor);
+    return {mailbox:email,...records,canDelete:Boolean(canDelete&&!records.editingUnavailable)};
+  }
   if(action==='active-search-students'){
-    if(url.searchParams.get('mailbox')!==email)fail('account_changed',409);
     const students=(await store.getStudents(owner)).map(({id,Nome,CGM,Escola,Serie,Turma,Turno})=>({
       id,name:Nome,cgm:CGM,school:Escola,className:[Serie,Turma,Turno].filter(Boolean).join(' · ')
     }));
     return {mailbox:email,author,students};
   }
 
-  if(body.mailbox!==email)fail('account_changed',409);
+  if(action==='active-search-edit'||action==='active-search-delete'){
+    const {id,editVersion}=body;
+    const deleting=action==='active-search-delete';
+    const allowed=['type','mailbox','id',...(deleting?[]:['text','editVersion'])];
+    if(body.type!=='general'||typeof id!=='string'||!uuid.test(id)
+      ||Object.keys(body).some(key=>!allowed.includes(key)))fail('invalid_active_search',400);
+    const recordId=id.toLowerCase();
+    if(deleting){
+      if(!canDelete)fail('admin_required',403);
+      return {mailbox:email,id:recordId,deleted:await store.deleteActiveSearch(owner,recordId)};
+    }
+    const text=typeof body.text==='string'?body.text.trim():'';
+    if(!text||text.length>5000||text.includes('\0')||typeof editVersion!=='string'||!uuid.test(editVersion)){
+      fail('invalid_active_search',400);
+    }
+    if(!editor?.all&&!editor?.emails?.length)fail('active_search_edit_forbidden',403);
+    return {mailbox:email,id:recordId,...await store.editActiveSearch(owner,recordId,editor,text,editVersion.toLowerCase())};
+  }
   if(!author)fail('active_search_author_required',403);
   if(body.authorMailbox!==author)fail('author_changed',409);
   const {id,studentId,searchDate,searchTime}=body;

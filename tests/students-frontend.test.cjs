@@ -9,9 +9,10 @@ function ui(file,name){
  const nodes=new Map(),requests=[],window={FAROL_CONFIG:{schoolName:'Do not use this as identity'}};
  const get=key=>{if(!nodes.has(key))nodes.set(key,{value:'',innerHTML:'',textContent:'',listeners:{},open:false,setAttribute(key,value){this[key]=value;},addEventListener(e,fn){this.listeners[e]=fn;},focus(){},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();}});return nodes.get(key);};
  get('#inspector-panel-consult').querySelector=get;
+ get('#active-search-panel-consult').querySelector=get;
  const root={innerHTML:'',querySelector:get};
- const context=vm.createContext({window,crypto,Intl,Date,URLSearchParams,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
- if(file==='students.js')vm.runInContext(fs.readFileSync('occurrences.js','utf8'),context);
+ const context=vm.createContext({window,crypto,Intl,Date,URLSearchParams,AbortController,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
+ if(['students.js','active-search.js'].includes(file))vm.runInContext(fs.readFileSync('occurrences.js','utf8'),context);
  vm.runInContext(fs.readFileSync(file,'utf8'),context);
  return {app:window[name],window,root,get,requests,respond:(i,data,ok=true)=>requests[i].resolve({ok,json:async()=>data})};
 }
@@ -207,4 +208,38 @@ test('Pessoal de Marcos com acesso só a ocorrências abre diretamente a consult
  assert.equal(h.get('#inspector-tab-consult')['aria-selected'],'true');
  assert.equal(h.requests.length,1);
  assert.match(h.requests[0].url,/inspector-occurrences/);
+});
+
+test('Consultar buscas ativas mostra as duas datas, edita a ação e pede confirmação da exclusão',async()=>{
+ const h=ui('active-search.js','FarolActiveSearch');
+ let confirmation=false,question='';
+ h.window.confirm=message=>{question=message;return confirmation;};
+ h.app.connectionChanged(general.email,'viewer',true);
+ h.app.mount(h.root);
+ assert.equal(h.get('#active-search-tab-consult')['aria-selected'],'true');
+ assert.match(h.requests[0].url,/active-search-records/);
+ const item={id:'a',date:'2026-11-26',time:'11:00:00',searchDate:'2026-11-24',searchTime:'09:10:00',
+  student:'Aluna fictícia',className:'8º A',text:'Texto original.',authorName:'autora@escola.pr.gov.br',editVersion:'version-a'};
+ h.respond(0,{mailbox:general.email,items:[item],canDelete:true});await settle();
+ const cards=h.get('#active-search-records-cards'),rows=h.get('#active-search-records-rows');
+ assert.match(h.get('#active-search-panel-consult').innerHTML,/Data da busca/);
+ assert.match(rows.innerHTML,/26\/11\/2026.*11:00:00.*24\/11\/2026.*09:10:00/);
+ assert.match(cards.innerHTML,/Busca · 24\/11\/2026 · 09:10:00/);
+ rows.listeners.click(click({editOccurrence:item.id}));
+ const input=h.get('#active-search-records-edit-text');
+ assert.equal(input.value,item.text);
+ input.value='Ação revisada.';
+ h.get('#active-search-records-edit-form').listeners.submit({preventDefault(){}});
+ assert.equal(h.requests[1].url,'/api/google/active-search-edit');
+ assert.deepEqual(JSON.parse(h.requests[1].opts.body),{type:'general',mailbox:general.email,id:item.id,text:input.value,editVersion:item.editVersion});
+ h.respond(1,{mailbox:general.email,id:item.id,text:input.value,editVersion:'version-b'});await settle();
+ assert.match(rows.innerHTML,/Ação revisada/);
+ cards.listeners.click(click({deleteOccurrence:item.id}));
+ assert.match(question,/Excluir definitivamente a busca ativa/);
+ assert.equal(h.requests.length,2);
+ confirmation=true;
+ cards.listeners.click(click({deleteOccurrence:item.id}));
+ assert.equal(h.requests[2].url,'/api/google/active-search-delete');
+ h.respond(2,{mailbox:general.email,id:item.id,deleted:true});await settle();
+ assert.equal(rows.innerHTML,'');
 });

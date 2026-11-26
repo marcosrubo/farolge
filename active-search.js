@@ -15,11 +15,36 @@
     school_unavailable:'O cadastro de alunos da escola está indisponível.',
     conflict:'Este envio já está vinculado a outro registro. Reabra o formulário para fazer um novo registro.'
   };
-  let root=null,mailbox=null,identity=null,dispose=null;
+  const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const records=window.FarolOccurrences?.create({
+    id:'active-search-records',action:'active-search-records',mobileCards:true,
+    deleteAction:'active-search-delete',editAction:'active-search-edit',
+    presentation:{
+      singular:'busca ativa',plural:'buscas ativas',title:'Buscas ativas registradas',
+      textLabel:'Ação',editLabel:'Ação',editField:'text',editedMessage:'Ação alterada.',showActivityTime:true,
+      migrationMessage:'Alterar e Excluir ficam disponíveis após a atualização de Busca Ativa no Supabase.',
+      errorMessages:{
+        setup_required:errors.setup_required,
+        login_required:'Identifique-se novamente para consultar as buscas ativas.',
+        module_forbidden:'A consulta de buscas ativas não está habilitada para o seu acesso.',
+        account_changed:'A conta mudou. Atualize a lista de buscas ativas.',
+        school_unavailable:'Os dados de buscas ativas da escola estão indisponíveis.',
+        storage_access_denied:'O Supabase recusou o acesso às buscas ativas.',
+        invalid_page:'Atualize as buscas ativas para reiniciar a consulta.',
+        invalid_occurrence:'Informe uma ação de até 5.000 caracteres.',
+        invalid_active_search:'Confira o texto da ação.',
+        active_search_missing:'A busca ativa já não está disponível.',
+        active_search_edit_forbidden:'Só quem registrou a busca ou Marcos na conta Pessoal pode alterá-la.',
+        unavailable:'Não foi possível consultar as buscas ativas. Tente atualizar.'
+      }
+    }
+  });
+  let root=null,mailbox=null,identity=null,consultOnly=false,dispose=null;
 
   async function request(action,options){
     const response=await fetch('/api/google/'+action,{cache:'no-store',credentials:'same-origin',...options});
     const result=await response.json();
+    if(options.signal?.aborted)throw options.signal.reason;
     if(!response.ok){
       window.FarolAccessDenied?.(result);
       throw new Error(result.error);
@@ -145,18 +170,70 @@
   function render(){
     dispose?.();
     if(!root)return;
+    const source=mailbox,controller=new AbortController(),{signal}=controller;
+    let tab=consultOnly?'consult':'register',students=[],author=null,loading=false,closeForm=null;
     root.innerHTML=`
-      <div class="active-search">
-        <a class="button" href="#radar">Voltar ao Radar</a>
-        <h1>Registrar busca ativa</h1>
+      <a class="button active-search-back" href="#radar">Voltar ao Radar</a>
+      <h1>Busca Ativa</h1>
+      <div class="inspector-tabs" role="tablist" aria-label="Busca Ativa">
+        <button type="button" id="active-search-tab-register" role="tab" aria-controls="active-search-panel-register"${consultOnly?' hidden':''}>REGISTRAR</button>
+        <button type="button" id="active-search-tab-consult" role="tab" aria-controls="active-search-panel-consult">CONSULTAR</button>
+      </div>
+      <section class="panel" id="active-search-panel-register" role="tabpanel" aria-labelledby="active-search-tab-register" tabindex="0">
+        <p class="demand-intro">Selecione um aluno para registrar uma busca ativa.</p>
+        <label class="student-search-label" for="active-search-filter">Buscar aluno, CGM ou turma</label>
+        <input class="form-control" id="active-search-filter" type="search" autocomplete="off" disabled>
+        <p class="overview-status" data-student-status role="status"></p>
+        <ul id="active-search-list" class="student-list"></ul>
+        <button class="button" type="button" data-retry>Atualizar alunos</button>
+      </section>
+      <section id="active-search-panel-consult" role="tabpanel" aria-labelledby="active-search-tab-consult" tabindex="0" hidden></section>
+      <dialog id="active-search-dialog" aria-labelledby="active-search-student-name"></dialog>`;
+    const find=selector=>root.querySelector(selector);
+    const filter=find('#active-search-filter'),list=find('#active-search-list'),dialog=find('#active-search-dialog');
+    const listStatus=find('[data-student-status]'),retry=find('[data-retry]');
+    const panel=name=>find('#active-search-panel-'+name),tabButton=name=>find('#active-search-tab-'+name);
+    dispose=()=>{controller.abort();closeForm?.();records?.unmount();};
+
+    function showStudents(){
+      const term=fold(filter.value.trim());
+      const matches=students.filter(item=>item.search.includes(term));
+      list.innerHTML=matches.map(item=>`<li><button type="button" class="student-row" data-student="${escape(item.id)}"><span>${escape(item.name)}</span><span class="student-class">${escape(item.className)}</span></button></li>`).join('');
+      listStatus.textContent=matches.length?'':students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.';
+    }
+
+    async function load(){
+      if(!source||loading||tab!=='register')return;
+      loading=retry.disabled=true;
+      listStatus.textContent='Consultando alunos…';
+      try{
+        const result=await request('active-search-students?'+new URLSearchParams({mailbox:source}),{signal});
+        if(signal.aborted)return;
+        if(result.mailbox!==source||!Array.isArray(result.students))throw new Error('account_changed');
+        author=result.author;
+        students=result.students.map(item=>({...item,search:fold([item.name,item.cgm,item.className].join(' '))}))
+          .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{sensitivity:'base'})
+            ||a.className.localeCompare(b.className,'pt-BR')||a.cgm.localeCompare(b.cgm));
+        filter.disabled=!students.length;
+        showStudents();
+      }catch(error){
+        if(signal.aborted)return;
+        listStatus.textContent=errors[error.message]||'Não foi possível consultar os alunos.';
+      }finally{
+        if(!signal.aborted)loading=retry.disabled=false;
+      }
+    }
+
+    function openForm(student,trigger){
+      if(closeForm||!source||tab!=='register')return;
+      const registeredAuthor=author;
+      dialog.innerHTML=`
+        <h2 id="active-search-student-name">${escape(student.name)}</h2>
+        <p>${escape(student.className)}</p>
         <form class="active-search-form">
+          <p class="demand-intro">${escape(student.school)}</p>
+          <p class="demand-intro">${registeredAuthor?'Registrado por: '+escape(registeredAuthor):errors.active_search_author_required}</p>
           <fieldset>
-            <label for="active-search-filter">Buscar aluno por nome ou CGM</label>
-            <input id="active-search-filter" type="search" autocomplete="off" disabled>
-            <label for="active-search-student">Aluno</label>
-            <select id="active-search-student" name="studentId" required disabled><option value="">Selecione um aluno</option></select>
-            <p data-student-status role="status"></p>
-            <button class="button" type="button" data-retry hidden>Tentar carregar alunos</button>
             <div class="active-search-dates">
               <label>Data da busca<input name="searchDate" type="date" required></label>
               <label>Hora da busca<input name="searchTime" type="time" required></label>
@@ -165,115 +242,134 @@
               <label for="active-search-action">Ação</label>
               <button class="button" type="button" data-dictate aria-describedby="active-search-voice-status">Falar</button>
             </div>
-            <textarea id="active-search-action" name="actionText" rows="5" maxlength="5000" required></textarea>
-            <p id="active-search-voice-status" role="status"></p>
+            <textarea id="active-search-action" name="actionText" rows="6" maxlength="5000" required></textarea>
+            <p id="active-search-voice-status" class="demand-footnote" role="status"></p>
           </fieldset>
-          <p data-author></p>
-          <div class="button-row"><button class="button primary" type="submit" disabled>Salvar registro</button></div>
           <p data-submit-status role="status"></p>
-        </form>
-      </div>`;
-    const form=root.querySelector('form'),fields=form.querySelector('fieldset');
-    const {studentId:student,searchDate:date,searchTime:time,actionText:field}=form.elements;
-    const filter=form.querySelector('input[type="search"]'),save=form.querySelector('button[type="submit"]');
-    const listStatus=form.querySelector('[data-student-status]'),feedback=form.querySelector('[data-submit-status]');
-    const authorLabel=form.querySelector('[data-author]'),retry=form.querySelector('[data-retry]');
-    const dictation=setupDictation(form.querySelector('[data-dictate]'),form.querySelector('#active-search-voice-status'),field);
-    const controller=new AbortController();
-    const {signal}=controller;
-    dispose=()=>{controller.abort();dictation.dispose();};
-    const source=mailbox;
-    let students=[],author=null,pending=null,saving=false;
-
-    function defaultDates(){
+          <div class="button-row">
+            <button class="button primary" type="submit"${registeredAuthor?'':' disabled'}>Salvar registro</button>
+            <button class="button" type="button" data-cancel>Cancelar</button>
+          </div>
+        </form>`;
+      const form=dialog.querySelector('form'),fields=form.querySelector('fieldset');
+      const {searchDate:date,searchTime:time,actionText:field}=form.elements;
+      const save=form.querySelector('button[type="submit"]'),cancel=form.querySelector('[data-cancel]');
+      const feedback=form.querySelector('[data-submit-status]');
+      const dictation=setupDictation(form.querySelector('[data-dictate]'),form.querySelector('#active-search-voice-status'),field);
       const {year,month,day,hour,minute}=Object.fromEntries(format.formatToParts(new Date()).map(({type,value})=>[type,value]));
       date.value=`${year}-${month}-${day}`;
       time.value=`${hour}:${minute}`;
+      let saving=false,pending=null;
+      function close(){
+        dialog.removeEventListener('cancel',cancelDialog);
+        dictation.dispose();
+        closeForm=null;
+        if(dialog.open)dialog.close();
+        dialog.innerHTML='';
+        if(!signal.aborted)trigger.focus();
+      }
+      function cancelDialog(event){
+        event.preventDefault();
+        if(!saving)close();
+      }
+      closeForm=close;
+      dialog.addEventListener('cancel',cancelDialog);
+      cancel.addEventListener('click',close);
+      form.addEventListener('submit',async event=>{
+        event.preventDefault();
+        if(!registeredAuthor||saving||!form.reportValidity())return;
+        if(dictation.active){feedback.textContent='Encerre o ditado e revise o texto antes de salvar.';return;}
+        const text=field.value.trim();
+        if(!text){feedback.textContent='Descreva a ação de busca ativa.';field.focus();return;}
+        pending??={type:'general',mailbox:source,authorMailbox:registeredAuthor,id:crypto.randomUUID(),
+          studentId:student.id,searchDate:date.value,searchTime:time.value,text};
+        saving=fields.disabled=save.disabled=cancel.disabled=true;
+        feedback.textContent='Salvando registro…';
+        try{
+          const result=await request('active-search-register',{
+            method:'POST',signal,headers:{'Content-Type':'application/json','X-Farol-Request':'1'},
+            body:JSON.stringify(pending)
+          });
+          if(signal.aborted)return;
+          if(!result.saved||result.id!==pending.id||typeof result.date!=='string'||typeof result.time!=='string'){
+            throw new Error('unconfirmed');
+          }
+          close();
+          listStatus.textContent=`Busca ativa registrada em ${result.date.split('-').reverse().join('/')} às ${result.time} (Brasília).`;
+        }catch(error){
+          if(signal.aborted)return;
+          const message=errors[error.message];
+          if(message)pending=null;
+          feedback.textContent=message||'A gravação ainda não foi confirmada. Use Tentar novamente para conferir o mesmo envio.';
+        }finally{
+          if(!signal.aborted&&closeForm===close){
+            saving=save.disabled=cancel.disabled=false;
+            fields.disabled=Boolean(pending);
+            save.textContent=pending?'Tentar novamente':'Salvar registro';
+          }
+        }
+      });
+      dialog.showModal();
+      field.focus();
     }
-    function showStudents(){
-      const term=fold(filter.value.trim()),selected=student.value;
-      const matches=students.filter(item=>item.search.includes(term)||item.id===selected);
-      student.replaceChildren(new Option('Selecione um aluno',''),...matches.map(item=>new Option(item.label,item.id)));
-      student.value=selected;
-      listStatus.textContent=matches.length?'':students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.';
-    }
-    async function load(){
-      if(!source){listStatus.textContent='Aguardando acesso ao cadastro de alunos da escola.';return;}
-      listStatus.textContent='Carregando alunos…';
-      retry.hidden=true;
-      try{
-        const result=await request('active-search-students?'+new URLSearchParams({mailbox:source}),{signal});
-        if(signal.aborted)return;
-        if(result.mailbox!==source||!Array.isArray(result.students))throw new Error('account_changed');
-        author=result.author;
-        authorLabel.textContent=author?'Registrando como '+author:errors.active_search_author_required;
-        const showSchool=new Set(result.students.map(item=>item.school)).size>1;
-        students=result.students.map(item=>({
-          ...item,search:fold(item.name+' '+item.cgm),
-          label:[item.name,'CGM '+item.cgm,item.className,showSchool?item.school:null].filter(Boolean).join(' — ')
-        })).sort((a,b)=>a.label.localeCompare(b.label,'pt-BR',{sensitivity:'base'}));
-        filter.disabled=student.disabled=!students.length;
-        save.disabled=!author||!students.length;
-        showStudents();
-      }catch(error){
-        if(signal.aborted)return;
-        listStatus.textContent=errors[error.message]||'Não foi possível carregar os alunos.';
-        retry.hidden=false;
+
+    function drawTabs(){
+      for(const name of ['register','consult']){
+        const current=name===tab;
+        tabButton(name).setAttribute('aria-selected',String(current));
+        tabButton(name).tabIndex=current?0:-1;
+        panel(name).hidden=!current;
+      }
+      if(tab==='consult'){
+        panel('consult').innerHTML=records?.markup()||'';
+        records?.mount(panel('consult'));
+      }else if(!students.length){
+        load();
       }
     }
 
+    function selectTab(name,focus=false){
+      if(name===tab||(consultOnly&&name==='register'))return;
+      if(tab==='consult'){
+        records?.unmount();
+        panel('consult').innerHTML='';
+      }
+      tab=name;
+      drawTabs();
+      if(focus)tabButton(name).focus();
+    }
+
+    for(const name of ['register','consult']){
+      tabButton(name).addEventListener('click',()=>selectTab(name));
+      tabButton(name).addEventListener('keydown',event=>{
+        const other=name==='register'?'consult':'register';
+        const destination={Home:'register',End:'consult',ArrowLeft:other,ArrowRight:other}[event.key];
+        if(destination){event.preventDefault();selectTab(destination,true);}
+      });
+    }
     filter.addEventListener('input',showStudents);
-    filter.addEventListener('keydown',event=>{if(event.key==='Enter')event.preventDefault();});
     retry.addEventListener('click',load);
-    form.addEventListener('submit',async event=>{
-      event.preventDefault();
-      if(!source||!author||saving||!form.reportValidity())return;
-      if(dictation.active){
-        feedback.textContent='Encerre o ditado e revise o texto antes de salvar.';
-        return;
-      }
-      const text=field.value.trim();
-      if(!text){feedback.textContent='Descreva a ação de busca ativa.';field.focus();return;}
-      pending??={type:'general',mailbox:source,authorMailbox:author,id:crypto.randomUUID(),
-        studentId:student.value,searchDate:date.value,searchTime:time.value,text};
-      saving=fields.disabled=save.disabled=true;
-      feedback.textContent='Salvando registro…';
-      try{
-        const result=await request('active-search-register',{
-          method:'POST',signal,headers:{'Content-Type':'application/json','X-Farol-Request':'1'},
-          body:JSON.stringify(pending)
-        });
-        if(signal.aborted)return;
-        if(!result.saved||result.id!==pending.id)throw new Error('unconfirmed');
-        pending=null;
-        form.reset();
-        defaultDates();
-        showStudents();
-        feedback.textContent='Busca ativa registrada.';
-      }catch(error){
-        if(signal.aborted)return;
-        const message=errors[error.message];
-        if(message)pending=null;
-        feedback.textContent=message||'A gravação ainda não foi confirmada. Use Tentar novamente para conferir o mesmo envio.';
-      }finally{
-        if(!signal.aborted){
-          saving=save.disabled=false;
-          fields.disabled=Boolean(pending);
-          save.textContent=pending?'Tentar novamente':'Salvar registro';
-        }
-      }
+    list.addEventListener('click',event=>{
+      const trigger=event.target.closest('[data-student]');
+      const student=students.find(item=>item.id===trigger?.dataset.student);
+      if(student)openForm(student,trigger);
     });
-    defaultDates();
-    load();
+    retry.disabled=!source;
+    if(!source)listStatus.textContent='Os dados da escola estão indisponíveis.';
+    drawTabs();
   }
 
   window.FarolActiveSearch={
     mount(element){root=element;render();},
     unmount(){dispose?.();dispose=root=null;},
-    connectionChanged(email,accessIdentity){
-      if(email===mailbox&&identity===accessIdentity)return;
+    connectionChanged(email,accessIdentity,restricted=false){
+      if(email===mailbox&&identity===accessIdentity&&consultOnly===restricted)return;
+      dispose?.();
+      dispose=null;
       mailbox=email;
       identity=accessIdentity;
+      consultOnly=restricted;
+      records?.connectionChanged(email?{email}:null,accessIdentity);
       if(root)render();
     }
   };

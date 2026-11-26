@@ -24,7 +24,7 @@ const modules = [
 ];
 window.FarolMenuModules=modules;
 let archiveReturnHash='';
-let allowedModules=new Set(['bi-seed']),temporaryUser=null,moduleUserKey=null,overviewSelected=false;
+let allowedModules=new Set(['bi-seed']),temporaryUser=null,moduleUserKey=null,overviewSelected=false,activeSearchConsultOnly=false;
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 
 function updateSchool(){
@@ -96,7 +96,7 @@ function render(){
   const analysis=route==='analise-faltas';
   const activeSearch=route==='busca-ativa';
   const requested=modules.find(item=>item.id===(analysis||activeSearch?'radar':route));
-  const enabled=requested&&allowedModules.has(requested.id);
+  const enabled=requested&&(allowedModules.has(requested.id)||(activeSearch&&activeSearchConsultOnly));
   const waitingForOverview=enabled&&requested.id==='inicio'&&!overviewSelected;
   const selected=enabled&&!waitingForOverview?requested:!requested&&allowedModules.has('bi-seed')?modules.find(item=>item.id==='bi-seed'):null;
   const title=analysis?'Radar / Análise de faltas':activeSearch?'Radar / Busca ATIVA':(selected||requested)?.label||'Meu espaço';
@@ -107,7 +107,7 @@ function render(){
   if(!selected){
     main.classList.toggle('radar-workspace',false);
     main.innerHTML=requested&&!enabled
-      ?`<section class="development-content module-unavailable" aria-labelledby="module-title"><h1 id="module-title">${title}</h1><h2>Módulo indisponível</h2><p>Esta opção não está habilitada para o seu acesso.</p></section>`
+      ?`<section class="development-content module-unavailable" aria-labelledby="module-title"><h1 id="module-title">${title}</h1><h2>Módulo indisponível</h2><p>Esta opção não está habilitada para o seu acesso.</p>${route==='radar'&&activeSearchConsultOnly?'<a class="button active-search-back" href="#busca-ativa">Consultar buscas ativas</a>':''}</section>`
       :'<section class="development-content" aria-labelledby="module-title"><h1 id="module-title">Meu espaço</h1><p>Escolha uma opção no menu.</p></section>';
     return;
   }
@@ -187,8 +187,9 @@ function setupEmailConnections(){
     const next=new Set(Array.isArray(result?.modules)?result.modules:[]);
     if(!identityKey)next.add('bi-seed');
     if(identityKey!==moduleUserKey||!next.has('inicio'))overviewSelected=false;
-    const changed=next.size!==allowedModules.size||[...next].some(id=>!allowedModules.has(id))||identityKey!==moduleUserKey;
-    allowedModules=next;temporaryUser=user;moduleUserKey=identityKey;
+    const consultOnly=result?.activeSearchConsultOnly===true;
+    const changed=consultOnly!==activeSearchConsultOnly||next.size!==allowedModules.size||[...next].some(id=>!allowedModules.has(id))||identityKey!==moduleUserKey;
+    allowedModules=next;temporaryUser=user;moduleUserKey=identityKey;activeSearchConsultOnly=consultOnly;
     window.FarolTemporaryAccess?.update(user,configured);
     if(temporaryExpiry!==null)clearTimeout(temporaryExpiry);
     temporaryExpiry=null;
@@ -256,8 +257,9 @@ function setupEmailConnections(){
         :result.settingsUser||result.institutionalUser||result.connections?.general;
       window.FarolAuthorizedUsers?.connectionChanged(access('configuracoes',settings));
       window.FarolAttendanceAnalysis?.connectionChanged(access('radar',school));
-      window.FarolActiveSearch?.connectionChanged(access('radar',school)?.email,
-        JSON.stringify([activeEmails.general,activeEmails.personal,result.temporary?.id]));
+      const activeSearchMailbox=activeSearchConsultOnly?activeEmails.personal:access('radar',school)?.email;
+      window.FarolActiveSearch?.connectionChanged(activeSearchMailbox,
+        JSON.stringify([activeEmails.general,activeEmails.personal,result.temporary?.id]),activeSearchConsultOnly);
       for(const type of types){
         const mailbox=result.connections?.[type]||(result.errors?.[type]?null:connections?.[type]);
         window.FarolOverview?.connectionChanged(type,access('inicio',mailbox),access('inicio',school));

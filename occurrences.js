@@ -18,29 +18,34 @@ window.FarolOccurrences=(()=>{
   };
   const accessErrors=new Set(['login_required','module_forbidden','admin_required','access_denied','account_changed','school_unavailable']);
 
-  function create({id,action,mobileCards=false,deleteAction,editAction}){
+  function create({id,action,mobileCards=false,deleteAction,editAction,presentation={}}){
+    const {singular='ocorrência',plural='ocorrências',title='Ocorrências dos alunos',textLabel='Ocorrência',
+      editLabel='Texto da ocorrência',editedMessage='Texto da ocorrência alterado.',editField='ocorrencia',showActivityTime=false,migrationMessage,errorMessages={}}=presentation;
+    const notice={...messages,...errorMessages};
+    const shortDate=value=>value.split('-').reverse().join('/');
+    const shortTime=value=>value.slice(0,8);
     let root=null,connection=null,viewer=null,items=[],next=null,busy=false,error='',loaded=false,version=0;
     let canDelete=false,deleting=false,actionFeedback='',editing=null,savingEdit=false,editingUnavailable=false;
     const element=part=>root.querySelector('#'+id+'-'+part);
 
     function markup(){
-      const refresh=`<button type="button" class="button overview-refresh" id="${id}-refresh">Atualizar ocorrências</button>`;
+      const refresh=`<button type="button" class="button overview-refresh" id="${id}-refresh">Atualizar ${plural}</button>`;
       return `<section class="overview-group overview-occurrences" aria-labelledby="${id}-title">
-        <div class="overview-heading"><h2 id="${id}-title">Ocorrências dos alunos</h2></div>
+        <div class="overview-heading"><h2 id="${id}-title">${title}</h2></div>
         <p id="${id}-identity" class="overview-identity"></p>
         <p class="demand-footnote">Mais recentes primeiro. Horário de Brasília.</p>
         ${mobileCards?refresh:''}
         <p id="${id}-status" class="overview-status" role="status"></p>
-        <div class="overview-occurrences-scroll" role="region" aria-label="Lista de ocorrências dos alunos" tabindex="0">
-          <table><thead><tr><th scope="col">Data</th><th scope="col">Hora</th><th scope="col">Aluno</th><th scope="col">Turma</th><th scope="col">Ocorrência</th><th scope="col">Registrado por</th>${deleteAction||editAction?`<th scope="col" id="${id}-actions" hidden>Ações</th>`:''}</tr></thead><tbody id="${id}-rows"></tbody></table>
+        <div class="overview-occurrences-scroll" role="region" aria-label="${title}" tabindex="0">
+          <table><thead><tr><th scope="col">${showActivityTime?'Data do registro':'Data'}</th><th scope="col">${showActivityTime?'Hora do registro':'Hora'}</th><th scope="col">Aluno</th><th scope="col">Turma</th>${showActivityTime?'<th scope="col">Data da busca</th><th scope="col">Hora da busca</th>':''}<th scope="col">${textLabel}</th><th scope="col">Registrado por</th>${deleteAction||editAction?`<th scope="col" id="${id}-actions" hidden>Ações</th>`:''}</tr></thead><tbody id="${id}-rows"></tbody></table>
         </div>
-        ${mobileCards?`<ul id="${id}-cards" class="inspector-occurrence-cards" role="list" aria-label="Lista de ocorrências dos alunos"></ul>`:''}
+        ${mobileCards?`<ul id="${id}-cards" class="inspector-occurrence-cards" role="list" aria-label="${title}"></ul>`:''}
         <div class="button-row">${mobileCards?'':refresh}<button type="button" class="button overview-refresh" id="${id}-more" hidden>Carregar mais</button></div>
         ${editAction?`<dialog id="${id}-edit-dialog" aria-labelledby="${id}-edit-title">
-          <h2 id="${id}-edit-title">Alterar ocorrência</h2>
+          <h2 id="${id}-edit-title">Alterar ${singular}</h2>
           <p id="${id}-edit-student"></p>
           <form id="${id}-edit-form">
-            <label class="field">Texto da ocorrência<textarea id="${id}-edit-text" class="form-control" required maxlength="5000" rows="6"></textarea></label>
+            <label class="field">${editLabel}<textarea id="${id}-edit-text" class="form-control" required maxlength="5000" rows="6"></textarea></label>
             <p id="${id}-edit-feedback" role="status"></p>
             <div class="button-row"><button type="submit" id="${id}-edit-save" class="button primary">Salvar alteração</button><button type="button" id="${id}-edit-cancel" class="button">Cancelar</button></div>
           </form>
@@ -57,36 +62,38 @@ window.FarolOccurrences=(()=>{
       if(!root)return;
       element('identity').textContent=connection?.email||'Conta GERAL não conectada';
       let status=actionFeedback;
-      if(!connection)status='Os dados de ocorrências da escola estão indisponíveis.';
-      else if(busy)status=deleting?'Excluindo ocorrência…':savingEdit?'Salvando alteração…':'Consultando ocorrências…';
-      else if(!status&&error)status=(messages[error]||messages.unavailable)+(loaded?' A lista anterior foi mantida.':'');
-      else if(!status&&loaded&&!items.length&&!next)status='Nenhuma ocorrência registrada.';
+      if(!connection)status=`Os dados de ${plural} da escola estão indisponíveis.`;
+      else if(busy)status=deleting?`Excluindo ${singular}…`:savingEdit?'Salvando alteração…':`Consultando ${plural}…`;
+      else if(!status&&error)status=(notice[error]||notice.unavailable)+(loaded?' A lista anterior foi mantida.':'');
+      else if(!status&&loaded&&!items.length&&!next)status=`Nenhuma ${singular} registrada.`;
       if(!busy&&!error&&editingUnavailable){
-        status=[status,'Alterar fica disponível após a atualização de ocorrências no Supabase.'].filter(Boolean).join(' ');
+        status=[status,migrationMessage||`Alterar fica disponível após a atualização de ${plural} no Supabase.`].filter(Boolean).join(' ');
       }
       element('status').textContent=status;
       const hasActions=canDelete||Boolean(editAction&&items.some(item=>item.editVersion));
       if(deleteAction||editAction)element('actions').hidden=!hasActions;
       const records=items.map(item=>({
-        id:escape(item.id),date:escape(item.date.split('-').reverse().join('/')),time:escape(item.time.slice(0,8)),
+        id:escape(item.id),date:escape(shortDate(item.date)),time:escape(shortTime(item.time)),
+        ...(showActivityTime?{searchDate:escape(shortDate(item.searchDate)),searchTime:escape(shortTime(item.searchTime))}:{}),
         student:escape(item.student),className:escape(item.className),text:escape(item.text),
         author:escape(item.authorName||'Não informado'),canEdit:Boolean(editAction&&item.editVersion)
       }));
-      const deleteButton=({id,student,date,time})=>`<button type="button" class="button inspector-occurrence-delete" data-delete-occurrence="${id}" aria-label="Excluir ocorrência de ${student}, ${date} às ${time}"${busy?' disabled':''}>Excluir</button>`;
+      const deleteButton=({id,student,date,time})=>`<button type="button" class="button inspector-occurrence-delete" data-delete-occurrence="${id}" aria-label="Excluir ${singular} de ${student}, ${date} às ${time}"${busy?' disabled':''}>Excluir</button>`;
       const actions=record=>{
         const {id,student,date,time,canEdit}=record;
-        const editButton=canEdit?`<button type="button" class="button inspector-occurrence-edit" data-edit-occurrence="${id}" aria-label="Alterar ocorrência de ${student}, ${date} às ${time}"${busy?' disabled':''}>Alterar</button>`:'';
+        const editButton=canEdit?`<button type="button" class="button inspector-occurrence-edit" data-edit-occurrence="${id}" aria-label="Alterar ${singular} de ${student}, ${date} às ${time}"${busy?' disabled':''}>Alterar</button>`:'';
         return editButton+(canDelete?deleteButton(record):'');
       };
       element('rows').innerHTML=records.map(record=>{
         const {date,time,student,className,text,author}=record;
-        return `<tr><td>${date}</td><td>${time}</td><td>${student}</td><td>${className}</td><td class="occurrence-text">${text}</td><td>${author}</td>${hasActions?`<td><div class="button-row">${actions(record)}</div></td>`:''}</tr>`;
+        return `<tr><td>${date}</td><td>${time}</td><td>${student}</td><td>${className}</td>${showActivityTime?`<td>${record.searchDate}</td><td>${record.searchTime}</td>`:''}<td class="occurrence-text">${text}</td><td>${author}</td>${hasActions?`<td><div class="button-row">${actions(record)}</div></td>`:''}</tr>`;
       }).join('');
       if(mobileCards){
         element('cards').innerHTML=records.map(record=>{
           const {date,time,student,className,text,author,canEdit}=record;
           return `<li>
-            <p class="inspector-occurrence-date">${date} · ${time}</p>
+            <p class="inspector-occurrence-date">${showActivityTime?'Registro · ':''}${date} · ${time}</p>
+            ${showActivityTime?`<p class="inspector-occurrence-date">Busca · ${record.searchDate} · ${record.searchTime}</p>`:''}
             <h3>${student}</h3><p class="inspector-occurrence-class">${className}</p>
             <p class="occurrence-text">${text}</p>
             <p class="inspector-occurrence-author">Registrado por: ${author}</p>
@@ -134,7 +141,7 @@ window.FarolOccurrences=(()=>{
       const item=items.find(item=>item.id===button?.dataset.deleteOccurrence);
       if(!item)return;
       const date=item.date.split('-').reverse().join('/');
-      if(!window.confirm(`Excluir definitivamente a ocorrência de ${item.student}, registrada em ${date} às ${item.time.slice(0,8)}?`))return;
+      if(!window.confirm(`Excluir definitivamente a ${singular} de ${item.student}, registrada em ${date} às ${item.time.slice(0,8)}?`))return;
       const ticket=++version,mailbox=connection.email;
       busy=true;deleting=true;actionFeedback='';draw();
       try{
@@ -150,12 +157,12 @@ window.FarolOccurrences=(()=>{
         if(ticket!==version)return;
         if(result.mailbox!==mailbox||result.id!==item.id||typeof result.deleted!=='boolean')throw new Error('unavailable');
         items=items.filter(entry=>entry.id!==item.id);
-        actionFeedback=result.deleted?'Ocorrência excluída.':'A ocorrência já não está disponível.';
+        actionFeedback=result.deleted?`${singular[0].toUpperCase()+singular.slice(1)} excluída.`:`A ${singular} já não está disponível.`;
       }catch(failure){
         if(ticket!==version)return;
         if(accessErrors.has(failure.message)){
           canDelete=false;
-          actionFeedback='O acesso para excluir ocorrências não está disponível. Atualize a lista.';
+          actionFeedback=`O acesso para excluir ${plural} não está disponível. Atualize a lista.`;
         }else{
           actionFeedback='Não foi possível confirmar a exclusão. Atualize a lista para conferir.';
         }
@@ -198,7 +205,7 @@ window.FarolOccurrences=(()=>{
       if(!root||!connection||!editing||busy||element('edit-save').disabled)return;
       const text=element('edit-text').value.trim();
       if(!text||text.length>5000){
-        element('edit-feedback').textContent=messages.invalid_occurrence;
+        element('edit-feedback').textContent=notice.invalid_occurrence;
         return;
       }
       const item=editing,ticket=++version,mailbox=connection.email;
@@ -211,7 +218,7 @@ window.FarolOccurrences=(()=>{
         const response=await fetch('/api/google/'+editAction,{
           method:'POST',credentials:'same-origin',cache:'no-store',
           headers:{'Content-Type':'application/json','X-Farol-Request':'1'},
-          body:JSON.stringify({type:'general',mailbox,id:item.id,ocorrencia:text,editVersion:item.editVersion})
+          body:JSON.stringify({type:'general',mailbox,id:item.id,[editField]:text,editVersion:item.editVersion})
         });
         const result=await response.json();
         if(ticket!==version)return;
@@ -221,12 +228,12 @@ window.FarolOccurrences=(()=>{
         if(result.mailbox!==mailbox||result.id!==item.id||typeof result.text!=='string'||!result.editVersion)throw new Error('unavailable');
         items=items.map(entry=>entry.id===item.id?{...entry,text:result.text,editVersion:result.editVersion}:entry);
         closeEdit();
-        actionFeedback='Texto da ocorrência alterado.';
+        actionFeedback=editedMessage;
       }catch(failure){
         if(ticket!==version)return;
-        refreshRequired=accessErrors.has(failure.message)||['conflict','occurrence_missing','occurrence_edit_forbidden'].includes(failure.message);
+        refreshRequired=accessErrors.has(failure.message)||['conflict','occurrence_missing','occurrence_edit_forbidden','active_search_missing','active_search_edit_forbidden'].includes(failure.message);
         if(refreshRequired)items=items.map(entry=>entry.id===item.id?{...entry,editVersion:null}:entry);
-        element('edit-feedback').textContent=messages[failure.message]||'Não foi possível confirmar a alteração. Atualize a lista para conferir.';
+        element('edit-feedback').textContent=notice[failure.message]||'Não foi possível confirmar a alteração. Atualize a lista para conferir.';
       }finally{
         if(ticket===version){
           busy=false;savingEdit=false;

@@ -1250,3 +1250,43 @@ test('Busca Ativa autoriza pelo Radar e grava com a conta institucional verifica
  profile.permissions=[];
  assert.equal((await post(personal.cookie)).json().error,'module_forbidden');
 });
+
+test('Busca Ativa aplica as permissões de consulta, alteração e exclusão separadamente',async()=>{
+ const h=harness(),admin=await h.admin(),email='docente@escola.pr.gov.br';
+ const profile={id:temporaryId,Nome:'Docente',email,permissions:['radar']};
+ h.store.getRegisteredUser=async address=>address===email?profile:null;
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ const teacher=await h.login(email,'','personal');
+ const owner=h.userFor(GENERAL_EMAIL).id,id='12345678-1234-4234-8234-123456789abc';
+ const editors=[],deletions=[];
+ h.store.getTemporaryOwner=async()=>owner;
+ h.store.getActiveSearches=async(key,page,editor)=>{
+  assert.equal(key,owner);assert.equal(page,'');editors.push(editor);
+  return {items:[],nextPageToken:null};
+ };
+ h.store.editActiveSearch=async(key,recordId,editor,text,version)=>{
+  assert.equal(key,owner);assert.equal(recordId,id);assert.equal(version,id);editors.push(editor);
+  return {text,editVersion:version};
+ };
+ h.store.deleteActiveSearch=async(key,recordId)=>{deletions.push([key,recordId]);return true;};
+ const body={type:'general',mailbox:GENERAL_EMAIL,id};
+ const post=(action,cookie,fields={})=>h.request(action,{method:'POST',cookie,body:{...body,...fields}});
+ const list=cookie=>h.request('active-search-records',{cookie,query:'?mailbox='+GENERAL_EMAIL});
+ const change={text:'Ação revisada',editVersion:id};
+ assert.equal((await list('')).status,403);
+ assert.equal((await list(teacher.cookie)).json().canDelete,false);
+ assert.equal((await list(admin.personal.cookie)).json().canDelete,false);
+ assert.equal((await list(admin.cookie)).json().canDelete,true);
+ assert.equal((await h.request('status',{cookie:admin.personal.cookie})).json().activeSearchConsultOnly,true);
+ assert.equal((await post('active-search-edit',teacher.cookie,change)).json().text,change.text);
+ assert.equal((await post('active-search-edit',admin.personal.cookie,change)).status,200);
+ assert.equal((await post('active-search-edit',teacher.cookie,{...change,searchDate:'2026-11-24'})).status,400);
+ for(const cookie of [teacher.cookie,admin.personal.cookie,admin.general.cookie]){
+  assert.equal((await post('active-search-delete',cookie)).json().error,'admin_required');
+ }
+ assert.equal((await post('active-search-delete',admin.cookie)).json().deleted,true);
+ assert.deepEqual(deletions,[[owner,id]]);
+ assert.deepEqual(editors,[{emails:[email]},{all:true},{all:true},{emails:[email]},{all:true}]);
+ profile.permissions=[];
+ assert.equal((await list(teacher.cookie)).status,403);
+});

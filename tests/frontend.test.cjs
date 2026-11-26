@@ -478,16 +478,20 @@ test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado 
   if(!nodes.has(selector))nodes.set(selector,{
    value:'',maxLength:5000,listeners:{},
    addEventListener(name,handler){this.listeners[name]=handler;},
-   replaceChildren(...options){this.options=options;},
+   setAttribute(name,value){this[name]=value;},
+   removeEventListener(name){delete this.listeners[name];},
+   focus(){},
+   showModal(){this.open=true;},
+   close(){this.open=false;},
    setRangeText(text,start,end){this.value=this.value.slice(0,start)+text+this.value.slice(end);}
   });
   return nodes.get(selector);
  };
- const form=get('form');
- form.elements=Object.fromEntries(['studentId','searchDate','searchTime','actionText'].map(name=>[name,get(name)]));
+ const form=get('form'),dialog=get('#active-search-dialog');
+ dialog.querySelector=get;
+ form.elements=Object.fromEntries(['searchDate','searchTime','actionText'].map(name=>[name,get(name)]));
  form.querySelector=get;
  form.reportValidity=()=>true;
- form.reset=()=>{for(const element of Object.values(form.elements))element.value='';};
  let session;
  window.SpeechRecognition=class{
   static async available({langs,processLocally}){
@@ -508,7 +512,7 @@ test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado 
   Option:class{constructor(text,value){this.text=text;this.value=value;}},
   async fetch(url,options){
    requests.push({url,options});
-   const result=options.method==='POST'?{saved:true,id}:{mailbox:adminEmail,author,students:[
+   const result=options.method==='POST'?{saved:true,id,date:'2026-11-26',time:'22:35:30'}:{mailbox:adminEmail,author,students:[
     {id:'1',name:'Ágata',cgm:'00123',className:'8º B',school:'Escola Fictícia'},
     {id:'2',name:'Bruno',cgm:'00234',className:'8º A',school:'Escola Fictícia'}
    ]};
@@ -518,14 +522,20 @@ test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado 
  window.FarolActiveSearch.connectionChanged(adminEmail,author);
  window.FarolActiveSearch.mount({querySelector:get});
  await settle();
- const {studentId,searchDate,searchTime,actionText}=form.elements;
- assert.equal(searchDate.value,'2026-11-26');
- assert.equal(searchTime.value,'22:35');
- const filter=get('input[type="search"]');
+ const list=get('#active-search-list'),filter=get('#active-search-filter');
+ assert.equal(get('#active-search-tab-register')['aria-selected'],'true');
+ assert.equal(get('#active-search-panel-consult').hidden,true);
+ assert.equal(dialog.open,undefined);
  filter.value='agata';
  filter.listeners.input();
- assert.deepEqual(Array.from(studentId.options,option=>option.value),['','1']);
- studentId.value='1';
+ assert.match(list.innerHTML,/Ágata/);
+ assert.doesNotMatch(list.innerHTML,/Bruno/);
+ const trigger={dataset:{student:'1'},focus(){}};
+ list.listeners.click({target:{closest:()=>trigger}});
+ assert.equal(dialog.open,true);
+ const {searchDate,searchTime,actionText}=form.elements;
+ assert.equal(searchDate.value,'2026-11-26');
+ assert.equal(searchTime.value,'22:35');
  searchTime.value='14:30';
  actionText.value='Tentativa pela manhã.';
  const speak=get('[data-dictate]');
@@ -544,5 +554,25 @@ test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado 
  assert.equal(saved.studentId,'1');
  assert.equal(saved.searchTime,'14:30');
  assert.equal(saved.text,'Tentativa pela manhã. Contato à tarde. Retorno combinado.');
- assert.equal(get('[data-submit-status]').textContent,'Busca ativa registrada.');
+ assert.equal(dialog.open,false);
+ assert.match(get('[data-student-status]').textContent,/Busca ativa registrada em 26\/11\/2026/);
+});
+
+test('Pessoal de Marcos tem atalho para consultar buscas sem abrir os demais recursos do Radar',async()=>{
+ const calls=[];
+ const h=ui({configured:true,connections:{general:null,personal:{email:adminEmail}},
+  modules:['bi-seed','inspetores-monitores'],activeSearchConsultOnly:true},'',{
+  FarolActiveSearch:{mount(){},unmount(){},connectionChanged(...args){calls.push(args);}}
+ });
+ await settle();
+ assert.match(h.get('#main').innerHTML,/Módulo indisponível/);
+ assert.match(h.get('#main').innerHTML,/href="#busca-ativa">Consultar buscas ativas/);
+ h.context.location.hash='#busca-ativa';
+ h.window.listeners.hashchange();
+ assert.match(h.get('#main').innerHTML,/active-search-board/);
+ assert.equal(calls.at(-1)[0],adminEmail);
+ assert.equal(calls.at(-1)[2],true);
+ h.context.location.hash='#analise-faltas';
+ h.window.listeners.hashchange();
+ assert.match(h.get('#main').innerHTML,/Módulo indisponível/);
 });

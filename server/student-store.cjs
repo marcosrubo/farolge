@@ -26,6 +26,20 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
     const identity=unseal(row[field],config.key,occurrenceKey(owner,row.id,field));
     return typeof identity==='string'&&Boolean(identity)&&(editor.id?identity===editor.id:identity===editor.email||identity===editor.personalEmail);
   }
+  const activeSearchKey=(owner,id,field)=>`active-search.${owner}.${id}.${field}`;
+  function recordPageFilter(pageToken,dateField,timeField){
+    let after='';
+    if(pageToken){
+      let cursor;try{if(pageToken.length>1024)throw new Error();cursor=JSON.parse(Buffer.from(pageToken,'base64url').toString('utf8'));}catch{throw storageError('invalid_page',400);}
+      const date=cursor?.date,time=cursor?.time,id=cursor?.id;
+      if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||typeof time!=='string'||!/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?$/.test(time)||typeof id!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id))throw storageError('invalid_page',400);
+      after='&or='+encodeURIComponent(`(${dateField}.lt.${date},and(${dateField}.eq.${date},${timeField}.lt.${time}),and(${dateField}.eq.${date},${timeField}.eq.${time},id.lt.${id}))`);
+    }
+    return after;
+  }
+  const nextRecordPage=(last,length,dateField,timeField)=>length>20
+    ?Buffer.from(JSON.stringify({date:last[dateField],time:last[timeField],id:last.id})).toString('base64url'):null;
+  const canEditActiveSearch=(editor,author)=>editor?.all||Boolean(author&&editor?.emails?.includes(author));
   return {
     async getStudents(owner){
       const all=[];
@@ -48,13 +62,7 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
       return count;
     },
     async getOccurrences(owner,pageToken='',editor=null){
-      let after='';
-      if(pageToken){
-        let cursor;try{if(pageToken.length>1024)throw new Error();cursor=JSON.parse(Buffer.from(pageToken,'base64url').toString('utf8'));}catch{throw storageError('invalid_page',400);}
-        const date=cursor?.date,time=cursor?.time,id=cursor?.id;
-        if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||typeof time!=='string'||!/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?$/.test(time)||typeof id!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id))throw storageError('invalid_page',400);
-        after='&or='+encodeURIComponent(`(Data.lt.${date},and(Data.eq.${date},Hora.lt.${time}),and(Data.eq.${date},Hora.eq.${time},id.lt.${id}))`);
-      }
+      const after=recordPageFilter(pageToken,'Data','Hora');
       const editFields=editor?`,edit_revision${editor.all?'':editor.id?',AutorId':',EmailAutor'}`:'';
       const readPage=fields=>call('Ocorrencias','GET',
         `${ownerQuery(owner)}&select=id,cgm_key,Nome,Data,Hora,Ocorrencia,NomeAutor${fields},Alunos(Serie,Turma,Turno)&order=Data.desc,Hora.desc,id.desc&limit=21${after}`);
@@ -74,7 +82,7 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
         const editVersion=!editingUnavailable&&canEditOccurrence(row,owner,editor)?row.edit_revision:null;
         return {id:row.id,date:row.Data,time:row.Hora,student:unseal(row.Nome,config.key,occurrenceKey(owner,row.id,'Nome')),className:turma,text:unseal(row.Ocorrencia,config.key,occurrenceKey(owner,row.id,'Ocorrencia')),authorName:row.NomeAutor?unseal(row.NomeAutor,config.key,occurrenceKey(owner,row.id,'NomeAutor')):null,...(editVersion?{editVersion}:{})};
       });
-      const nextPageToken=rows.length>20?Buffer.from(JSON.stringify({date:last.Data,time:last.Hora,id:last.id})).toString('base64url'):null;
+      const nextPageToken=nextRecordPage(last,rows.length,'Data','Hora');
       return {items,nextPageToken,...(editingUnavailable?{editingUnavailable:true}:{})};
     },
     async deleteOccurrence(owner,id){
@@ -99,9 +107,61 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
       if(updated[0].id!==id||updated[0].edit_revision!==revision)throw storageError('storage_unavailable');
       return {text,editVersion:revision};
     },
+    async getActiveSearches(owner,pageToken='',editor=null){
+      const after=recordPageFilter(pageToken,'DataRegistro','HoraRegistro');
+      const readPage=revision=>call('BuscaAtiva','GET',
+        `${ownerQuery(owner)}&select=id,cgm_key,DataRegistro,HoraRegistro,DataBusca,HoraBusca,Usuario,Acao,Alunos(Nome,Serie,Turma,Turno)${revision}&order=DataRegistro.desc,HoraRegistro.desc,id.desc&limit=21${after}`);
+      let rows,editingUnavailable=false;
+      try{rows=await readPage(',edit_revision');}
+      catch(error){
+        if(error.message!=='setup_required')throw error;
+        rows=await readPage('');
+        editingUnavailable=true;
+      }
+      if(!Array.isArray(rows))throw storageError('storage_unavailable');
+      const page=rows.slice(0,20);
+      const items=page.map(row=>{
+        const readStudent=field=>unseal(row.Alunos[field],config.key,`student.${owner}.${row.cgm_key}.${field}`);
+        const readRecord=field=>unseal(row[field],config.key,activeSearchKey(owner,row.id,field));
+        const author=readRecord('Usuario');
+        return {
+          id:row.id,date:row.DataRegistro,time:row.HoraRegistro,searchDate:row.DataBusca,searchTime:row.HoraBusca,
+          student:row.Alunos?readStudent('Nome'):'Aluno indisponível',
+          className:row.Alunos?['Serie','Turma','Turno'].map(readStudent).filter(Boolean).join(' · '):'—',
+          text:readRecord('Acao'),authorName:author,
+          ...(!editingUnavailable&&row.edit_revision&&canEditActiveSearch(editor,author)?{editVersion:row.edit_revision}:{})
+        };
+      });
+      return {items,nextPageToken:nextRecordPage(page.at(-1),rows.length,'DataRegistro','HoraRegistro'),
+        ...(editingUnavailable?{editingUnavailable:true}:{})};
+    },
+    async deleteActiveSearch(owner,id){
+      const rows=await call('BuscaAtiva','DELETE',`${ownerQuery(owner)}&id=eq.${id}&select=id`);
+      if(!Array.isArray(rows)||rows.length>1||(rows.length&&rows[0]?.id!==id))throw storageError('storage_unavailable');
+      return rows.length===1;
+    },
+    async editActiveSearch(owner,id,editor,text,version){
+      const filter=`${ownerQuery(owner)}&id=eq.${id}`;
+      const rows=await call('BuscaAtiva','GET',`${filter}&select=id,Usuario,Acao,edit_revision&limit=1`);
+      if(!Array.isArray(rows)||rows.length>1||(rows[0]&&rows[0].id!==id))throw storageError('storage_unavailable');
+      const row=rows[0];
+      if(!row)throw storageError('active_search_missing',404);
+      const author=unseal(row.Usuario,config.key,activeSearchKey(owner,id,'Usuario'));
+      if(!canEditActiveSearch(editor,author))throw storageError('active_search_edit_forbidden',403);
+      const key=activeSearchKey(owner,id,'Acao');
+      if(unseal(row.Acao,config.key,key)===text)return {text,editVersion:row.edit_revision};
+      if(row.edit_revision!==version)throw storageError('conflict',409);
+      const revision=crypto.randomUUID();
+      const updated=await call('BuscaAtiva','PATCH',`${filter}&edit_revision=eq.${version}&select=id,edit_revision`,
+        {Acao:seal(text,config.key,key),edit_revision:revision});
+      if(!Array.isArray(updated)||updated.length>1)throw storageError('storage_unavailable');
+      if(!updated.length)throw storageError('conflict',409);
+      if(updated[0].id!==id||updated[0].edit_revision!==revision)throw storageError('storage_unavailable');
+      return {text,editVersion:revision};
+    },
     async saveActiveSearch(owner,id,value){
       const fields=['Escola','Usuario','Acao'];
-      const keyFor=field=>`active-search.${owner}.${id}.${field}`;
+      const keyFor=field=>activeSearchKey(owner,id,field);
       const encoded=Object.fromEntries(fields.map(field=>[field,seal(value[field],config.key,keyFor(field))]));
       const rows=await call('BuscaAtiva','POST','on_conflict=owner_id,id',{...value,...encoded,owner_id:owner,id});
       if(!Array.isArray(rows)||rows.length>1)throw storageError('storage_unavailable');
