@@ -556,3 +556,11 @@ Ao conectar ou revisar a autorização, a Geral verifica `GE_ArquivoMorto_Geral`
 - **Demandas PESSOAIS:** **Arquivo Morto** aparece em ME DEVEM, MINHAS, DEVO, Caixa de entrada e Despachadas. Nas três categorias, o botão abre a conversa para escolher a mensagem. Aplica `GE_ArquivoMorto_Pessoal` e retira INBOX, Despachadas e as três categorias da mensagem escolhida. As demais mensagens mantêm suas etiquetas.
 
 Os e-mails movidos ficam disponíveis no marcador correspondente no Gmail. As duas operações preservam o estado de leitura, os demais marcadores e os dados de acompanhamento no FAROL. Usam as permissões e fontes de caixa já definidas por módulo. Publicar com a Política de Privacidade revisão 40. Sem alteração de SQL, escopos ou variáveis. Na Vercel, usar **Revisar autorização** nas conexões já abertas e conferir o destino de uma mensagem de teste de cada lista no Gmail.
+
+### Consulta e retorno do Arquivo Morto (26/11/2026)
+
+Em **Demandas INSTITUCIONAIS**, a lista Arquivo Morto fica abaixo de Caixa de Entrada, Classificadas, Anuais e Arquivadas. Em **Demandas PESSOAIS**, Caixa de Entrada e Despachadas ficam lado a lado abaixo de ME DEVEM, MINHAS e DEVO. Em telas estreitas, Caixa de Entrada vem acima de Despachadas. A lista Arquivo Morto pessoal fica abaixo de ambas.
+
+O Arquivo Morto usa o marcador da caixa autorizada de cada módulo e carrega até 20 mensagens por página. **Voltar p/ Cx Entrada** aplica `INBOX` e remove apenas o marcador de Arquivo Morto da mensagem escolhida. O servidor confirma a permissão e a conta e verifica a movimentação antes de atualizar as listas. A operação preserva as outras etiquetas, o estado de leitura e o acompanhamento salvo. [API de marcadores por mensagem do Gmail](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/modify)
+
+Sem novo SQL, escopo ou variável. Publicar com a Política de Privacidade revisão 41. Na Vercel, conferir a ordem das listas em telas largas e estreitas e testar o retorno de uma mensagem em cada conexão.

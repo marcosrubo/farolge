@@ -1123,3 +1123,20 @@ test('rota de Arquivo Morto pessoal exige POST, mesma origem e o módulo Pessoal
  assert.equal(result.status,409);
  assert.equal(result.json().error,'archive_label_missing');
 });
+
+
+test('a consulta e o retorno do Arquivo Morto pessoal seguem as permissões de Demandas PESSOAIS',async()=>{
+ const h=harness(),admin=await h.admin();
+ const query='?mailbox='+encodeURIComponent(GENERAL_EMAIL);
+ assert.equal((await h.request('archived',{cookie:admin.general.cookie,query})).status,403);
+ const listed=await h.request('archived',{cookie:admin.cookie,query});
+ assert.equal(listed.status,200);
+ assert.equal(listed.json().mailbox,GENERAL_EMAIL);
+ assert.equal((await h.request('personal-restore',{cookie:admin.cookie})).status,405);
+ const body={type:'personal',mailbox:GENERAL_EMAIL,messageId:'message1'};
+ assert.equal((await h.request('personal-restore',{method:'POST',body,cookie:admin.cookie,origin:'https://other.example'})).status,403);
+ h.labels.get(GENERAL_EMAIL).delete('GE_ArquivoMorto_Pessoal');
+ const restore=await h.request('personal-restore',{method:'POST',body,cookie:admin.cookie});
+ assert.equal(restore.status,409);
+ assert.equal(restore.json().error,'archive_label_missing');
+});

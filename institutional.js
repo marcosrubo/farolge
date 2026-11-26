@@ -1,8 +1,10 @@
 'use strict';
 window.FarolInstitutional=(()=>{
-  const titles=['Caixa de Entrada','Classificadas','Arquivadas','Anuais'];
+  const titles=['Caixa de Entrada','Classificadas','Arquivadas','Anuais','Arquivo Morto'];
   const annualColumn=3;
+  const archiveColumn=4;
   const columnOrder=[0,1,annualColumn,2];
+  const allLists=[...columnOrder,archiveColumn];
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const day=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const displayDate=value=>value.split('-').reverse().join('/');
@@ -36,7 +38,10 @@ window.FarolInstitutional=(()=>{
     const notes=m.observations?`<details open><summary>Observações da demanda anual</summary><p class="institutional-observations">${escape(m.observations)}</p></details>`:'';
     const annualDisabled=disabled||columns[annualColumn].missingLabels;
     const archiveDisabled=moving||columns.some(c=>c.busy)||!connection?.manageInstitutional||Boolean(columns[index].error);
-    return `<article class="demand-card institutional-card ${m.unread?'is-unread':''}"><div class="institutional-card-content"><span class="deadline ${!due?'none':due<today?'late':due===today?'today':''}">${escape(status)}</span><h3>${escape(m.subject)}</h3><p class="demand-person">${escape(m.from)}</p><p class="demand-card-meta">${escape(received(m.date))}${m.unread?' · Não lida':''}</p>${suggestions.length?`<details><summary>Atividades e possíveis prazos</summary>${suggestions.map(a=>`<blockquote class="institutional-evidence">${escape(a.evidence)}</blockquote><p class="demand-footnote">${a.dueDate?'Possível prazo: '+escape(displayDate(a.dueDate))+'. ':''}${escape(a.review||'Confira o trecho antes de definir a data limite.')}</p>`).join('')}</details>`:'<p class="demand-footnote">Prazo não identificado no texto.</p>'}${m.limitedText?'<p class="demand-footnote">Texto indisponível ou limitado. Confira o conteúdo e os anexos no Gmail.</p>':''}${notes}<a href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connection.email)}#all/${encodeURIComponent(m.threadId)}" target="_blank" rel="noopener noreferrer">Abrir no Gmail</a></div>${index===0?`<form class="institutional-classify" data-classify-form="${escape(m.id)}"><label>Data limite para execução<input type="date" required min="1900-01-01" max="9999-12-31" data-due="${escape(m.id)}" aria-label="Data limite para ${escape(m.subject)}" value="${escape(drafts.get(m.id)??m.dueDate??'')}" ${disabled?'disabled':''}></label><button class="button" ${disabled?'disabled':''}>Classificar</button></form>`:''}<div class="demand-card-bottom">${index===0?`<label class="institutional-annual-check"><input type="checkbox" data-annual="${escape(m.id)}" ${annualDisabled?'disabled':''}> Demanda ANUAL</label>`:''}${index!==2?`<button class="button" type="button" data-archive="${escape(m.id)}" ${disabled?'disabled':''}>Arquivar</button>`:''}<button class="button" type="button" data-dead-archive="${escape(m.id)}" ${archiveDisabled?'disabled':''}>Arquivo Morto</button></div></article>`;
+    const archiveAction=index===archiveColumn
+      ?`<button class="button" type="button" data-restore="${escape(m.id)}" ${archiveDisabled?'disabled':''}>Voltar p/ Cx Entrada</button>`
+      :`<button class="button" type="button" data-dead-archive="${escape(m.id)}" ${archiveDisabled?'disabled':''}>Arquivo Morto</button>`;
+    return `<article class="demand-card institutional-card ${m.unread?'is-unread':''}"><div class="institutional-card-content"><span class="deadline ${!due?'none':due<today?'late':due===today?'today':''}">${escape(status)}</span><h3>${escape(m.subject)}</h3><p class="demand-person">${escape(m.from)}</p><p class="demand-card-meta">${escape(received(m.date))}${m.unread?' · Não lida':''}</p>${suggestions.length?`<details><summary>Atividades e possíveis prazos</summary>${suggestions.map(a=>`<blockquote class="institutional-evidence">${escape(a.evidence)}</blockquote><p class="demand-footnote">${a.dueDate?'Possível prazo: '+escape(displayDate(a.dueDate))+'. ':''}${escape(a.review||'Confira o trecho antes de definir a data limite.')}</p>`).join('')}</details>`:'<p class="demand-footnote">Prazo não identificado no texto.</p>'}${m.limitedText?'<p class="demand-footnote">Texto indisponível ou limitado. Confira o conteúdo e os anexos no Gmail.</p>':''}${notes}<a href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connection.email)}#all/${encodeURIComponent(m.threadId)}" target="_blank" rel="noopener noreferrer">Abrir no Gmail</a></div>${index===0?`<form class="institutional-classify" data-classify-form="${escape(m.id)}"><label>Data limite para execução<input type="date" required min="1900-01-01" max="9999-12-31" data-due="${escape(m.id)}" aria-label="Data limite para ${escape(m.subject)}" value="${escape(drafts.get(m.id)??m.dueDate??'')}" ${disabled?'disabled':''}></label><button class="button" ${disabled?'disabled':''}>Classificar</button></form>`:''}<div class="demand-card-bottom">${index===0?`<label class="institutional-annual-check"><input type="checkbox" data-annual="${escape(m.id)}" ${annualDisabled?'disabled':''}> Demanda ANUAL</label>`:''}${index!==2&&index!==archiveColumn?`<button class="button" type="button" data-archive="${escape(m.id)}" ${disabled?'disabled':''}>Arquivar</button>`:''}${archiveAction}</div></article>`;
   }
   function draw(){
     if(!root)return;
@@ -48,7 +53,7 @@ window.FarolInstitutional=(()=>{
     columns.forEach((state,index)=>{
       const items=shown(index);
       root.querySelector('#institutional-count-'+index).textContent=state.loaded?String(items.length):'—';
-      root.querySelector('#institutional-status-'+index).textContent=state.busy?'Carregando…':state.error?(errors[state.error]||errors.unavailable)+(state.loaded?' A lista anterior foi mantida; atualize antes de continuar.':''):state.missingLabels?errors.labels_missing:state.loaded?state.items.length+' e-mails carregados':'';
+      root.querySelector('#institutional-status-'+index).textContent=state.busy?'Carregando…':state.error?(errors[state.error]||errors.unavailable)+(state.loaded?' A lista anterior foi mantida; atualize antes de continuar.':''):index===archiveColumn&&state.archiveMissing?errors.archive_label_missing:state.missingLabels?errors.labels_missing:state.loaded?state.items.length+' e-mails carregados':'';
       const list=root.querySelector('#institutional-list-'+index);
       list.innerHTML=items.map(m=>card(m,index)).join('')||(state.loaded?'<p class="demand-empty">Nenhum e-mail nesta seleção.</p>':'');
       list.querySelectorAll('[data-due]').forEach(input=>input.addEventListener('input',()=>drafts.set(input.dataset.due,input.value)));
@@ -67,6 +72,7 @@ window.FarolInstitutional=(()=>{
       }));
       list.querySelectorAll('[data-archive]').forEach(button=>button.addEventListener('click',()=>move(button.dataset.archive,index,'archive')));
       list.querySelectorAll('[data-dead-archive]').forEach(button=>button.addEventListener('click',()=>move(button.dataset.deadArchive,index,'dead-archive')));
+      list.querySelectorAll('[data-restore]').forEach(button=>button.addEventListener('click',()=>move(button.dataset.restore,index,'restore')));
       const more=root.querySelector('#institutional-more-'+index);more.hidden=!state.nextPage;more.disabled=moving||state.busy||!connection?.gmail||Boolean(state.error);
     });
   }
@@ -105,7 +111,7 @@ window.FarolInstitutional=(()=>{
     }catch(cause){if(ticket===epoch)feedback=errors[cause.message]||errors.unavailable;}
     finally{if(ticket===epoch){moving=false;draw();}}
   }
-  async function refresh(indices=columnOrder,serial=false){
+  async function refresh(indices=allLists,serial=false){
     if(moving||columns.some(c=>c.busy))return;
     const ticket=epoch;
     if(serial){for(const index of indices){if(ticket!==epoch||!root)return;await load(index);}}
@@ -114,32 +120,37 @@ window.FarolInstitutional=(()=>{
   async function move(id,index,operation,value){
     if(moving||columns.some(c=>c.busy)||!connection?.manageInstitutional||columns[index].error)return;
     const message=columns[index].items.find(m=>m.id===id);if(!message)return;
-    const deadArchive=operation==='dead-archive';
-    const ticket=epoch,mailbox=connection.email;moving=true;feedback=deadArchive?'Movendo para o Arquivo Morto…':operation==='classify'?'Salvando prazo e classificando…':operation==='annual'?'Salvando observações e movendo para Anuais…':'Arquivando…';draw();
+    const deadArchive=operation==='dead-archive',restoring=operation==='restore';
+    const ticket=epoch,mailbox=connection.email;moving=true;feedback=restoring?'Voltando para a Caixa de Entrada…':deadArchive?'Movendo para o Arquivo Morto…':operation==='classify'?'Salvando prazo e classificando…':operation==='annual'?'Salvando observações e movendo para Anuais…':'Arquivando…';draw();
     try{
       const body={type:'general',mailbox,messageId:id,operation,...(operation==='classify'?{dueDate:value,version:message.version}:operation==='annual'?{observations:value,version:message.version}:{})};
       const response=await fetch('/api/google/institutional-move',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Farol-Request':'1'},body:JSON.stringify(body)});
       const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==epoch)return;if(result.mailbox!==mailbox||result.messageId!==id||result.operation!==operation)throw new Error('account_changed');
-      feedback=deadArchive?'Mensagem movida para o Arquivo Morto.':operation==='classify'?'Data limite salva. E-mail movido para Classificadas.':operation==='annual'?'Observações salvas. Demanda movida para Anuais.':'Demanda movida para Arquivadas.';drafts.delete(id);annualDrafts.delete(id);
+      feedback=restoring?'Mensagem voltou para a Caixa de Entrada.':deadArchive?'Mensagem movida para o Arquivo Morto.':operation==='classify'?'Data limite salva. E-mail movido para Classificadas.':operation==='annual'?'Observações salvas. Demanda movida para Anuais.':'Demanda movida para Arquivadas.';drafts.delete(id);annualDrafts.delete(id);
       // Clear source rows immediately after confirmed success, even if refresh fails.
       for(const state of columns)state.items=state.items.filter(m=>m.id!==id);
-      const target=operation==='classify'?1:operation==='annual'?annualColumn:2;
-      if(!deadArchive){
-        columns[target].items.push({...message,dueDate:result.demand?.dueDate||message.dueDate,observations:result.demand?.observations||message.observations,version:result.demand?.version||message.version});
-        columns[target].loaded=true;columns[target].missingLabels=false;
-      }
-      moving=false;draw();await refresh(deadArchive?columnOrder:[...new Set([index,target])],true);
+      const target=restoring?0:deadArchive?archiveColumn:operation==='classify'?1:operation==='annual'?annualColumn:2;
+      columns[target].items.push({...message,dueDate:result.demand?.dueDate||message.dueDate,observations:result.demand?.observations||message.observations,version:result.demand?.version||message.version});
+      columns[target].loaded=true;columns[target].missingLabels=false;
+      if(deadArchive)columns[target].archiveMissing=false;
+      moving=false;draw();await refresh(deadArchive?allLists:[...new Set([index,target])],true);
       if(ticket===epoch&&columns.some(state=>state.error))feedback+=' A movimentação foi confirmada, mas uma lista não pôde ser atualizada; os dados anteriores foram mantidos.';
     }catch(cause){if(ticket===epoch){
       if(cause.message==='archive_label_missing')columns[index].archiveMissing=true;
-      feedback=(cause.message!=='unavailable'&&errors[cause.message])||(deadArchive?'Não foi possível confirmar a movimentação para o Arquivo Morto. Atualize o quadro para conferir.':errors.unavailable);
+      feedback=(cause.message!=='unavailable'&&errors[cause.message])||(restoring||deadArchive?'Não foi possível confirmar a movimentação. Atualize o quadro para conferir.':errors.unavailable);
     }}
     finally{if(ticket===epoch){moving=false;draw();}}
   }
   function mount(element){
     root=element;search='';reset();
-    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nos e-mails carregados<input id="institutional-search" type="search" placeholder="Assunto, remetente, trecho ou observação"></label><button class="button" id="institutional-refresh">Atualizar quadro</button><button class="button" id="institutional-prepare" hidden>Preparar marcadores</button></div><p class="demand-footnote">Defina uma data limite e clique em Classificar para mover da entrada para Classificadas. Marque Demanda ANUAL e informe as observações antes de mover para Anuais. Os prazos encontrados no texto são sugestões e não são salvos automaticamente. Arquivar move a mensagem para Arquivadas. Arquivo Morto retira a mensagem do quadro e deixa o e-mail disponível no marcador GE_ArquivoMorto_Geral no Gmail. As duas ações mantêm o acompanhamento salvo e o estado de leitura.</p><p class="demand-footnote">Entrada, Anuais e Arquivadas: mensagens mais recentes primeiro. Classificadas: data limite mais antiga primeiro, com ordenação de todas as mensagens do marcador antes da paginação; mensagens sem prazo salvo aparecem ao final. Páginas de 20 mensagens. Busca e contagens consideram os e-mails carregados. Calendário de Brasília.</p><p id="institutional-feedback" class="demand-notice" role="status"></p><div class="demand-columns institutional-columns">${columnOrder.map(index=>`<section class="demand-column"><h2>${titles[index]} <span id="institutional-count-${index}">0</span></h2><p class="demand-notice" role="status" id="institutional-status-${index}"></p><div class="demand-cards" id="institutional-list-${index}"></div><button class="button demand-more" id="institutional-more-${index}" hidden>Carregar mais</button></section>`).join('')}</div>
+    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nos e-mails carregados<input id="institutional-search" type="search" placeholder="Assunto, remetente, trecho ou observação"></label><button class="button" id="institutional-refresh">Atualizar quadro</button><button class="button" id="institutional-prepare" hidden>Preparar marcadores</button></div><p class="demand-footnote">Defina uma data limite e clique em Classificar para mover da entrada para Classificadas. Marque Demanda ANUAL e informe as observações antes de mover para Anuais. Os prazos encontrados no texto são sugestões e não são salvos automaticamente. Arquivar move a mensagem para Arquivadas. Arquivo Morto move a mensagem para a lista abaixo das quatro colunas. As movimentações mantêm o acompanhamento salvo e o estado de leitura.</p><p class="demand-footnote">Entrada, Anuais, Arquivadas e Arquivo Morto: mensagens mais recentes primeiro. Classificadas: data limite mais antiga primeiro, com ordenação de todas as mensagens do marcador antes da paginação; mensagens sem prazo salvo aparecem ao final. Páginas de 20 mensagens. Busca e contagens consideram os e-mails carregados. Calendário de Brasília.</p><p id="institutional-feedback" class="demand-notice" role="status"></p><div class="demand-columns institutional-columns">${columnOrder.map(index=>`<section class="demand-column"><h2>${titles[index]} <span id="institutional-count-${index}">0</span></h2><p class="demand-notice" role="status" id="institutional-status-${index}"></p><div class="demand-cards" id="institutional-list-${index}"></div><button class="button demand-more" id="institutional-more-${index}" hidden>Carregar mais</button></section>`).join('')}</div>
+      <section class="inbox-panel" aria-labelledby="institutional-archive-title">
+        <div class="inbox-heading"><h2 id="institutional-archive-title">Arquivo Morto <span id="institutional-count-${archiveColumn}">—</span></h2></div>
+        <p class="demand-notice" role="status" id="institutional-status-${archiveColumn}"></p>
+        <div class="demand-cards" id="institutional-list-${archiveColumn}"></div>
+        <button class="button demand-more" id="institutional-more-${archiveColumn}" hidden>Carregar mais</button>
+      </section>
       <dialog id="institutional-annual-dialog" aria-labelledby="institutional-annual-title">
         <h2 id="institutional-annual-title">Demanda ANUAL</h2>
         <p id="institutional-annual-subject"></p>

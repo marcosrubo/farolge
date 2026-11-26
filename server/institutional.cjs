@@ -76,16 +76,18 @@ function extractActivities(text,subject,receivedAt){
   return activities.length?activities:[{activity:subject||'(Sem assunto)',dueDate:null,evidence:'',review:'Prazo não identificado no texto disponível.'}];
 }
 // Keep existing column IDs stable for clients with a previous release cached.
-const FOLDERS=['INBOX',...GENERAL_FOLDERS];
+const ARCHIVE_COLUMN=4;
+const FOLDERS=['INBOX',...GENERAL_FOLDERS,GENERAL_ARCHIVE_LABEL];
 async function handleInstitutional({action='institutional',url,body={},client,store,owner,email,canModify=false}){
   const moving=action==='institutional-move';
-  const deadArchive=body.operation==='dead-archive';
+  const deadArchive=body.operation==='dead-archive',restoring=body.operation==='restore';
+  const archiveMove=deadArchive||restoring;
   const annual=body.operation==='annual',classifying=body.operation==='classify';
   const observations=typeof body.observations==='string'?body.observations.trim():'';
   if((moving?body.mailbox:url.searchParams.get('mailbox'))!==email)fail('account_changed',409);
   const request=async path=>(await readGmail(client,{url:BASE+path,timeout:10000})).data;
   if(moving){
-    if(body.type!=='general'||!validId(body.messageId)||!['classify','annual','archive','dead-archive'].includes(body.operation)||Object.keys(body).some(key=>!['type','mailbox','messageId','operation',...(!deadArchive?['dueDate','version']:[]),...(annual?['observations']:[])].includes(key)))fail('invalid_institutional',400);
+    if(body.type!=='general'||!validId(body.messageId)||!['classify','annual','archive','dead-archive','restore'].includes(body.operation)||Object.keys(body).some(key=>!['type','mailbox','messageId','operation',...(!archiveMove?['dueDate','version']:[]),...(annual?['observations']:[])].includes(key)))fail('invalid_institutional',400);
     if((classifying||annual)&&(!Number.isSafeInteger(body.version)||body.version<0))fail('invalid_institutional',400);
     if(classifying&&(!body.dueDate||!validDate(body.dueDate)))fail('invalid_institutional',400);
     if(annual&&(!observations||body.observations.length>4000))fail('invalid_institutional',400);
@@ -93,21 +95,22 @@ async function handleInstitutional({action='institutional',url,body={},client,st
   }
   const column=Number(url.searchParams.get('column')||'0');
   const page=url.searchParams.get('page')||'';
-  if(!moving&&(!/^[0-3]$/.test(url.searchParams.get('column')||'0')))fail('invalid_column',400);
+  if(!moving&&(!/^[0-4]$/.test(url.searchParams.get('column')||'0')))fail('invalid_column',400);
   if(!moving&&page.length>2048)fail('invalid_page',400);
   const {labels=[]}=await request('/labels');
-  const archiveId=labels.find(label=>label.name===GENERAL_ARCHIVE_LABEL)?.id;
   const ids=FOLDERS.map((name,i)=>i===0?'INBOX':labels.find(label=>label.name===name)?.id||null);
+  const archiveId=ids[ARCHIVE_COLUMN];
   if(moving){
     const [inbox,classified,archived,annualLabel]=ids;
-    if(deadArchive&&!archiveId)fail('archive_label_missing',409);
-    if(!deadArchive&&(!classified||!archived||(annual&&!annualLabel)))fail('labels_missing',409);
+    if(archiveMove&&!archiveId)fail('archive_label_missing',409);
+    if(!archiveMove&&(!classified||!archived||(annual&&!annualLabel)))fail('labels_missing',409);
     const id=body.messageId;
     let message=await request('/messages/'+id+'?format=metadata');
     if(message?.id!==id)fail('invalid_provider',502);
     const eligible=m=>{
       const current=m.labelIds||[];
       if(current.some(l=>['SPAM','TRASH','DRAFT'].includes(l)))return false;
+      if(restoring)return current.includes(archiveId)||current.includes(inbox);
       if(current.includes(archiveId))return deadArchive;
       if(annual)return current.includes(inbox)&&![classified,archived,annualLabel].some(l=>current.includes(l));
       if(classifying)return ![archived,annualLabel].some(l=>current.includes(l))&&[inbox,classified].some(l=>current.includes(l));
@@ -129,16 +132,16 @@ async function handleInstitutional({action='institutional',url,body={},client,st
       message=await request('/messages/'+id+'?format=metadata');
       if(message?.id!==id||!eligible(message))fail('not_inbox',409);
     }
-    const target=deadArchive?archiveId:annual?annualLabel:classifying?classified:archived;
-    const remove=deadArchive?ids.filter(Boolean):annual||classifying?[inbox]:[inbox,classified,annualLabel].filter(Boolean);
+    const target=restoring?inbox:deadArchive?archiveId:annual?annualLabel:classifying?classified:archived;
+    const remove=restoring?[archiveId]:deadArchive?ids.slice(0,ARCHIVE_COLUMN).filter(Boolean):annual||classifying?[inbox]:[inbox,classified,annualLabel].filter(Boolean);
     let result=message;
-    if(!deadArchive||!message.labelIds?.includes(target)||remove.some(label=>message.labelIds?.includes(label))){
-      ({data:result}=await client.request({url:BASE+'/messages/'+id+'/modify',method:'POST',data:{addLabelIds:[target],removeLabelIds:remove},timeout:10000,...(deadArchive?{retry:false}:{})}));
+    if(!archiveMove||!message.labelIds?.includes(target)||remove.some(label=>message.labelIds?.includes(label))){
+      ({data:result}=await client.request({url:BASE+'/messages/'+id+'/modify',method:'POST',data:{addLabelIds:[target],removeLabelIds:remove},timeout:10000,...(archiveMove?{retry:false}:{})}));
     }
     if(result?.id!==id||!(result.labelIds||[]).includes(target)||remove.some(l=>(result.labelIds||[]).includes(l)))fail('classification_unconfirmed',502);
     return {mailbox:email,messageId:id,operation:body.operation,demand:saved?{dueDate:saved.dueDate,observations:saved.observations||null,version:saved.version}:null};
   }
-  if(!ids[column])return {mailbox:email,column,items:[],nextPage:null,missingLabels:true,canModify};
+  if(!ids[column])return {mailbox:email,column,items:[],nextPage:null,missingLabels:column!==ARCHIVE_COLUMN,archiveMissing:!archiveId,canModify};
   let messages,nextPage,demands;
   if(column===1){
     // Gmail orders by receipt, not by the saved deadline. Scan only IDs first,
@@ -170,7 +173,7 @@ async function handleInstitutional({action='institutional',url,body={},client,st
         const message=await request('/messages/'+id+'?format=full');
         if(message.id!==id||!validId(message.threadId))fail('invalid_provider',502);
         const labels=message.labelIds||[];
-        if(!labels.includes(ids[column])||labels.some(l=>['TRASH','SPAM','DRAFT',archiveId].includes(l)))continue;
+        if(!labels.includes(ids[column])||labels.some(l=>['TRASH','SPAM','DRAFT'].includes(l))||(column!==ARCHIVE_COLUMN&&labels.includes(archiveId)))continue;
         const headers=Object.fromEntries((message.payload?.headers||[]).map(h=>[h.name.toLowerCase(),String(h.value||'')]));
         const subject=headers.subject||'(Sem assunto)',date=Number(message.internalDate)||0;
         const text=plainText(message.payload)||htmlText(message.payload),demand=demands.get(id);

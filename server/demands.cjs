@@ -33,7 +33,9 @@ function publicDemand(row){
 async function handleDemands({action,url,body,client,store,owner,email,canClassify=false}){
   const request=async(path)=>{const {data}=await client.request({url:BASE+path,timeout:10000});return data;};
   const archiving=action==='personal-archive';
-  const expected=archiving||['demand','classify'].includes(action)?body.mailbox:url.searchParams.get('mailbox');
+  const restoring=action==='personal-restore';
+  const archiveMove=archiving||restoring;
+  const expected=archiveMove||['demand','classify'].includes(action)?body.mailbox:url.searchParams.get('mailbox');
   if(expected!==email)fail('account_changed',409);
   if(action==='demand'){
     if(Object.keys(body).some(key=>!['type','mailbox','threadId','version','dueDate','completed','responsible','column'].includes(key)) || body.type!=='personal' || !Number.isInteger(body.column) || body.column<0 || body.column>2 || !validId(body.threadId) || !Number.isSafeInteger(body.version) || body.version<0 || !validDate(body.dueDate) || typeof body.completed!=='boolean' || typeof body.responsible!=='string' || body.responsible.length>200)fail('invalid_demand',400);
@@ -42,7 +44,7 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
     if(Object.keys(body).some(key=>!['type','mailbox','messageId','column'].includes(key)) || body.type!=='personal' || !validId(body.messageId) || !Number.isInteger(body.column) || body.column<0 || body.column>2)fail('invalid_classification',400);
     if(!canClassify)fail('classify_scope',403);
   }
-  if(archiving){
+  if(archiveMove){
     if(body.type!=='personal'||!validId(body.messageId)||Object.keys(body).some(key=>!['type','mailbox','messageId'].includes(key)))fail('invalid_archive',400);
     if(!canClassify)fail('classify_scope',403);
   }
@@ -54,19 +56,6 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
   const excluded=['TRASH','SPAM','DRAFT'];
   const inArchive=message=>Boolean(archiveId)&&message.labelIds?.includes(archiveId);
   const canArchiveMessage=message=>!message.labelIds?.some(id=>excluded.includes(id))&&message.labelIds?.some(id=>activeIds.includes(id));
-  if(archiving){
-    if(!archiveId)fail('archive_label_missing',409);
-    const {messageId}=body,path=BASE+'/messages/'+messageId;
-    const {data:message}=await readGmail(client,{url:path+'?format=metadata',timeout:10000});
-    if(message?.id!==messageId||!validId(message.threadId))fail('invalid_provider',502);
-    if(message.labelIds?.some(id=>excluded.includes(id))||(!canArchiveMessage(message)&&!inArchive(message)))fail('not_inbox',409);
-    let result=message;
-    if(!inArchive(message)||canArchiveMessage(message)){
-      ({data:result}=await client.request({url:path+'/modify',method:'POST',data:{addLabelIds:[archiveId],removeLabelIds:activeIds},timeout:10000,retry:false}));
-    }
-    if(result?.id!==messageId||!inArchive(result)||result.labelIds.some(id=>activeIds.includes(id)))fail('classification_unconfirmed',502);
-    return {mailbox:email,messageId,threadId:message.threadId};
-  }
   const withoutArchived=thread=>{
     const messages=thread.messages?.filter(message=>!inArchive(message));
     return messages?.length===thread.messages?.length?thread:{...thread,messages,snippet:''};
@@ -76,10 +65,29 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
     const h=headers(message),labelIds=message.labelIds||[];
     return {id:message.id,threadId:message.threadId,subject:clean(h.subject||'(Sem assunto)'),from:clean(h.from),to:clean(h.to),snippet:clean(message.snippet),date:Number(message.internalDate)||0,unread:labelIds.includes('UNREAD'),labels:LABELS.filter((_,i)=>labelIds.includes(ids[i]))};
   };
+  if(archiveMove){
+    if(!archiveId)fail('archive_label_missing',409);
+    const {messageId}=body,path=BASE+'/messages/'+messageId;
+    const {data:message}=await readGmail(client,{url:path+'?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To',timeout:10000});
+    if(message?.id!==messageId||!validId(message.threadId))fail('invalid_provider',502);
+    const current=message.labelIds||[];
+    const eligible=restoring?current.includes('INBOX'):canArchiveMessage(message);
+    if(current.some(id=>excluded.includes(id))||(!eligible&&!inArchive(message)))fail('not_inbox',409);
+    const target=restoring?'INBOX':archiveId;
+    const remove=restoring?[archiveId]:activeIds;
+    let result=message;
+    if(!current.includes(target)||remove.some(id=>current.includes(id))){
+      ({data:result}=await client.request({url:path+'/modify',method:'POST',data:{addLabelIds:[target],removeLabelIds:remove},timeout:10000,retry:false}));
+    }
+    const after=result?.labelIds||[];
+    if(result?.id!==messageId||!after.includes(target)||remove.some(id=>after.includes(id)))fail('classification_unconfirmed',502);
+    return {mailbox:email,messageId,threadId:message.threadId,item:inboxMessage({...message,labelIds:after})};
+  }
   const inInbox=message=>(message.labelIds||[]).includes('INBOX') && !(message.labelIds||[]).some(id=>['TRASH','SPAM','DRAFT'].includes(id));
-  if(action==='inbox'||action==='classified') {
+  if(['inbox','classified','archived'].includes(action)) {
+    const listingArchive=action==='archived';
     const page=url.searchParams.get('page')||'';if(page.length>2048)fail('invalid_page',400);
-    const listLabel=action==='classified'?classifiedId:'INBOX';
+    const listLabel=listingArchive?archiveId:action==='classified'?classifiedId:'INBOX';
     if(!listLabel)return {mailbox:email,items:[],nextPage:null,canClassify,missingLabels:true};
     const params=new URLSearchParams({labelIds:listLabel,maxResults:'20',includeSpamTrash:'false'});if(page)params.set('pageToken',page);
     const listed=await request('/messages?'+params);
@@ -87,10 +95,10 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
       if(!validId(item.id))fail('invalid_provider',502);
       try {
         const message=await request('/messages/'+item.id+'?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To');
-        return (message.labelIds||[]).includes(listLabel) && !inArchive(message) && !(message.labelIds||[]).some(id=>excluded.includes(id))?inboxMessage(message):null;
+        return (message.labelIds||[]).includes(listLabel) && (listingArchive||!inArchive(message)) && !(message.labelIds||[]).some(id=>excluded.includes(id))?inboxMessage(message):null;
       } catch(error){if(error.response?.status===404)return null;throw error;}
     })).filter(Boolean);
-    return {mailbox:email,items,nextPage:listed.nextPageToken||null,canClassify,missingLabels:ids.some(id=>!id)||!classifiedId};
+    return {mailbox:email,items,nextPage:listed.nextPageToken||null,canClassify,missingLabels:!listingArchive&&(ids.some(id=>!id)||!classifiedId)};
   }
   if(action==='classify') {
     const label=ids[body.column];if(!label||!classifiedId)fail('labels_missing',409);

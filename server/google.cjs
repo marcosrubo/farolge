@@ -30,7 +30,7 @@ const SCHOOL_DOMAIN='escola.pr.gov.br';
 const SCOPES = ['openid','email','profile',READ_SCOPE,DRIVE_SCOPE];
 const ROUTES = new Set(['inicio','analise-faltas','radar','institucionais','pessoais','bi-seed','inspetores-monitores','manutencao-sistema','configuracoes']);
 const TYPES = ['general','personal'];
-const personalActions=new Set(['board','thread','demand','inbox','classified','classify','personal-archive']);
+const personalActions=new Set(['board','thread','demand','inbox','classified','classify','personal-archive','archived','personal-restore']);
 const driveReadActions=new Set(['student-import','attendance-import']);
 const driveMetadataActions=new Set(['maintenance','student-files','attendance-files']);
 const schoolActions=new Set(['students','occurrence','occurrences','inspector-occurrences','attendance-analysis']);
@@ -280,7 +280,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     const temporaryPublic=['temporary-users','temporary-user','temporary-login','temporary-activate','temporary-password','temporary-logout'];
     if(!['status','access-denied','start','callback','disconnect','logout',...temporaryPublic].includes(action)
       &&!actionModules.has(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','personal-archive','institutional-move','institutional-labels','occurrence','occurrence-delete','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
+    const expected=['start','disconnect','logout','demand','classify','personal-archive','personal-restore','institutional-move','institutional-labels','occurrence','occurrence-delete','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{
       configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured',
@@ -539,8 +539,8 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             }
             return reply(503,{error:'unavailable'});
           }
-          const failure=(action.startsWith('institutional')||action==='personal-archive')?gmailFailure(error):null;
-          const scopeError={classify:'classify_scope','personal-archive':'classify_scope','institutional-move':'institutional_scope'}[action]||'missing_scope';
+          const failure=(action.startsWith('institutional')||['archived','personal-archive','personal-restore'].includes(action))?gmailFailure(error):null;
+          const scopeError={classify:'classify_scope','personal-archive':'classify_scope','personal-restore':'classify_scope','institutional-move':'institutional_scope'}[action]||'missing_scope';
           if(failure)return reply(failure.status,{error:failure.code==='missing_scope'?scopeError:failure.code});
           if(error.response?.status===403)return reply(403,{error:scopeError});
           if(error.response?.status===404)return reply(404,{error:'not_found'});

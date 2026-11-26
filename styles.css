@@ -107,7 +107,11 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 @media(max-width:1200px){.demands-workspace{padding:28px 23px}.demand-columns{gap:10px}.demand-column{padding:10px}.demand-card-open{padding:12px}}
 @media(max-width:760px){.demands-workspace{padding:24px 16px}.demand-columns{display:block}.demand-column{display:none}.demand-column.mobile-active{display:block}.demand-mobile-tabs{display:flex;gap:6px;margin:16px 0}.demand-mobile-tabs button{flex:1;font-size:11px;padding:9px 5px}.demand-mobile-tabs [aria-pressed=true]{background:var(--green);color:white}.demand-fields{grid-template-columns:1fr}.demand-toolbar label{flex:1;min-width:125px}.demand-toolbar label.demand-check{flex:auto}}
 
-/* Caixa de entrada ocupa a largura das três colunas; ações por mensagem. */
+/* Caixa de Entrada e Despachadas em duas colunas, com Arquivo Morto abaixo. */
+.personal-mailbox-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:16px}
+.personal-mailbox-columns .inbox-message{grid-template-columns:minmax(0,1fr);gap:8px}
+.personal-mailbox-columns .inbox-actions{justify-content:flex-start}
+@media(max-width:760px){.personal-mailbox-columns{display:block}}
 .inbox-panel{margin-top:28px;padding:20px;background:#fff;border:1px solid var(--border);border-radius:12px;min-width:0}
 .inbox-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:-20px -20px 16px;padding:18px 20px;background:var(--green);color:#fff;border-radius:11px 11px 0 0}
 .inbox-heading h2{margin:0;font-size:20px;color:#fff}

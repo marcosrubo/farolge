@@ -123,6 +123,9 @@ function interactive(fetcher){
   get innerHTML(){return this._html;}
   querySelector(selector){if(!this.nodes.has(selector))this.nodes.set(selector,new Node());return this.nodes.get(selector);}
   querySelectorAll(selector){
+   if(selector==='[data-restore-message]')return this.restoreButtons=[...this.innerHTML.matchAll(/data-restore-message="([\w-]+)"/g)].map(match=>{
+    const button=new Node();button.dataset={restoreMessage:match[1]};return button;
+   });
    if(selector==='[data-archive-thread]'){
     this.archiveThreads=[...this.querySelector('#demand-columns').innerHTML.matchAll(/data-archive-thread="([\w-]+)" data-column="([0-2])"/g)].map(match=>{const b=new Node();b.dataset={archiveThread:match[1],column:match[2]};return b;});
     return this.archiveThreads;
@@ -157,7 +160,7 @@ test('quadro carrega três colunas e apaga dados imediatamente quando a conta mu
  const requests=[];
  const h=interactive(async(url)=>{requests.push(url);return {ok:true,json:async()=>({mailbox:'person@gmail.com',items:[],nextPage:null})};});
  h.api.connectionChanged({email:'person@gmail.com',gmail:true});h.api.mount(h.root);await settle();
- assert.equal(requests.length,5);assert.ok(h.root.querySelector('#demand-columns').innerHTML.includes('ME DEVEM'));
+ assert.equal(requests.length,6);assert.ok(h.root.querySelector('#demand-columns').innerHTML.includes('ME DEVEM'));
  h.api.connectionChanged(null);
  assert.ok(h.root.querySelector('#demand-notice').textContent.includes('Conecte a conta Pessoal'));
  assert.ok(!h.root.querySelector('#demand-columns').innerHTML.includes('person@gmail.com'));
@@ -423,5 +426,51 @@ test('botões do Arquivo Morto na Pessoal permitem escolher uma mensagem da conv
  assert.ok(!ui.root.querySelector('#classified-list').innerHTML.includes('data-classified-archive="message1"'));
  assert.deepEqual(ui.root.archiveThreads.map(button=>button.dataset.column),['1']);
  assert.match(ui.root.querySelector('#demand-notice').textContent,/movida para o Arquivo Morto/);
+ ui.api.unmount();
+});
+
+
+test('lista Arquivo Morto da Pessoal por marcador e restaura uma mensagem sem tocar na conversa',async()=>{
+ const h=harness(),body={type:'personal',mailbox:h.email,messageId:'message1'};
+ h.messages.get('message1').labelIds=['L4','UNREAD','CUSTOM'];
+ h.messages.get('inbox2').labelIds=['L4','TRASH'];
+ const listed=await h.run('archived',{query:{page:'next'}});
+ assert.deepEqual(listed.items.map(item=>item.id),['message1']);
+ const request=new URL(h.calls.find(call=>call.url.includes('/messages?')).url);
+ assert.equal(request.searchParams.get('labelIds'),'L4');
+ assert.equal(request.searchParams.get('pageToken'),'next');
+ await assert.rejects(h.run('personal-restore',{body,canClassify:false}),{message:'classify_scope'});
+ await assert.rejects(h.run('personal-restore',{body:{...body,messageId:'inbox2'}}),{message:'not_inbox'});
+ const result=await h.run('personal-restore',{body});
+ assert.equal(result.item.id,'message1');
+ assert.equal(result.item.unread,true);
+ await h.run('personal-restore',{body});
+ assert.deepEqual(h.messages.get('message1').labelIds,['UNREAD','CUSTOM','INBOX']);
+ assert.deepEqual(h.messages.get('inbox2').labelIds,['L4','TRASH']);
+ assert.deepEqual(h.calls.filter(call=>call.method==='POST').map(call=>call.data),[{addLabelIds:['INBOX'],removeLabelIds:['L4']}]);
+ assert.equal(h.rows.size,0);
+});
+
+test('Pessoal mostra as duas colunas acima do Arquivo Morto e move o cartão após confirmação',async()=>{
+ const h=harness();
+ h.messages.get('message1').labelIds=['L4','UNREAD'];
+ let fail=true;
+ const ui=interactive(async(url,options={})=>{
+  const parsed=new URL(url,'https://farol.invalid'),action=parsed.pathname.split('/').at(-1);
+  if(action==='personal-restore'&&fail)return {ok:false,json:async()=>({error:'classification_unconfirmed'})};
+  const body=options.body?JSON.parse(options.body):undefined;
+  const result=await h.run(action,{body,query:Object.fromEntries(parsed.searchParams)});
+  return {ok:true,json:async()=>result};
+ });
+ ui.api.connectionChanged({email:h.email,gmail:true,classify:true});ui.api.mount(ui.root);await settle();
+ assert.match(ui.root.innerHTML,/<div class="personal-mailbox-columns">[\s\S]+id="inbox-title"[\s\S]+id="classified-title"[\s\S]+<\/section><\/div><section[\s\S]+id="archived-title"/);
+ const list=ui.root.querySelector('#archived-list');
+ await list.restoreButtons[0].listeners.click();
+ assert.match(list.innerHTML,/data-restore-message="message1"/);
+ fail=false;
+ await list.restoreButtons[0].listeners.click();
+ assert.doesNotMatch(list.innerHTML,/data-restore-message="message1"/);
+ assert.match(ui.root.querySelector('#inbox-list').innerHTML,/data-inbox-archive="message1"/);
+ assert.match(ui.root.querySelector('#archived-feedback').textContent,/voltou para a Caixa de Entrada/);
  ui.api.unmount();
 });

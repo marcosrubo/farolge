@@ -12,7 +12,12 @@ window.FarolDemands=(()=>{
     return days>0?{text:`Atrasado há ${days} ${days===1?'dia':'dias'}`,kind:'late'}:days===0?{text:'Vence hoje',kind:'today'}:{text:'Vence em '+date(demand.dueDate),kind:'future'};
   }
   const errors={login_required:'Conecte a conta Pessoal para consultar suas demandas.',missing_scope:'Revise a autorização da conta Pessoal e permita a consulta ao Gmail.',setup_required:'O armazenamento de prazos ainda precisa ser preparado no Supabase. Consulte as instruções de publicação.',account_changed:'A conta Pessoal mudou. Atualize o quadro antes de continuar.',conflict:'Esta demanda foi alterada em outra janela. Feche e abra a conversa novamente antes de salvar.',not_found:'O e-mail ou a conversa não está mais disponível. Atualize a lista.',classify_scope:'Para movimentar mensagens, use Pessoal → Revisar autorização e conceda a permissão de modificar o Gmail.',archive_label_missing:'Use Pessoal → Revisar autorização para criar GE_ArquivoMorto_Pessoal.',gmail_rate_limit:'O Google limitou temporariamente o acesso. Aguarde e atualize as listas.',gmail_domain_policy:'A organização bloqueou o acesso do aplicativo ao Gmail.',labels_missing:'Um marcador está ausente. Use Pessoal → Revisar autorização para prepará-lo.',not_inbox:'Esta mensagem já foi movida ou não está disponível para esta operação. Atualize a lista.',classification_unconfirmed:'O Gmail não confirmou a movimentação. Atualize as listas para conferir.',invalid_demand:'Confira o prazo e os dados da demanda.',unavailable:'Não foi possível consultar ou salvar os dados. Tente novamente.'};
-  let inbox={items:[],loaded:false,busy:false},inboxSearch='',classified={items:[],loaded:false,busy:false},classifiedSearch='';
+  const mailboxTitles={inbox:'Caixa de Entrada',classified:'Despachadas',archived:'Arquivo Morto'};
+  const mailboxKinds=Object.keys(mailboxTitles);
+  const mailboxSearch={inbox:'',classified:'',archived:''};
+  const emptyMailbox=()=>({items:[],loaded:false,busy:false});
+  let inbox=emptyMailbox(),classified=emptyMailbox(),archived=emptyMailbox();
+  const mailboxState=kind=>({inbox,classified,archived})[kind];
   let root=null,connection,epoch=0,columns=[],busy=false,active=null,detailVersion=0,search='',unread=false,view='pending',sort='recent',tab=0;
   const dialog=()=>document.querySelector('#demand-dialog');
   function clearDetails(){
@@ -20,7 +25,7 @@ window.FarolDemands=(()=>{
     const panel=dialog();if(panel?.open)panel.close();
     const content=document.querySelector('#demand-detail');if(content)content.textContent='';
   }
-  function reset(){++epoch;busy=false;inbox={items:[],loaded:false,busy:false};classified={items:[],loaded:false,busy:false};columns=titles.map(()=>({items:[],loaded:false,nextPage:null,error:null}));clearDetails();}
+  function reset(){++epoch;busy=false;inbox=emptyMailbox();classified=emptyMailbox();archived=emptyMailbox();columns=titles.map(()=>({items:[],loaded:false,nextPage:null,error:null}));clearDetails();}
   async function api(action,params,body){
     const response=await fetch('/api/google/'+action+(params?'?'+new URLSearchParams(params):''),{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json','X-Farol-Request':'1'}:{},...(body?{body:JSON.stringify(body)}:{})});
     const result=await response.json();window.FarolAccessDenied?.(result);if(!response.ok)throw new Error(result.error||'unavailable');return result;
@@ -48,41 +53,48 @@ window.FarolDemands=(()=>{
     root.querySelectorAll('[data-archive-thread]').forEach(button=>button.addEventListener('click',()=>open(button.dataset.archiveThread,Number(button.dataset.column),true)));
     root.querySelectorAll('[data-more]').forEach(button=>button.addEventListener('click',()=>load(Number(button.dataset.more),true)));
   }
-  const mailboxBusy=()=>inbox.busy||classified.busy;
-  function drawInbox(){drawMailbox('inbox');drawMailbox('classified');}
+  const mailboxBusy=()=>inbox.busy||classified.busy||archived.busy;
+  function drawMailboxes(){mailboxKinds.forEach(drawMailbox);}
   function drawMailbox(kind){
-    const state=kind==='inbox'?inbox:classified,search=kind==='inbox'?inboxSearch:classifiedSearch;
-    const title=kind==='inbox'?'Caixa de entrada':'Despachadas',attribute=kind==='inbox'?'classify':'classified-classify';
+    const state=mailboxState(kind),search=mailboxSearch[kind];
+    const title=mailboxTitles[kind],attribute=kind==='inbox'?'classify':'classified-classify';
     if(!root)return;
     const target=root.querySelector('#'+kind+'-list');if(!target)return;
     const items=state.items.filter(item=>!search||[item.subject,item.from,item.to,item.snippet].join(' ').toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
     root.querySelector('#'+kind+'-count').textContent=state.loaded?`${items.length} exibidos / ${state.items.length} carregados`:'';
-    root.querySelector('#'+kind+'-permission').textContent=connection?.gmail && state.loaded && !state.canClassify?errors.classify_scope:state.missingLabels?errors.labels_missing:'';
-    target.innerHTML=!state.loaded?`<p class="demand-empty">${mailboxBusy()?'Carregando '+title+'…':state.error?escape(errors[state.error]||errors.unavailable):'Conecte a conta Pessoal para consultar '+title+'.'}</p>`:items.length?items.map(item=>`<article class="inbox-message ${item.unread?'is-unread':''}"><div class="inbox-message-main"><a class="inbox-subject" href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connection.email)}#all/${encodeURIComponent(item.threadId)}" target="_blank" rel="noopener noreferrer">${escape(item.subject)} <span>(abrir no Gmail)</span></a><p>${escape(item.from)} · ${escape(dateTime(item.date))}${item.unread?' · Não lida':''}</p><p class="demand-snippet">${escape(item.snippet)}</p><p class="inbox-labels">${item.labels.length?'Etiquetas: '+item.labels.map(escape).join(' · '):'Sem etiqueta de classificação do FAROL'}</p></div><div class="inbox-actions" aria-label="Ações da mensagem">${titles.map((title,column)=>`<button class="button" data-${attribute}="${column}" data-message="${escape(item.id)}" ${mailboxBusy()||busy||!state.canClassify||state.missingLabels||(kind==='classified'&&item.labels.includes(title))?'disabled':''}>${escape(title)}${item.labels.includes(title)?' ✓':''}</button>`).join('')}<button class="button" type="button" data-${kind}-archive="${escape(item.id)}" ${mailboxBusy()||busy||!state.canClassify?'disabled':''}>Arquivo Morto</button></div></article>`).join(''):`<p class="demand-empty">Nenhum e-mail nesta seleção de ${title}.</p>`;
+    const permission=state.missingLabels?(kind==='archived'?errors.archive_label_missing:errors.labels_missing):'';
+    root.querySelector('#'+kind+'-permission').textContent=connection?.gmail&&state.loaded&&!state.canClassify?errors.classify_scope:permission;
+    const actionDisabled=mailboxBusy()||busy||!state.canClassify;
+    target.innerHTML=!state.loaded?`<p class="demand-empty">${mailboxBusy()?'Carregando '+title+'…':state.error?escape(errors[state.error]||errors.unavailable):'Conecte a conta Pessoal para consultar '+title+'.'}</p>`:items.length?items.map(item=>`<article class="inbox-message ${item.unread?'is-unread':''}"><div class="inbox-message-main"><a class="inbox-subject" href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(connection.email)}#all/${encodeURIComponent(item.threadId)}" target="_blank" rel="noopener noreferrer">${escape(item.subject)} <span>(abrir no Gmail)</span></a><p>${escape(item.from)} · ${escape(dateTime(item.date))}${item.unread?' · Não lida':''}</p><p class="demand-snippet">${escape(item.snippet)}</p>${kind!=='archived'?`<p class="inbox-labels">${item.labels.length?'Etiquetas: '+item.labels.map(escape).join(' · '):'Sem etiqueta de classificação do FAROL'}</p>`:''}</div><div class="inbox-actions" aria-label="Ações da mensagem">${kind==='archived'
+      ?`<button class="button" type="button" data-restore-message="${escape(item.id)}" ${actionDisabled?'disabled':''}>Voltar p/ Cx Entrada</button>`
+      :`${titles.map((title,column)=>`<button class="button" data-${attribute}="${column}" data-message="${escape(item.id)}" ${actionDisabled||state.missingLabels||(kind==='classified'&&item.labels.includes(title))?'disabled':''}>${escape(title)}${item.labels.includes(title)?' ✓':''}</button>`).join('')}<button class="button" type="button" data-${kind}-archive="${escape(item.id)}" ${actionDisabled?'disabled':''}>Arquivo Morto</button>`}</div></article>`).join(''):`<p class="demand-empty">Nenhum e-mail nesta seleção.</p>`;
     root.querySelector('#'+kind+'-more').hidden=!state.nextPage;
     root.querySelector('#'+kind+'-more').disabled=mailboxBusy();
     root.querySelector('#'+kind+'-refresh').disabled=mailboxBusy()||!connection?.gmail;
     root.querySelector('#demand-refresh').disabled=mailboxBusy();
-    root.querySelectorAll('[data-'+kind+'-archive]').forEach(button=>button.addEventListener('click',()=>archiveMessage(button.getAttribute('data-'+kind+'-archive'),kind)));
-    root.querySelectorAll('[data-'+attribute+']').forEach(button=>button.addEventListener('click',()=>classify(button.dataset.message,Number(kind==='inbox'?button.dataset.classify:button.dataset.classifiedClassify),kind)));
+    if(kind==='archived'){
+      target.querySelectorAll('[data-restore-message]').forEach(button=>button.addEventListener('click',()=>restoreMessage(button.dataset.restoreMessage)));
+    }else{
+      root.querySelectorAll('[data-'+kind+'-archive]').forEach(button=>button.addEventListener('click',()=>archiveMessage(button.getAttribute('data-'+kind+'-archive'),kind)));
+      root.querySelectorAll('[data-'+attribute+']').forEach(button=>button.addEventListener('click',()=>classify(button.dataset.message,Number(kind==='inbox'?button.dataset.classify:button.dataset.classifiedClassify),kind)));
+    }
   }
-  const loadInbox=append=>loadMailbox('inbox',append);
   async function loadMailbox(kind,append=false){
     if(!root||!connection?.gmail||mailboxBusy()||busy)return;
-    const state=kind==='inbox'?inbox:classified;
-    const ticket=epoch,mailbox=connection.email;state.busy=true;state.error=null;drawInbox();drawColumns();
+    const state=mailboxState(kind);
+    const ticket=epoch,mailbox=connection.email;state.busy=true;state.error=null;drawMailboxes();drawColumns();
     try {
       const result=await api(kind,{mailbox,...(append?{page:state.nextPage}:{})});
       if(ticket!==epoch||!root)return;if(result.mailbox!==mailbox)throw new Error('account_changed');
       const combined=[...(append?state.items:[]),...result.items];
       Object.assign(state,{loaded:true,items:[...new Map(combined.map(item=>[item.id,item])).values()],nextPage:result.nextPage,canClassify:result.canClassify===true,missingLabels:result.missingLabels});
-      root.querySelector('#'+kind+'-feedback').textContent=kind==='inbox'?'Caixa de entrada atualizada. Ao classificar, a mensagem será movida para Despachadas.':'Despachadas atualizado. Adicionar categorias mantém a mensagem nesta caixa.';
+      root.querySelector('#'+kind+'-feedback').textContent='';
     } catch(error){if(ticket===epoch){state.error=error.message;root.querySelector('#'+kind+'-feedback').textContent=errors[error.message]||errors.unavailable;}}
-    finally {if(ticket===epoch){state.busy=false;drawInbox();drawColumns();}}
+    finally {if(ticket===epoch){state.busy=false;drawMailboxes();drawColumns();}}
   }
   async function classify(messageId,column,source='inbox'){
     if(!root||!connection?.gmail||mailboxBusy()||busy||!(inbox.canClassify||classified.canClassify||connection.classify))return;
-    const ticket=epoch,mailbox=connection.email;inbox.busy=true;drawInbox();drawColumns();root.querySelector('#'+source+'-feedback').textContent='Aplicando etiqueta…';
+    const ticket=epoch,mailbox=connection.email;inbox.busy=true;drawMailboxes();drawColumns();root.querySelector('#'+source+'-feedback').textContent='Aplicando etiqueta…';
     let applied=false;
     try {
       const result=await api('classify',null,{type:'personal',mailbox,messageId,column});
@@ -110,7 +122,7 @@ window.FarolDemands=(()=>{
     } catch(error){if(ticket===epoch){
       if(error.message==='classify_scope'||error.message==='missing_scope'){inbox.canClassify=false;classified.canClassify=false;connection={...connection,classify:false};}
       root.querySelector('#'+source+'-feedback').textContent=applied?'Etiqueta aplicada no Gmail. Não foi possível atualizar as colunas; clique em Atualizar.':errors[error.message]||errors.unavailable;
-    }} finally {if(ticket===epoch){inbox.busy=false;drawInbox();drawColumns();}}
+    }} finally {if(ticket===epoch){inbox.busy=false;drawMailboxes();drawColumns();}}
   }
   async function archiveMessage(messageId,source){
     if(!root||!connection?.gmail||mailboxBusy()||busy||!(inbox.canClassify||classified.canClassify||connection.classify))return;
@@ -122,7 +134,7 @@ window.FarolDemands=(()=>{
     const showStatus=text=>{if(!detail||active===thread)status.textContent=text;};
     inbox.busy=true;
     if(saveButton)saveButton.disabled=true;
-    drawInbox();drawColumns();
+    drawMailboxes();drawColumns();
     showStatus('Movendo para o Arquivo Morto…');
     const success='Mensagem movida para o Arquivo Morto.';
     try{
@@ -131,6 +143,10 @@ window.FarolDemands=(()=>{
       if(result.mailbox!==mailbox||result.messageId!==messageId)throw new Error('account_changed');
       inbox.items=inbox.items.filter(item=>item.id!==messageId);
       classified.items=classified.items.filter(item=>item.id!==messageId);
+      if(result.item?.id===messageId){
+        insertMessage(archived,result.item);
+        archived.missingLabels=false;
+      }
       if(active?.id===result.threadId)clearDetails();
       notice(success);
       showStatus(success);
@@ -157,30 +173,61 @@ window.FarolDemands=(()=>{
       if(ticket===epoch){
         inbox.busy=false;
         if(saveButton&&active===thread)saveButton.disabled=false;
-        drawInbox();drawColumns();
+        drawMailboxes();drawColumns();
       }
     }
   }
+  function insertMessage(state,item){
+    state.items=[item,...state.items.filter(message=>message.id!==item.id)].sort((a,b)=>b.date-a.date||a.id.localeCompare(b.id));
+    state.loaded=true;state.canClassify=true;state.error=null;
+  }
+  async function restoreMessage(messageId){
+    if(!root||!connection?.gmail||mailboxBusy()||busy||!archived.canClassify||!archived.items.some(item=>item.id===messageId))return;
+    const ticket=epoch,mailbox=connection.email,status=root.querySelector('#archived-feedback');
+    archived.busy=true;drawMailboxes();drawColumns();
+    status.textContent='Voltando para a Caixa de Entrada…';
+    try{
+      const result=await api('personal-restore',null,{type:'personal',mailbox,messageId});
+      if(ticket!==epoch||!root)return;
+      if(result.mailbox!==mailbox||result.messageId!==messageId||result.item?.id!==messageId)throw new Error('account_changed');
+      archived.items=archived.items.filter(item=>item.id!==messageId);
+      insertMessage(inbox,result.item);
+      status.textContent='Mensagem voltou para a Caixa de Entrada.';
+    }catch(error){
+      if(ticket===epoch)status.textContent=(error.message!=='unavailable'&&errors[error.message])||'Não foi possível confirmar o retorno. Atualize as listas para conferir.';
+    }finally{
+      if(ticket===epoch){archived.busy=false;drawMailboxes();drawColumns();}
+    }
+  }
+  function mailboxPanel(kind){
+    const title=mailboxTitles[kind];
+    return `<section class="inbox-panel" aria-labelledby="${kind}-title">
+      <div class="inbox-heading"><h2 id="${kind}-title">${title} <span id="${kind}-count"></span></h2><button class="button" id="${kind}-refresh">Atualizar</button></div>
+      <p class="demand-notice" id="${kind}-permission"></p>
+      <label class="inbox-search">Buscar em ${title}<input id="${kind}-search" type="search" placeholder="Assunto, remetente ou trecho" value="${escape(mailboxSearch[kind])}"></label>
+      <p id="${kind}-feedback" class="demand-notice" role="status"></p>
+      <div id="${kind}-list"></div><button class="button demand-more" id="${kind}-more" hidden>Carregar mais e-mails</button>
+    </section>`;
+  }
   function shell(){
     if(!root)return;
-    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nas conversas carregadas<input id="demand-search" type="search" placeholder="Assunto, pessoa ou trecho" value="${escape(search)}"></label><label>Situação<select id="demand-view"><option value="pending">Pendentes</option><option value="done">Concluídas</option><option value="all">Todas</option></select></label><label>Ordenar<select id="demand-sort"><option value="recent">Mais recentes</option><option value="oldest">Mais antigas</option><option value="deadline">Prazo mais próximo</option></select></label><label class="demand-check"><input id="demand-unread" type="checkbox" ${unread?'checked':''}> Somente não lidas</label><button class="button" id="demand-refresh">Atualizar</button></div><p class="demand-notice" id="demand-notice" role="status"></p><div class="demand-mobile-tabs" role="group" aria-label="Escolher coluna">${titles.map((title,i)=>`<button class="button" data-tab="${i}" aria-pressed="${tab===i}">${title}</button>`).join('')}</div><div class="demand-columns" id="demand-columns"></div><p class="demand-footnote">Até 20 conversas por carregamento em cada coluna. Busca, filtros, contagem e ordenação consideram as conversas carregadas. Ler aqui não marca o e-mail como lido. Os prazos seguem o calendário de Brasília.</p><section class="inbox-panel" aria-labelledby="inbox-title"><div class="inbox-heading"><h2 id="inbox-title">Caixa de entrada <span id="inbox-count"></span></h2><button class="button" id="inbox-refresh">Atualizar Caixa de entrada</button></div><p class="demand-footnote">Todos os e-mails da Caixa de entrada da conta Pessoal, em páginas de 20 mensagens. Cada botão adiciona a categoria e Despachadas à mensagem escolhida e a retira da Caixa de entrada, preservando outras etiquetas e a indicação de não lida. Para adicionar outras categorias, use a lista Despachadas abaixo ou abra a conversa nas colunas.</p><p class="demand-notice" id="inbox-permission"></p><label class="inbox-search">Buscar nos e-mails carregados<input id="inbox-search" type="search" placeholder="Assunto, remetente ou trecho" value="${escape(inboxSearch)}"></label><p id="inbox-feedback" class="demand-notice" role="status"></p><div id="inbox-list"></div><button class="button demand-more" id="inbox-more" hidden>Carregar mais e-mails</button></section><section class="inbox-panel" aria-labelledby="classified-title"><div class="inbox-heading"><h2 id="classified-title">Despachadas <span id="classified-count"></span></h2><button class="button" id="classified-refresh">Atualizar despachadas</button></div><p class="demand-footnote">Mensagens de Despachadas, em páginas de 20. Adicione outras categorias para que o mesmo e-mail apareça simultaneamente em ME DEVEM, MINHAS e DEVO. Adicionar categorias mantém a mensagem em Despachadas. Arquivo Morto retira a mensagem das listas e deixa o e-mail disponível no marcador GE_ArquivoMorto_Pessoal no Gmail.</p><p class="demand-notice" id="classified-permission"></p><label class="inbox-search">Buscar em Despachadas<input id="classified-search" type="search" placeholder="Assunto, remetente ou trecho" value="${escape(classifiedSearch)}"></label><p id="classified-feedback" class="demand-notice" role="status"></p><div id="classified-list"></div><button class="button demand-more" id="classified-more" hidden>Carregar mais despachadas</button></section>`;
+    root.innerHTML=`<div class="demand-toolbar"><label>Buscar nas conversas carregadas<input id="demand-search" type="search" placeholder="Assunto, pessoa ou trecho" value="${escape(search)}"></label><label>Situação<select id="demand-view"><option value="pending">Pendentes</option><option value="done">Concluídas</option><option value="all">Todas</option></select></label><label>Ordenar<select id="demand-sort"><option value="recent">Mais recentes</option><option value="oldest">Mais antigas</option><option value="deadline">Prazo mais próximo</option></select></label><label class="demand-check"><input id="demand-unread" type="checkbox" ${unread?'checked':''}> Somente não lidas</label><button class="button" id="demand-refresh">Atualizar</button></div><p class="demand-notice" id="demand-notice" role="status"></p><div class="demand-mobile-tabs" role="group" aria-label="Escolher coluna">${titles.map((title,i)=>`<button class="button" data-tab="${i}" aria-pressed="${tab===i}">${title}</button>`).join('')}</div><div class="demand-columns" id="demand-columns"></div><p class="demand-footnote">Até 20 conversas por carregamento em cada coluna. Busca, filtros, contagem e ordenação consideram as conversas carregadas. Ler aqui não marca o e-mail como lido. Os prazos seguem o calendário de Brasília.</p><div class="personal-mailbox-columns">${mailboxPanel('inbox')}${mailboxPanel('classified')}</div>${mailboxPanel('archived')}`;
     root.querySelector('#demand-search').addEventListener('input',event=>{search=event.target.value;drawColumns();});
     for(const [id,set,value] of [['demand-view',v=>view=v,view],['demand-sort',v=>sort=v,sort]]){const select=root.querySelector('#'+id);select.value=value;select.addEventListener('change',event=>{set(event.target.value);drawColumns();});}
     root.querySelector('#demand-unread').addEventListener('change',event=>{unread=event.target.checked;drawColumns();});
     root.querySelector('#demand-refresh').addEventListener('click',()=>refresh());
     root.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{tab=Number(button.dataset.tab);root.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));drawColumns();}));
-    root.querySelector('#inbox-search').addEventListener('input',event=>{inboxSearch=event.target.value;drawInbox();});
-    root.querySelector('#inbox-refresh').addEventListener('click',()=>loadInbox());
-    root.querySelector('#inbox-more').addEventListener('click',()=>loadInbox(true));
-    root.querySelector('#classified-search').addEventListener('input',event=>{classifiedSearch=event.target.value;drawMailbox('classified');});
-    root.querySelector('#classified-refresh').addEventListener('click',()=>loadMailbox('classified'));
-    root.querySelector('#classified-more').addEventListener('click',()=>loadMailbox('classified',true));
-    drawColumns();drawInbox();
+    for(const kind of mailboxKinds){
+      root.querySelector('#'+kind+'-search').addEventListener('input',event=>{mailboxSearch[kind]=event.target.value;drawMailbox(kind);});
+      root.querySelector('#'+kind+'-refresh').addEventListener('click',()=>loadMailbox(kind));
+      root.querySelector('#'+kind+'-more').addEventListener('click',()=>loadMailbox(kind,true));
+    }
+    drawColumns();drawMailboxes();
   }
   function notice(text){if(root)root.querySelector('#demand-notice').textContent=text;}
   async function load(index,append=false){
     if(!connection?.gmail||!root||busy||mailboxBusy())return;
-    const ticket=epoch,mailbox=connection.email;busy=true;drawColumns();drawInbox();
+    const ticket=epoch,mailbox=connection.email;busy=true;drawColumns();drawMailboxes();
     try {
       const result=await api('board',{mailbox,column:index,...(append?{page:columns[index].nextPage}:{})});
       if(ticket!==epoch||!root)return;
@@ -188,17 +235,14 @@ window.FarolDemands=(()=>{
       const combined=[...(append?columns[index].items:[]),...result.items.map(item=>({...item,demand:project(item.demand,index)}))];
       columns[index]={loaded:true,items:[...new Map(combined.map(item=>[item.id,item])).values()],nextPage:result.nextPage,missingLabel:result.missingLabel};
     } catch(error){if(ticket===epoch){columns[index].error=error.message;notice(errors[error.message]||errors.unavailable);}}
-    finally {if(ticket===epoch){busy=false;drawColumns();drawInbox();}}
+    finally {if(ticket===epoch){busy=false;drawColumns();drawMailboxes();}}
   }
   async function refresh(){
     reset();shell();
     if(!connection?.gmail){notice(connection===undefined?'Verificando a conexão Pessoal…':errors[connection?'missing_scope':'login_required']);return;}
     const ticket=epoch;notice('Consultando '+connection.email+'…');
     for(let index=0;index<3;index++){if(ticket!==epoch||!root)return;await load(index);}
-    if(ticket!==epoch||!root)return;
-    await loadInbox();
-    if(ticket!==epoch||!root)return;
-    await loadMailbox('classified');
+    for(const kind of mailboxKinds){if(ticket!==epoch||!root)return;await loadMailbox(kind);}
     if(ticket===epoch && !columns.some(c=>c.error))notice('Conta Pessoal: '+connection.email+'. Classifique os e-mails na Caixa de entrada abaixo. Definir prazo aqui não avisa o destinatário.');
   }
   function historyHtml(events){
@@ -254,7 +298,7 @@ window.FarolDemands=(()=>{
     const changed=connection?.email!==value?.email || connection?.gmail!==value?.gmail || connection?.classify!==value?.classify;
     connection=value;if(changed){reset();if(root)refresh();}
   }
-  function mount(element){root=element;inboxSearch='';classifiedSearch='';search='';unread=false;view='pending';sort='recent';tab=0;refresh();}
+  function mount(element){root=element;mailboxKinds.forEach(kind=>mailboxSearch[kind]='');search='';unread=false;view='pending';sort='recent';tab=0;refresh();}
   function unmount(){reset();root=null;}
   return {mount,unmount,connectionChanged,escape,deadline,day,list};
 })();
