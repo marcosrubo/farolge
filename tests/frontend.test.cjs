@@ -534,8 +534,8 @@ test('Busca Ativa preserva o fluxo de registro com ditado '+mode,async()=>{
  assert.equal(get('#active-search-tab-register')['aria-selected'],'true');
  assert.equal(get('#active-search-panel-consult').hidden,true);
  assert.equal(dialog.open,undefined);
- assert.match(list.innerHTML,/Ágata · CGM 00123 · 8oB<\/span><span class="student-class">Tarde/);
- assert.match(list.innerHTML,/Bruno · CGM 00234 · 1aA<\/span><span class="student-class">Manhã/);
+ assert.match(list.innerHTML,/<span class="student-name">Ágata<\/span>\s*<span class="student-cgm">CGM 00123<\/span>\s*<span class="student-class">8oB - Tarde<\/span>/);
+ assert.match(list.innerHTML,/Bruno<\/span>\s*<span class="student-cgm">CGM 00234<\/span>\s*<span class="student-class">1aA - Manhã/);
  for(const value of ['1a','1ª','1aA','1ªA']){
   filter.value=value;filter.listeners.input();
   assert.match(list.innerHTML,/Bruno/);assert.doesNotMatch(list.innerHTML,/Ágata/);

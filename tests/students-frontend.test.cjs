@@ -28,9 +28,9 @@ test('Inspetores mantém explicação sem conexão e mostra nome/turma com texto
  const sameSeries={...student,id:'c'.repeat(64),Nome:'CARLA',CGM:'0000789',Turma:'B'};
  h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student,other,sameSeries]});await settle();
  const list=h.get('#student-list'),filter=h.get('#student-search');
- assert.match(list.innerHTML,/ALUNA &lt;TESTE&gt; · CGM 0000123 · 8oA<\/span><span class="student-class">Manhã/);
- assert.match(list.innerHTML,/BRUNO · CGM 0000456 · 1aA/);
- assert.match(list.innerHTML,/CARLA · CGM 0000789 · 8oB/);
+ assert.match(list.innerHTML,/<span class="student-name">ALUNA &lt;TESTE&gt;<\/span>\s*<span class="student-cgm">CGM 0000123<\/span>\s*<span class="student-class">8oA - Manhã<\/span>/);
+ assert.match(list.innerHTML,/BRUNO<\/span>\s*<span class="student-cgm">CGM 0000456<\/span>\s*<span class="student-class">1aA - Manhã/);
+ assert.match(list.innerHTML,/CARLA<\/span>\s*<span class="student-cgm">CGM 0000789<\/span>\s*<span class="student-class">8oB - Manhã/);
  for(const value of ['8oa','8ºA']){
   filter.value=value;filter.listeners.input();
   assert.match(list.innerHTML,/ALUNA/);assert.doesNotMatch(list.innerHTML,/BRUNO|CARLA/);

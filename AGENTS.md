@@ -14,7 +14,7 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
-- Em 26/11/2026, Marcos pediu que as listas de alunos em REGISTRAR de Inspetores/Monitores e Busca Ativa mostrem o CGM após o nome, seguido de série/ano e turma abreviados, como 6oA e 1aA. O turno aparece à parte e o filtro aceita os códigos com letras ou símbolos ordinais.
+- Em 26/11/2026, Marcos pediu que as listas de alunos em REGISTRAR de Inspetores/Monitores e Busca Ativa mostrem o CGM após o nome, seguido de série/ano e turma abreviados, como 6oA e 1aA. No celular, Nome, CGM e Série+Turma - Turno aparecem em três linhas. O filtro aceita os códigos com letras ou símbolos ordinais.
 
 - Em 26/11/2026, Marcos pediu que Carga de Alunos abra uma janela mostrando Turno, Série, Turma, CGM e Nome durante a leitura e ofereça Parar. A prévia recebe as linhas por página, pode ser cancelada antes da confirmação e não grava. Confirmar carga relê a versão conferida e grava em uma transação. Política revisão 48. Sem novo SQL, escopo ou variável.
 

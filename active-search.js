@@ -189,7 +189,11 @@
     function showStudents(){
       const term=fold(filter.value.trim());
       const matches=students.filter(item=>item.search.includes(term));
-      list.innerHTML=matches.map(item=>`<li><button type="button" class="student-row" data-student="${escape(item.id)}"><span>${escape(item.name)} · CGM ${escape(item.cgm)}${item.code?' · '+escape(item.code):''}</span><span class="student-class">${escape(item.turno??item.className)}</span></button></li>`).join('');
+      list.innerHTML=matches.map(item=>`<li><button type="button" class="student-row" data-student="${escape(item.id)}">
+        <span class="student-name">${escape(item.name)}</span>
+        <span class="student-cgm">CGM ${escape(item.cgm)}</span>
+        <span class="student-class">${escape([item.code,item.turno??item.className].filter(Boolean).join(' - '))}</span>
+      </button></li>`).join('');
       listStatus.textContent=matches.length?'':students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.';
     }
 

@@ -28,7 +28,11 @@ window.FarolStudents=(()=>{
     const query=fold(root.querySelector('#student-search').value.trim());
     root.querySelector('#student-list').innerHTML=students
       .filter(s=>s.search.includes(query))
-      .map(s=>`<li><button type="button" class="student-row" data-student="${escape(s.id)}"><span>${escape(s.Nome)} · CGM ${escape(s.CGM)}${s.code?' · '+escape(s.code):''}</span><span class="student-class">${escape(s.Turno)}</span></button></li>`).join('');
+      .map(s=>`<li><button type="button" class="student-row" data-student="${escape(s.id)}">
+        <span class="student-name">${escape(s.Nome)}</span>
+        <span class="student-cgm">CGM ${escape(s.CGM)}</span>
+        <span class="student-class">${escape([s.code,s.Turno].filter(Boolean).join(' - '))}</span>
+      </button></li>`).join('');
   }
   async function load(){
     if(!root||!connection||connection.occurrencesOnly||busy||activeTab!=='register')return;
