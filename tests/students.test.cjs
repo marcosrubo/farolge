@@ -45,7 +45,7 @@ function fixturePdf(){
 test('PDF.js lê arquivo fictício e extrai a geração do PDF, sem depender da criação do Drive',async()=>{
  const pages=[];
  const result=await readStudentPdf(fixturePdf(),{onPage:rows=>pages.push(rows)});assert.equal(result.students.length,1);assert.equal(result.students[0].CGM,student.CGM);assert.equal(result.generatedAt,'2026-11-17T08:53:56-03:00');
- assert.deepEqual(pages,[[{Serie:'8 Ano',Turma:'A',CGM:student.CGM,Nome:student.Nome}]]);
+ assert.deepEqual(pages,[[{Turno:'Manha',Serie:'8 Ano',Turma:'A',CGM:student.CGM,Nome:student.Nome}]]);
  await assert.rejects(readStudentPdf(Buffer.from('not pdf')),{message:'unsupported_file'});
 });
 test('alunos ordenados em português e ocorrências derivam identidade, escola/aluno e horário de Brasília',async()=>{

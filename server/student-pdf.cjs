@@ -91,7 +91,7 @@ async function readStudentPdf(bytes,{loadEngine=loadPdfEngine,signal,onPage}={})
       signal?.throwIfAborted();
       if(items.length>20000)fail('file_too_large');
       const rows=[];
-      parser.addPage(groupLines(items),onPage&&(({Serie,Turma,CGM,Nome})=>rows.push({Serie,Turma,CGM,Nome})));
+      parser.addPage(groupLines(items),onPage&&(({Turno,Serie,Turma,CGM,Nome})=>rows.push({Turno,Serie,Turma,CGM,Nome})));
       page.cleanup();
       if(onPage)await onPage(rows);
       signal?.throwIfAborted();

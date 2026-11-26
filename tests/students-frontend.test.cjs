@@ -56,8 +56,9 @@ test('Carga de Alunos mostra nome e geração, exige ação explícita e bloquei
  const body=JSON.parse(h.requests[1].opts.body);assert.equal(body.folder,'lista');assert.equal(body.fileId,file.id);assert.equal(body.version,'7');assert.equal(body.mailbox,general.email);assert.equal(body.preview,true);
  const stream=streamPreview(h,1);
  assert.equal(h.get('#student-import-dialog').open,true);
+ assert.match(h.root.innerHTML,/>Turno<\/th>.*>Série<\/th>.*>Turma<\/th>.*>CGM<\/th>.*>Nome<\/th>/);
  stream.write({rows:[student]});await settle();
- assert.match(h.get('#student-import-rows').innerHTML,/<td>8º Ano<\/td><td>A<\/td><td>0000123<\/td><td>ALUNA &lt;TESTE&gt;<\/td>/);
+ assert.match(h.get('#student-import-rows').innerHTML,/<td>Manhã<\/td><td>8º Ano<\/td><td>A<\/td><td>0000123<\/td><td>ALUNA &lt;TESTE&gt;<\/td>/);
  assert.equal(h.get('#student-import-save').hidden,true);
  stream.write({preview:previewSummary});stream.close();await settle();
  assert.equal(h.get('#student-import-save').hidden,false);

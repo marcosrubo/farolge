@@ -323,11 +323,11 @@ Referências: [download e leitura parcial Drive](https://developers.google.com/w
 
 ### Acompanhamento e cancelamento da Carga de Alunos (26/11/2026)
 
-**Carregar** abre uma janela com Série, Turma, CGM e Nome. A tabela recebe as linhas conforme o servidor lê as páginas do PDF. **Parar** ou Esc interrompe a leitura e limpa a prévia. Até a confirmação, nenhuma linha é enviada ao Supabase. A revisão pode ser interrompida mesmo depois da última página.
+**Carregar** abre uma janela com Turno, Série, Turma, CGM e Nome. A tabela recebe as linhas conforme o servidor lê as páginas do PDF. **Parar** ou Esc interrompe a leitura e limpa a prévia. Até a confirmação, nenhuma linha é enviada ao Supabase. A revisão pode ser interrompida mesmo depois da última página.
 
 **Confirmar carga** relê a mesma versão do arquivo e grava todos os vínculos em uma única transação. O botão **Parar** fica indisponível após a confirmação, pois a transação enviada ao banco pode concluir. A troca de conta ou a saída da manutenção encerra a prévia, e os dados da janela ficam apenas em memória.
 
-Publicar com a Política de Privacidade revisão 47. A Vercel recebe a configuração de cancelamento para a função da API existente. Sem migração SQL, escopo Google ou variável nova. Na Vercel, conferir o preenchimento da tabela e testar **Parar** durante a leitura, **Parar** após a leitura e **Confirmar carga**.
+Publicar com a Política de Privacidade revisão 48. A Vercel recebe a configuração de cancelamento para a função da API existente. Sem migração SQL, escopo Google ou variável nova. Na Vercel, conferir o preenchimento da tabela e testar **Parar** durante a leitura, **Parar** após a leitura e **Confirmar carga**.
 
 ## Falha genérica na carga de alunos — 17/11/2026
 

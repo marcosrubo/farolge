@@ -82,7 +82,7 @@ window.FarolStudentImport=(()=>{
       await jsonResult(response);
       throw new Error('import_server_unavailable');
     }
-    const fields=['Serie','Turma','CGM','Nome'],decoder=new TextDecoder();
+    const fields=['Turno','Serie','Turma','CGM','Nome'],decoder=new TextDecoder();
     const reader=response.body.getReader();
     let buffer='',summary=null;
     try{
@@ -168,7 +168,7 @@ window.FarolStudentImport=(()=>{
         <p id="student-import-progress" role="status" tabindex="-1"></p>
         <div id="student-import-table" class="table-wrap" tabindex="0" role="region" aria-label="Linhas lidas do PDF">
           <table aria-label="Alunos do relatório"><thead><tr>
-            <th scope="col">Série</th><th scope="col">Turma</th><th scope="col">CGM</th><th scope="col">Nome</th>
+            <th scope="col">Turno</th><th scope="col">Série</th><th scope="col">Turma</th><th scope="col">CGM</th><th scope="col">Nome</th>
           </tr></thead><tbody id="student-import-rows"></tbody></table>
         </div>
         <div class="button-row">
