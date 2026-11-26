@@ -148,6 +148,25 @@ test('Consultar confirma a exclusão e remove somente a ocorrência confirmada p
  assert.match(cards.innerHTML,/Outra ocorrência/);
 });
 
+test('Consultar mantém registros e Excluir enquanto a migração de Alterar estiver indisponível',async()=>{
+ const h=ui('students.js','FarolStudents');
+ h.app.personalConnectionChanged({email:'marcos.rubo@gmail.com',name:'Marcos Rubo'});
+ h.app.connectionChanged(general);h.app.mount(h.root);
+ h.respond(0,{mailbox:general.email,students:[student]});await settle();
+ h.get('#inspector-tab-consult').listeners.click();
+ const item={id:'12345678-1234-4234-8234-123456789abc',date:'2026-11-24',time:'11:00:00',student:'Aluna fictícia',className:'8º A',text:'Ocorrência existente'};
+ h.respond(1,{mailbox:general.email,items:[item],canDelete:true,editingUnavailable:true});await settle();
+ const cards=h.get('#inspector-occurrences-cards'),status=h.get('#inspector-occurrences-status');
+ assert.match(cards.innerHTML,/Ocorrência existente/);
+ assert.match(cards.innerHTML,/>Excluir</);
+ assert.doesNotMatch(cards.innerHTML,/>Alterar</);
+ assert.match(status.textContent,/atualização de ocorrências no Supabase/);
+ h.get('#inspector-occurrences-refresh').listeners.click();
+ h.respond(2,{mailbox:general.email,items:[{...item,editVersion:item.id}],canDelete:true});await settle();
+ assert.match(cards.innerHTML,/>Alterar</);
+ assert.equal(status.textContent,'');
+});
+
 test('Consultar mostra Alterar nas ocorrências autorizadas e atualiza somente o texto confirmado',async()=>{
  const h=ui('students.js','FarolStudents');
  h.app.connectionChanged(general);

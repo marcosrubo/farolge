@@ -56,17 +56,26 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
         after='&or='+encodeURIComponent(`(Data.lt.${date},and(Data.eq.${date},Hora.lt.${time}),and(Data.eq.${date},Hora.eq.${time},id.lt.${id}))`);
       }
       const editFields=editor?`,edit_revision${editor.all?'':editor.id?',AutorId':',EmailAutor'}`:'';
-      const rows=await call('Ocorrencias','GET',`${ownerQuery(owner)}&select=id,cgm_key,Nome,Data,Hora,Ocorrencia,NomeAutor${editFields},Alunos(Serie,Turma,Turno)&order=Data.desc,Hora.desc,id.desc&limit=21${after}`);
+      const readPage=fields=>call('Ocorrencias','GET',
+        `${ownerQuery(owner)}&select=id,cgm_key,Nome,Data,Hora,Ocorrencia,NomeAutor${fields},Alunos(Serie,Turma,Turno)&order=Data.desc,Hora.desc,id.desc&limit=21${after}`);
+      let rows,editingUnavailable=false;
+      try{
+        rows=await readPage(editFields);
+      }catch(error){
+        if(!editFields||error.message!=='setup_required')throw error;
+        rows=await readPage('');
+        editingUnavailable=true;
+      }
       if(!Array.isArray(rows))throw storageError('storage_unavailable');
       const page=rows.slice(0,20),last=page.at(-1);
       const items=page.map(row=>{
         const student=row.Alunos;
         const turma=student?['Serie','Turma','Turno'].map(field=>unseal(student[field],config.key,`student.${owner}.${row.cgm_key}.${field}`)).join(' · '):'—';
-        const editVersion=canEditOccurrence(row,owner,editor)?row.edit_revision:null;
+        const editVersion=!editingUnavailable&&canEditOccurrence(row,owner,editor)?row.edit_revision:null;
         return {id:row.id,date:row.Data,time:row.Hora,student:unseal(row.Nome,config.key,occurrenceKey(owner,row.id,'Nome')),className:turma,text:unseal(row.Ocorrencia,config.key,occurrenceKey(owner,row.id,'Ocorrencia')),authorName:row.NomeAutor?unseal(row.NomeAutor,config.key,occurrenceKey(owner,row.id,'NomeAutor')):null,...(editVersion?{editVersion}:{})};
       });
       const nextPageToken=rows.length>20?Buffer.from(JSON.stringify({date:last.Data,time:last.Hora,id:last.id})).toString('base64url'):null;
-      return {items,nextPageToken};
+      return {items,nextPageToken,...(editingUnavailable?{editingUnavailable:true}:{})};
     },
     async deleteOccurrence(owner,id){
       const rows=await call('Ocorrencias','DELETE',`${ownerQuery(owner)}&id=eq.${encodeURIComponent(id)}&select=id`);
@@ -89,6 +98,26 @@ function makeStudentStore(config,fetcher,{seal,unseal}){
       if(!updated.length)throw storageError('conflict',409);
       if(updated[0].id!==id||updated[0].edit_revision!==revision)throw storageError('storage_unavailable');
       return {text,editVersion:revision};
+    },
+    async saveActiveSearch(owner,id,value){
+      const fields=['Escola','Usuario','Acao'];
+      const keyFor=field=>`active-search.${owner}.${id}.${field}`;
+      const encoded=Object.fromEntries(fields.map(field=>[field,seal(value[field],config.key,keyFor(field))]));
+      const rows=await call('BuscaAtiva','POST','on_conflict=owner_id,id',{...value,...encoded,owner_id:owner,id});
+      if(!Array.isArray(rows)||rows.length>1)throw storageError('storage_unavailable');
+      if(rows.length){
+        if(rows[0].id!==id)throw storageError('storage_unavailable');
+        return rows[0];
+      }
+      // A retry with the same ID returns the original registration timestamp.
+      const existing=await call('BuscaAtiva','GET',`${ownerQuery(owner)}&id=eq.${id}&limit=1`);
+      if(!Array.isArray(existing)||existing.length!==1||existing[0].id!==id)throw storageError('storage_unavailable');
+      const row=existing[0];
+      if(['cgm_key','DataBusca','HoraBusca'].some(field=>row[field]!==value[field])
+        ||fields.some(field=>unseal(row[field],config.key,keyFor(field))!==value[field])){
+        throw storageError('conflict',409);
+      }
+      return row;
     },
     async saveOccurrence(owner,id,value){
       const protectedFields=['Escola','CGM','Nome','Ocorrencia','EmailAutor','NomeAutor',...(value.AutorId?['AutorId']:[])];

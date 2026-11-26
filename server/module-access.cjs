@@ -9,6 +9,7 @@ const actionModules=new Map([
   ['students','inspetores-monitores'],['occurrence','inspetores-monitores'],['inspector-occurrences','inspetores-monitores'],
   ['occurrence-delete','inspetores-monitores'],['occurrence-edit','inspetores-monitores'],
   ['overview','inicio'],['occurrences','inicio'],['attendance-analysis','radar'],
+  ['active-search-students','radar'],['active-search-register','radar'],
   ...['maintenance','student-files','student-import','attendance-files','attendance-import'].map(action=>[action,'manutencao-sistema']),
   ...['institutional','institutional-move','institutional-labels'].map(action=>[action,'institucionais']),
   ...['board','thread','demand','inbox','classified','classify','personal-archive','archived','personal-restore'].map(action=>[action,'pessoais']),

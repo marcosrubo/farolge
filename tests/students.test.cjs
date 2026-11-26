@@ -150,6 +150,40 @@ test('endpoint de ocorrências valida caixa antes de consultar e não depende do
  await assert.rejects(handleStudents({action:'occurrences',url:new URL('https://farol.invalid/?mailbox=other'),store,owner,email}),{message:'account_changed'});assert.equal(calls,1);
 });
 
+test('a consulta do administrador lista ocorrências antes da migração de edição e mantém o mesmo cursor',async()=>{
+ const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,7)};
+ const key=field=>`occurrence.${owner}.${id}.${field}`;
+ const row={id,Data:'2026-11-17',Hora:'09:00:00',Nome:seal(student.Nome,cfg.key,key('Nome')),
+  Ocorrencia:seal('Registro fictício.',cfg.key,key('Ocorrencia'))};
+ let migrated=false;
+ const requests=[];
+ const store=makeStudentStore(cfg,async(url,opts)=>{
+  const {searchParams}=new URL(url);
+  assert.equal(opts.method,'GET');
+  assert.equal(searchParams.get('owner_id'),'eq.'+owner);
+  requests.push(searchParams);
+  if(searchParams.get('select').includes('edit_revision')){
+   if(!migrated)return {ok:false,status:400,json:async()=>({code:'42703',message:'column Ocorrencias.edit_revision does not exist'})};
+   return {ok:true,status:200,json:async()=>[{...row,edit_revision:id}]};
+  }
+  return {ok:true,status:200,json:async()=>[row]};
+ },{seal,unseal});
+ const token=Buffer.from(JSON.stringify({id,date:row.Data,time:row.Hora})).toString('base64url');
+ const legacy=await store.getOccurrences(owner,token,{all:true});
+ assert.equal(legacy.editingUnavailable,true);
+ assert.equal(legacy.items[0].text,'Registro fictício.');
+ assert.equal(legacy.items[0].editVersion,undefined);
+ assert.equal(requests.length,2);
+ assert.equal(requests[0].get('or'),requests[1].get('or'));
+ assert.equal(requests[0].get('order'),requests[1].get('order'));
+ assert.doesNotMatch(requests[1].get('select'),/edit_revision|AutorId/);
+ migrated=true;
+ const restored=await store.getOccurrences(owner,token,{all:true});
+ assert.equal(restored.editingUnavailable,undefined);
+ assert.equal(restored.items[0].editVersion,id);
+ assert.equal(requests.length,3);
+});
+
 test('exclusão usa somente a tabela de ocorrências e exige proprietário e ID na mesma linha',async()=>{
  const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,6)};
  let rows=[{owner,id},{owner:'other-owner',id},{owner,id:'22345678-1234-4234-8234-123456789abc'}];
@@ -214,4 +248,29 @@ test('edição confere a autoria, limita o PATCH ao texto cifrado e protege a re
  row.AutorId=null;
  assert.equal((await store.getOccurrences(owner,'',{id:'cadastro-original'})).items[0].editVersion,undefined);
  assert.equal((await store.getOccurrences(owner,'',{all:true})).items[0].editVersion,saved.editVersion);
+});
+
+test('Busca Ativa cifra os dados e confirma um reenvio sem substituir a hora original de Brasília',async()=>{
+ const {handleActiveSearch}=require('../server/active-search.cjs');
+ const config={storage:'https://test.invalid',serviceKey:'fake',key:Buffer.alloc(32,4)};
+ const author='docente@escola.pr.gov.br',calls=[];
+ let stored;
+ const vault=makeStudentStore(config,async(url,options)=>{
+  calls.push({url,options});
+  const existed=Boolean(stored);
+  if(options.method==='POST'&&!existed)stored=JSON.parse(options.body);
+  return {ok:true,json:async()=>options.method==='GET'||!existed?[stored]:[]};
+ },{seal,unseal});
+ const store={...vault,getStudent:async()=>student};
+ const body={type:'general',mailbox:email,authorMailbox:author,id,studentId:student.id,searchDate:'2026-11-16',searchTime:'09:32',text:'Ação de teste'};
+ const run=(now,changes={})=>handleActiveSearch({action:'active-search-register',body:{...body,...changes},store,owner,email,author,now:new Date(now)});
+ const result=await run('2026-11-18T01:30:02Z');
+ assert.deepEqual(result,{id,saved:true,date:'2026-11-17',time:'22:30:02'});
+ for(const [field,value] of Object.entries({Usuario:author,Escola:student.Escola,Acao:body.text})){
+  assert.notEqual(stored[field],value);
+  assert.equal(unseal(stored[field],config.key,`active-search.${owner}.${id}.${field}`),value);
+ }
+ assert.deepEqual(await run('2026-11-18T02:40:00Z'),result);
+ assert.equal(new URL(calls[2].url).searchParams.get('owner_id'),'eq.'+owner);
+ await assert.rejects(run('2026-11-18T02:40:00Z',{searchTime:'09:41'}),{message:'conflict'});
 });

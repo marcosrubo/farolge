@@ -259,3 +259,30 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 .archive-inbox-messages dt{font-weight:700}
 .archive-inbox-messages dd{margin:0;overflow-wrap:anywhere}
 @media(min-width:601px){.sidebar nav{min-height:0;overflow-y:auto}}
+
+/* Registro de Busca Ativa no Radar. */
+.radar-active-search-node > div{display:grid;gap:6px;min-width:0}
+.radar-active-search-node{flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
+.radar-active-search-register,.active-search > .button{display:inline-flex;align-items:center;text-decoration:none;color:var(--green);font-weight:650}
+.radar-active-search-register{flex-shrink:0}
+.active-search{max-width:740px}
+.active-search h1{margin:18px 0 14px}
+.active-search-form{background:#fff;border:1px solid var(--border);border-radius:12px;padding:clamp(14px,3vw,24px)}
+.active-search-form fieldset{border:0;margin:0;padding:0;min-inline-size:0}
+.active-search-form label{display:block;margin:0 0 6px;color:var(--green);font-weight:650}
+.active-search-form input,.active-search-form select,.active-search-form textarea{
+  display:block;width:100%;min-width:0;min-height:44px;padding:10px 12px;
+  border:1px solid #cbd8c8;border-radius:7px;background:#fff;color:#253d34;font-size:16px
+}
+.active-search-form input[type=search]{margin-bottom:14px}
+.active-search-form input:disabled,.active-search-form select:disabled,.active-search-form textarea:disabled{background:#f5f7f3}
+.active-search-form textarea{resize:vertical}
+.active-search-form textarea:focus-visible{outline:3px solid #b18b32;outline-offset:3px}
+.active-search-dates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0 12px}
+.active-search-dates input{margin-top:6px}
+.active-search-action{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.active-search-action label{margin:0}
+.active-search-form p{margin:8px 0;color:#52664f;line-height:1.5;overflow-wrap:anywhere}
+.active-search-form [data-author]{margin:16px 0 12px}
+.active-search-form .button-row{justify-content:flex-start}
+@media(max-width:400px){.active-search-dates{grid-template-columns:1fr}}

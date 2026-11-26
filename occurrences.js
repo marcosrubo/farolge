@@ -20,7 +20,7 @@ window.FarolOccurrences=(()=>{
 
   function create({id,action,mobileCards=false,deleteAction,editAction}){
     let root=null,connection=null,viewer=null,items=[],next=null,busy=false,error='',loaded=false,version=0;
-    let canDelete=false,deleting=false,actionFeedback='',editing=null,savingEdit=false;
+    let canDelete=false,deleting=false,actionFeedback='',editing=null,savingEdit=false,editingUnavailable=false;
     const element=part=>root.querySelector('#'+id+'-'+part);
 
     function markup(){
@@ -50,7 +50,7 @@ window.FarolOccurrences=(()=>{
 
     function clear(){
       version++;items=[];next=null;busy=false;error='';loaded=false;
-      canDelete=false;deleting=false;actionFeedback='';savingEdit=false;closeEdit();
+      canDelete=false;deleting=false;actionFeedback='';savingEdit=false;editingUnavailable=false;closeEdit();
     }
 
     function draw(){
@@ -61,6 +61,9 @@ window.FarolOccurrences=(()=>{
       else if(busy)status=deleting?'Excluindo ocorrência…':savingEdit?'Salvando alteração…':'Consultando ocorrências…';
       else if(!status&&error)status=(messages[error]||messages.unavailable)+(loaded?' A lista anterior foi mantida.':'');
       else if(!status&&loaded&&!items.length&&!next)status='Nenhuma ocorrência registrada.';
+      if(!busy&&!error&&editingUnavailable){
+        status=[status,'Alterar fica disponível após a atualização de ocorrências no Supabase.'].filter(Boolean).join(' ');
+      }
       element('status').textContent=status;
       const hasActions=canDelete||Boolean(editAction&&items.some(item=>item.editVersion));
       if(deleteAction||editAction)element('actions').hidden=!hasActions;
@@ -112,6 +115,8 @@ window.FarolOccurrences=(()=>{
         items=(more?[...new Map([...items,...result.items].map(item=>[item.id,item])).values()]:result.items)
           .sort((a,b)=>(b.date+'T'+b.time).localeCompare(a.date+'T'+a.time)||b.id.localeCompare(a.id));
         next=result.nextPageToken||null;loaded=true;
+        editingUnavailable=Boolean(editAction&&result.editingUnavailable===true);
+        if(editingUnavailable)for(const item of items)delete item.editVersion;
         canDelete=Boolean(deleteAction&&result.canDelete===true);
       }catch(failure){
         if(ticket===version){

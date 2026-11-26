@@ -71,7 +71,7 @@ test('configuração ausente mantém ambas indisponíveis sem simular conexão',
 });
 test('sem identificação, hashes diretos não abrem módulos restritos',async()=>{
  const h=ui({configured:true,connections:{general:null,personal:null},modules:[]});await settle();
- for(const route of ['inicio','radar','analise-faltas','institucionais','pessoais','inspetores-monitores','configuracoes']){
+ for(const route of ['inicio','radar','analise-faltas','busca-ativa','institucionais','pessoais','inspetores-monitores','configuracoes']){
   h.context.location.hash='#'+route;h.window.listeners.hashchange();
   assert.match(h.get('#main').innerHTML,/<section class="development-content module-unavailable"[^>]*><h1[^>]*>[^<]+<\/h1><h2>Módulo indisponível/);
   assert.ok(h.get('#navigation').innerHTML.includes('href="#bi-seed"'));
@@ -455,4 +455,94 @@ test('Arquivo Morto fica abaixo do divisor, acima da Manutenção, e Cancelar vo
  assert.equal(h.context.document.activeElement,cancel);
  leave();
  assert.equal(h.context.location.hash,'#radar');
+});
+
+test('Busca ATIVA tem Registrar no fluxograma e abre o formulário como subtela do Radar',async()=>{
+ const connections={general:{email:adminEmail},personal:{email:adminEmail}};
+ const mounts=[];
+ const h=ui({configured:true,connections,modules:adminModules},'',{
+  FarolActiveSearch:{unmount(){},connectionChanged(){},mount(element){mounts.push(element);}}
+ });
+ await settle();
+ assert.match(h.get('#main').innerHTML,/Busca ATIVA<\/strong>.*href="#busca-ativa">Registrar/);
+ h.context.location.hash='#busca-ativa';
+ h.window.listeners.hashchange();
+ assert.equal(h.get('#breadcrumb-title').textContent,'Radar / Busca ATIVA');
+ assert.match(h.get('#navigation').innerHTML,/class="nav-link active" href="#radar"/);
+ assert.deepEqual(mounts,[h.get('#active-search-board')]);
+});
+
+test('formulário de Busca Ativa usa horário de Brasília, acrescenta o ditado e permite editar antes de salvar',async()=>{
+ const nodes=new Map(),requests=[],window={};
+ const get=selector=>{
+  if(!nodes.has(selector))nodes.set(selector,{
+   value:'',maxLength:5000,listeners:{},
+   addEventListener(name,handler){this.listeners[name]=handler;},
+   replaceChildren(...options){this.options=options;},
+   setRangeText(text,start,end){this.value=this.value.slice(0,start)+text+this.value.slice(end);}
+  });
+  return nodes.get(selector);
+ };
+ const form=get('form');
+ form.elements=Object.fromEntries(['studentId','searchDate','searchTime','actionText'].map(name=>[name,get(name)]));
+ form.querySelector=get;
+ form.reportValidity=()=>true;
+ form.reset=()=>{for(const element of Object.values(form.elements))element.value='';};
+ let session;
+ window.SpeechRecognition=class{
+  static async available({langs,processLocally}){
+   assert.equal(langs.join(),'pt-BR');
+   assert.equal(processLocally,true);
+   return 'available';
+  }
+  get processLocally(){return this.local;}
+  set processLocally(value){this.local=value;}
+  start(){session=this;this.onstart();}
+  stop(){this.onend();}
+  abort(){}
+ };
+ const author='docente@escola.pr.gov.br',id='12345678-1234-4234-8234-123456789abc';
+ class FixedDate extends Date{constructor(){super('2026-11-27T01:35:30Z');}}
+ vm.runInNewContext(fs.readFileSync('active-search.js','utf8'),{
+  window,Date:FixedDate,Intl,URLSearchParams,AbortController,crypto:{randomUUID:()=>id},
+  Option:class{constructor(text,value){this.text=text;this.value=value;}},
+  async fetch(url,options){
+   requests.push({url,options});
+   const result=options.method==='POST'?{saved:true,id}:{mailbox:adminEmail,author,students:[
+    {id:'1',name:'Ágata',cgm:'00123',className:'8º B',school:'Escola Fictícia'},
+    {id:'2',name:'Bruno',cgm:'00234',className:'8º A',school:'Escola Fictícia'}
+   ]};
+   return {ok:true,json:async()=>result};
+  }
+ });
+ window.FarolActiveSearch.connectionChanged(adminEmail,author);
+ window.FarolActiveSearch.mount({querySelector:get});
+ await settle();
+ const {studentId,searchDate,searchTime,actionText}=form.elements;
+ assert.equal(searchDate.value,'2026-11-26');
+ assert.equal(searchTime.value,'22:35');
+ const filter=get('input[type="search"]');
+ filter.value='agata';
+ filter.listeners.input();
+ assert.deepEqual(Array.from(studentId.options,option=>option.value),['','1']);
+ studentId.value='1';
+ searchTime.value='14:30';
+ actionText.value='Tentativa pela manhã.';
+ const speak=get('[data-dictate]');
+ await speak.listeners.click();
+ assert.equal(session.processLocally,true);
+ assert.equal(session.lang,'pt-BR');
+ const final=Object.assign([{transcript:'Contato à tarde.'}],{isFinal:true});
+ session.onresult({resultIndex:0,results:[final]});
+ await form.listeners.submit({preventDefault(){}});
+ assert.equal(requests.length,1);
+ await speak.listeners.click();
+ assert.equal(actionText.value,'Tentativa pela manhã. Contato à tarde.');
+ actionText.value+=' Retorno combinado.';
+ await form.listeners.submit({preventDefault(){}});
+ const saved=JSON.parse(requests[1].options.body);
+ assert.equal(saved.studentId,'1');
+ assert.equal(saved.searchTime,'14:30');
+ assert.equal(saved.text,'Tentativa pela manhã. Contato à tarde. Retorno combinado.');
+ assert.equal(get('[data-submit-status]').textContent,'Busca ativa registrada.');
 });
