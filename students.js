@@ -1,6 +1,8 @@
 'use strict';
 window.FarolStudents=(()=>{
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const formatSeries=value=>String(value??'').replace(/[º°]/g,'o').replace(/ª/g,'a');
+  const fold=value=>formatSeries(value).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/\p{M}/gu,'');
   const messages={author_required:'Identifique quem vai registrar a ocorrência.',author_changed:'A identidade mudou. Feche e abra a ocorrência novamente.',author_profile_required:'Cadastre o Nome da pessoa em EmailsAutorizados antes de registrar.',storage_access_denied:'O Supabase recusou o acesso do servidor às tabelas. Confira a configuração no projeto FarolGE.',student_schema_invalid:'A estrutura de Alunos/Ocorrencias é incompatível. Confira database/students.sql no projeto FarolGE.',storage_unavailable:'Não foi possível comunicar com o Supabase. Tente atualizar os alunos.',setup_required:'Execute database/students.sql no Supabase do FAROL GE para preparar Alunos e Ocorrencias.',login_required:'Identifique-se novamente para consultar os alunos.',account_changed:'A conta mudou. Atualize a lista.',invalid_occurrence:'Confira o texto da ocorrência (até 5.000 caracteres).',student_missing:'O aluno não foi encontrado nesta conta. Atualize a lista.',conflict:'Este registro já foi enviado com outros dados. Feche e abra uma nova ocorrência.',unavailable:'Não foi possível concluir. Tente novamente.'};
   let root=null,connection=null,personal=null,actorVersion=0,students=[],version=0,busy=false,saving=false,selected=null,submission=null;
   const occurrences=window.FarolOccurrences?.create({id:'inspector-occurrences',action:'inspector-occurrences',mobileCards:true,deleteAction:'occurrence-delete',editAction:'occurrence-edit'});
@@ -24,8 +26,10 @@ window.FarolStudents=(()=>{
   }
   function list(){
     if(!root)return;
-    const query=root.querySelector('#student-search').value.trim().toLocaleLowerCase('pt-BR');
-    root.querySelector('#student-list').innerHTML=students.filter(s=>(s.Nome+' '+s.Serie+' '+s.Turma+' '+s.Turno+' '+s.CGM).toLocaleLowerCase('pt-BR').includes(query)).map(s=>`<li><button type="button" class="student-row" data-student="${escape(s.id)}"><span>${escape(s.Nome)}</span><span class="student-class">${escape(s.Serie)} · ${escape(s.Turma)} · ${escape(s.Turno)}</span></button></li>`).join('');
+    const query=fold(root.querySelector('#student-search').value.trim());
+    root.querySelector('#student-list').innerHTML=students
+      .filter(s=>fold([s.Nome,s.Serie,s.Turma,s.Turno,s.CGM].join(' ')).includes(query))
+      .map(s=>`<li><button type="button" class="student-row" data-student="${escape(s.id)}"><span>${escape(s.Nome)} · CGM ${escape(s.CGM)}</span><span class="student-class">${escape(formatSeries(s.Serie))} · ${escape(s.Turma)} · ${escape(s.Turno)}</span></button></li>`).join('');
   }
   async function load(){
     if(!root||!connection||connection.occurrencesOnly||busy||activeTab!=='register')return;
@@ -112,7 +116,7 @@ window.FarolStudents=(()=>{
         <button type="button" id="inspector-tab-register" role="tab" aria-selected="true" aria-controls="inspector-panel-register">REGISTRAR</button>
         <button type="button" id="inspector-tab-consult" role="tab" aria-selected="false" aria-controls="inspector-panel-consult" tabindex="-1">CONSULTAR</button>
       </div>
-      <section class="panel" id="inspector-panel-register" role="tabpanel" aria-labelledby="inspector-tab-register" tabindex="0"><p class="demand-intro">Selecione um aluno para registrar uma ocorrência.</p><label class="student-search-label" for="student-search">Buscar aluno, CGM ou turma</label><input class="form-control" type="search" id="student-search"><p id="student-status" class="overview-status" role="status"></p><ul id="student-list" class="student-list"></ul><button type="button" class="button" id="student-refresh">Atualizar alunos</button></section>
+      <section class="panel" id="inspector-panel-register" role="tabpanel" aria-labelledby="inspector-tab-register" tabindex="0"><p class="demand-intro">Selecione um aluno para registrar uma ocorrência.</p><label class="student-search-label" for="student-search">Buscar aluno, CGM, série, turma ou turno</label><input class="form-control" type="search" id="student-search"><p id="student-status" class="overview-status" role="status"></p><ul id="student-list" class="student-list"></ul><button type="button" class="button" id="student-refresh">Atualizar alunos</button></section>
       <section id="inspector-panel-consult" role="tabpanel" aria-labelledby="inspector-tab-consult" tabindex="0" hidden></section>
       <dialog id="student-dialog" aria-labelledby="student-dialog-title"><h2 id="student-dialog-title"></h2><p id="student-dialog-class"></p><form id="student-form"><p id="student-school" class="demand-intro"></p><p id="student-actor" class="demand-intro"></p><label class="field">Ocorrência<textarea id="student-occurrence" class="form-control" required maxlength="5000" rows="6"></textarea></label><p class="demand-footnote">A data e a hora serão registradas no momento do salvamento, pelo horário de Brasília.</p><p id="student-feedback" role="status"></p><div class="button-row"><button type="submit" id="student-save" class="button primary">Salvar ocorrência</button><button type="button" id="student-cancel" class="button">Cancelar</button></div></form></dialog>`;
     for(const name of ['register','consult']){

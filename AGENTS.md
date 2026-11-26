@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 26/11/2026, Marcos pediu que as listas de alunos em REGISTRAR de Inspetores/Monitores e Busca Ativa mostrem o CGM após o nome e usem o e a minúsculos nos ordinais de série. O filtro aceita as letras e os símbolos ordinais.
+
 - Em 26/11/2026, Marcos pediu que Carga de Alunos abra uma janela mostrando Turno, Série, Turma, CGM e Nome durante a leitura e ofereça Parar. A prévia recebe as linhas por página, pode ser cancelada antes da confirmação e não grava. Confirmar carga relê a versão conferida e grava em uma transação. Política revisão 48. Sem novo SQL, escopo ou variável.
 
 - Em 26/11/2026, Marcos pediu Alterar na consulta de Inspetores/Monitores, somente para o autor identificado ou a conta Pessoal verificada marcos.rubo@gmail.com. Alterar apenas o texto e a revisão. Identificar autoria pelo e-mail verificado salvo ou pelo identificador cifrado do cadastro temporário. Registros sem identificação de autoria podem ser editados por Marcos. SQL database/occurrence-edit.sql e política revisão 43.

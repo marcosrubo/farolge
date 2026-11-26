@@ -3,7 +3,8 @@
     timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
     hour:'2-digit',minute:'2-digit',hourCycle:'h23'
   });
-  const fold=value=>value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/\p{M}/gu,'');
+  const formatSeries=value=>value.replace(/[º°]/g,'o').replace(/ª/g,'a');
+  const fold=value=>formatSeries(value).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/\p{M}/gu,'');
   const errors={
     account_changed:'A conexão mudou. Volte ao Radar e abra o formulário novamente.',
     author_changed:'A conta institucional mudou. Volte ao Radar e abra o formulário novamente.',
@@ -172,7 +173,7 @@
       </div>
       <section class="panel" id="active-search-panel-register" role="tabpanel" aria-labelledby="active-search-tab-register" tabindex="0">
         <p class="demand-intro">Selecione um aluno para registrar uma busca ativa.</p>
-        <label class="student-search-label" for="active-search-filter">Buscar aluno, CGM ou turma</label>
+        <label class="student-search-label" for="active-search-filter">Buscar aluno, CGM, série, turma ou turno</label>
         <input class="form-control" id="active-search-filter" type="search" autocomplete="off" disabled>
         <p class="overview-status" data-student-status role="status"></p>
         <ul id="active-search-list" class="student-list"></ul>
@@ -189,7 +190,10 @@
     function showStudents(){
       const term=fold(filter.value.trim());
       const matches=students.filter(item=>item.search.includes(term));
-      list.innerHTML=matches.map(item=>`<li><button type="button" class="student-row" data-student="${escape(item.id)}"><span>${escape(item.name)}</span><span class="student-class">${escape(item.className)}</span></button></li>`).join('');
+      list.innerHTML=matches.map(item=>{
+        const className=item.className.replace(/^[^·]+/,formatSeries);
+        return `<li><button type="button" class="student-row" data-student="${escape(item.id)}"><span>${escape(item.name)} · CGM ${escape(item.cgm)}</span><span class="student-class">${escape(className)}</span></button></li>`;
+      }).join('');
       listStatus.textContent=matches.length?'':students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.';
     }
 

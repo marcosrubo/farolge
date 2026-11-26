@@ -520,7 +520,7 @@ test('Busca Ativa preserva o fluxo de registro com ditado '+mode,async()=>{
    requests.push({url,options});
    const result=options.method==='POST'?{saved:true,id,date:'2026-11-26',time:'22:35:30'}:{mailbox:adminEmail,author,students:[
     {id:'1',name:'Ágata',cgm:'00123',className:'8º B',school:'Escola Fictícia'},
-    {id:'2',name:'Bruno',cgm:'00234',className:'8º A',school:'Escola Fictícia'}
+    {id:'2',name:'Bruno',cgm:'00234',className:'1ª Série · A · Manhã',school:'Escola Fictícia'}
    ]};
    return {ok:true,json:async()=>result};
   }
@@ -532,10 +532,17 @@ test('Busca Ativa preserva o fluxo de registro com ditado '+mode,async()=>{
  assert.equal(get('#active-search-tab-register')['aria-selected'],'true');
  assert.equal(get('#active-search-panel-consult').hidden,true);
  assert.equal(dialog.open,undefined);
- filter.value='agata';
- filter.listeners.input();
- assert.match(list.innerHTML,/Ágata/);
- assert.doesNotMatch(list.innerHTML,/Bruno/);
+ assert.match(list.innerHTML,/Ágata · CGM 00123/);
+ assert.match(list.innerHTML,/8o B/);
+ assert.match(list.innerHTML,/1a Série · A · Manhã/);
+ for(const value of ['1a','1ª']){
+  filter.value=value;filter.listeners.input();
+  assert.match(list.innerHTML,/Bruno/);assert.doesNotMatch(list.innerHTML,/Ágata/);
+ }
+ for(const value of ['8o','8º','00123','agata']){
+  filter.value=value;filter.listeners.input();
+  assert.match(list.innerHTML,/Ágata/);assert.doesNotMatch(list.innerHTML,/Bruno/);
+ }
  const trigger={dataset:{student:'1'},focus(){}};
  list.listeners.click({target:{closest:()=>trigger}});
  assert.equal(dialog.open,true);

@@ -21,8 +21,21 @@ const student={id:'a'.repeat(64),Nome:'ALUNA <TESTE>',Escola:'ESCOLA FICTICIA',C
 const click=id=>({target:{closest:()=>({dataset:id})}});
 test('Inspetores mantém explicação sem conexão e mostra nome/turma com texto seguro',async()=>{
  const h=ui('students.js','FarolStudents');h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.root.innerHTML.includes('Inspetores/Monitores'));
- h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student]});await settle();
- assert.ok(h.get('#student-list').innerHTML.includes('ALUNA &lt;TESTE&gt;'));assert.ok(h.get('#student-list').innerHTML.includes('8º Ano · A · Manhã'));
+ const other={...student,id:'b'.repeat(64),Nome:'BRUNO',CGM:'0000456',Serie:'1ª Série'};
+ h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student,other]});await settle();
+ const list=h.get('#student-list'),filter=h.get('#student-search');
+ assert.match(list.innerHTML,/ALUNA &lt;TESTE&gt; · CGM 0000123/);
+ assert.match(list.innerHTML,/8o Ano · A · Manhã/);
+ assert.match(list.innerHTML,/1a Série · A · Manhã/);
+ for(const value of ['8o','8º','0000123']){
+  filter.value=value;filter.listeners.input();
+  assert.match(list.innerHTML,/ALUNA/);assert.doesNotMatch(list.innerHTML,/BRUNO/);
+ }
+ for(const value of ['1a','1ª']){
+  filter.value=value;filter.listeners.input();
+  assert.match(list.innerHTML,/BRUNO/);assert.doesNotMatch(list.innerHTML,/ALUNA/);
+ }
+ filter.value='';filter.listeners.input();
  h.get('#student-list').listeners.click(click({student:student.id}));assert.equal(h.get('#student-dialog').open,true);assert.equal(h.get('#student-school').textContent,student.Escola);
  h.get('#student-occurrence').value='Observação factual.';
  const event={preventDefault(){}};h.get('#student-form').listeners.submit(event);h.get('#student-form').listeners.submit(event);assert.equal(h.requests.length,2);
