@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 26/11/2026, Marcos pediu Alterar na consulta de Inspetores/Monitores, somente para o autor identificado ou a conta Pessoal verificada marcos.rubo@gmail.com. Alterar apenas o texto e a revisão. Identificar autoria pelo e-mail verificado salvo ou pelo identificador cifrado do cadastro temporário. Registros sem identificação de autoria podem ser editados por Marcos. SQL database/occurrence-edit.sql e política revisão 43.
+
 - Em 26/11/2026, Marcos pediu Arquivo Morto abaixo do divisor, acima de Manutenção do Sistema, com duas confirmações e movimentação da Caixa de Entrada Pessoal mensagem por mensagem. Exigir conexão Pessoal própria e permissão Arquivo Morto. Mostrar remetente, destinatário, data e assunto. Cancelar interrompe a fila, e uma requisição já iniciada pode concluir. SQL atualizado em database/module-access.sql para a permissão, política revisão 42 e escopos já existentes.
 
 - Em 26/11/2026, Marcos pediu a lista Arquivo Morto abaixo do quadro institucional e, na Pessoal, abaixo das duas colunas Caixa de Entrada e Despachadas. O botão Voltar p/ Cx Entrada da mensagem aplica INBOX e remove o Arquivo Morto da caixa em uso. Política revisão 41.

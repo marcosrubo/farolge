@@ -473,7 +473,7 @@ test('Marcos recebe todos os módulos e registra ocorrências com as duas conex�
  for(const credentials of ['',general.cookie,personal.cookie]){
   const status=(await h.request('status',{cookie:credentials})).json();
   assert.ok(status.modules.includes('bi-seed'));
-  assert.equal(status.modules.includes('inspetores-monitores'),false);
+  assert.equal(status.modules.includes('inspetores-monitores'),credentials===personal.cookie);
   assert.equal((await h.request('students',{cookie:credentials,query})).json().error,'module_forbidden');
   assert.equal((await h.request('occurrence',{cookie:credentials,method:'POST',body})).json().error,'module_forbidden');
  }
@@ -1161,4 +1161,49 @@ test('Arquivo Morto em lote exige permissão própria e conexão Pessoal direta'
  assert.deepEqual(result.json(),{mailbox:email,status:'empty'});
  profile.permissions=['pessoais'];
  assert.equal((await post(cookie,email)).json().error,'module_forbidden');
+});
+
+test('alterar ocorrência reconhece Marcos pela Pessoal verificada e mantém Exclusão restrita às duas conexões',async()=>{
+ const h=harness(),{general,personal}=await h.admin();
+ const body={type:'general',mailbox:GENERAL_EMAIL,id:temporaryId,editVersion:temporaryId,ocorrencia:' Texto atualizado. '};
+ const owner=h.userFor(GENERAL_EMAIL).id,query='?mailbox='+GENERAL_EMAIL,edits=[];
+ h.store.getOccurrences=async(id,token,editor)=>{
+  assert.equal(id,owner);assert.deepEqual(editor,{all:true});
+  return {items:[{id:temporaryId,editVersion:temporaryId}],nextPageToken:null};
+ };
+ h.store.editOccurrence=async(...args)=>{edits.push(args);return {text:'Texto atualizado.',editVersion:temporaryId};};
+ const status=(await h.request('status',{cookie:personal.cookie})).json();
+ assert.deepEqual(status.school,{email:GENERAL_EMAIL,occurrencesOnly:true});
+ const list=(await h.request('inspector-occurrences',{cookie:personal.cookie,query})).json();
+ assert.equal(list.canDelete,false);
+ assert.equal(list.items[0].editVersion,temporaryId);
+ const edit=(cookie,more={})=>h.request('occurrence-edit',{method:'POST',cookie,body,...more});
+ assert.equal((await edit(general.cookie)).status,403);
+ assert.equal((await edit(personal.cookie,{origin:'https://outside.example'})).status,403);
+ assert.equal((await edit(personal.cookie,{body:{...body,EmailAutor:GENERAL_EMAIL}})).status,400);
+ assert.equal((await edit(personal.cookie,{body:{...body,ocorrencia:' '}})).status,400);
+ assert.deepEqual((await edit(personal.cookie)).json(),{mailbox:GENERAL_EMAIL,id:temporaryId,text:'Texto atualizado.',editVersion:temporaryId});
+ assert.deepEqual(edits,[[owner,temporaryId,{all:true},'Texto atualizado.',temporaryId]]);
+ assert.equal((await h.request('occurrence-delete',{method:'POST',cookie:personal.cookie,body:{type:'general',mailbox:GENERAL_EMAIL,id:temporaryId}})).status,403);
+});
+
+test('alteração usa o cadastro autenticado em sessão temporária, mesmo com cookies de Marcos presentes',async()=>{
+ const h=harness(),admin=await h.admin();
+ const {writeTemporarySession}=require('../server/temporary-access.cjs');
+ const profile={id:temporaryId,Nome:'Inspetora',password_hash:'hash simulado',permissions:['inspetores-monitores']};
+ h.store.getTemporaryOwner=async()=>h.userFor(GENERAL_EMAIL).id;
+ h.store.getTemporaryUser=async()=>profile;
+ let calls=0;
+ h.store.editOccurrence=async(_owner,_id,editor)=>{
+  calls++;
+  assert.deepEqual(editor,{id:profile.id});
+  throw Object.assign(new Error('occurrence_edit_forbidden'),{status:403});
+ };
+ const token=await writeTemporarySession(h.store,profile);
+ const cookie=admin.cookie+'; __Host-farol-temporary='+token;
+ const body={type:'general',mailbox:GENERAL_EMAIL,id:temporaryId,editVersion:temporaryId,ocorrencia:'Revisão.'};
+ const response=await h.request('occurrence-edit',{method:'POST',cookie,body});
+ assert.equal(response.status,403);
+ assert.equal(response.json().error,'occurrence_edit_forbidden');
+ assert.equal(calls,1);
 });

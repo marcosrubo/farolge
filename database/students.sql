@@ -26,6 +26,8 @@ create table if not exists public."Ocorrencias" (
   "Ocorrencia" text not null,
   "EmailAutor" text,
   "NomeAutor" text,
+  "AutorId" text,
+  edit_revision uuid not null default gen_random_uuid(),
   created_at timestamptz not null default now(),
   primary key (owner_id,id),
   foreign key (owner_id,cgm_key) references public."Alunos"(owner_id,cgm_key)

@@ -169,3 +169,49 @@ test('exclusão usa somente a tabela de ocorrências e exige proprietário e ID 
  assert.equal(rows.length,2);
  assert.ok(rows.some(row=>row.owner==='other-owner'&&row.id===id));
 });
+
+test('edição confere a autoria, limita o PATCH ao texto cifrado e protege a revisão',async()=>{
+ const cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,7)};
+ const key=field=>`occurrence.${owner}.${id}.${field}`;
+ const version='12345678-1234-4234-8234-123456789abc';
+ const text='Observação original.';
+ let row={id,edit_revision:version,Ocorrencia:seal(text,cfg.key,key('Ocorrencia')),
+  EmailAutor:seal(actor.email,cfg.key,key('EmailAutor')),AutorId:null,Nome:seal(student.Nome,cfg.key,key('Nome')),
+  Data:'2026-11-17',Hora:'09:00:00'};
+ const writes=[];
+ const store=makeStudentStore(cfg,async(url,opts)=>{
+  const {pathname,searchParams}=new URL(url);
+  assert.equal(pathname,'/rest/v1/Ocorrencias');
+  const matches=searchParams.get('owner_id')==='eq.'+owner&&(!searchParams.has('id')||searchParams.get('id')==='eq.'+id);
+  if(opts.method==='GET')return {ok:true,status:200,json:async()=>matches?[structuredClone(row)]:[]};
+  assert.equal(opts.method,'PATCH');assert.ok(matches);
+  assert.equal(searchParams.get('edit_revision'),'eq.'+row.edit_revision);
+  const update=JSON.parse(opts.body);writes.push(update);
+  assert.deepEqual(Object.keys(update).sort(),['Ocorrencia','edit_revision']);
+  assert.notEqual(update.Ocorrencia,'Texto corrigido.');
+  row={...row,...update};
+  return {ok:true,status:200,json:async()=>[{id,edit_revision:row.edit_revision}]};
+ },{seal,unseal});
+ const own=(await store.getOccurrences(owner,'',{email:actor.email})).items[0];
+ assert.equal(own.editVersion,version);
+ assert.equal(own.EmailAutor,undefined);
+ assert.equal((await store.getOccurrences(owner,'',{email:'other@example.com',personalEmail:actor.email})).items[0].editVersion,version);
+ assert.equal((await store.getOccurrences(owner,'',{email:'other@example.com'})).items[0].editVersion,undefined);
+ assert.equal((await store.getOccurrences(owner)).items[0].editVersion,undefined);
+ await assert.rejects(store.editOccurrence(owner,id,{email:'other@example.com'},'Texto corrigido.',version),{message:'occurrence_edit_forbidden'});
+ await assert.rejects(store.editOccurrence('other-owner',id,{all:true},'Texto corrigido.',version),{message:'occurrence_missing'});
+ const saved=await store.editOccurrence(owner,id,{email:actor.email},'Texto corrigido.',version);
+ assert.equal(unseal(row.Ocorrencia,cfg.key,key('Ocorrencia')),'Texto corrigido.');
+ assert.equal(row.Data,'2026-11-17');
+ assert.equal(unseal(row.EmailAutor,cfg.key,key('EmailAutor')),actor.email);
+ assert.deepEqual(await store.editOccurrence(owner,id,{email:actor.email},'Texto corrigido.',version),saved);
+ await assert.rejects(store.editOccurrence(owner,id,{all:true},'Outra revisão.',version),{message:'conflict'});
+ assert.equal(writes.length,1);
+ row.EmailAutor=null;
+ row.AutorId=seal('cadastro-original',cfg.key,key('AutorId'));
+ assert.equal((await store.getOccurrences(owner,'',{id:'cadastro-original'})).items[0].editVersion,saved.editVersion);
+ assert.equal((await store.getOccurrences(owner,'',{id:'outro-cadastro'})).items[0].editVersion,undefined);
+ row.AutorId=null;
+ assert.equal((await store.getOccurrences(owner,'',{id:'cadastro-original'})).items[0].editVersion,undefined);
+ assert.equal((await store.getOccurrences(owner,'',{all:true})).items[0].editVersion,saved.editVersion);
+});

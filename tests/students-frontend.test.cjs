@@ -147,3 +147,45 @@ test('Consultar confirma a exclusão e remove somente a ocorrência confirmada p
  assert.doesNotMatch(cards.innerHTML,/>Excluir</);
  assert.match(cards.innerHTML,/Outra ocorrência/);
 });
+
+test('Consultar mostra Alterar nas ocorrências autorizadas e atualiza somente o texto confirmado',async()=>{
+ const h=ui('students.js','FarolStudents');
+ h.app.connectionChanged(general);
+ h.app.personalConnectionChanged({id:'monitor-id',name:'Inspetora'});
+ h.app.mount(h.root);
+ h.respond(0,{mailbox:general.email,students:[student]});await settle();
+ h.get('#inspector-tab-consult').listeners.click();
+ const item={id:'a',date:'2026-11-24',time:'11:00:00',student:'Aluna fictícia',className:'8º A',text:'Texto original.',authorName:'Inspetora',editVersion:'version-a'};
+ h.respond(1,{mailbox:general.email,items:[item,{...item,id:'b',text:'Outro texto.',editVersion:undefined}]});await settle();
+ const cards=h.get('#inspector-occurrences-cards'),rows=h.get('#inspector-occurrences-rows');
+ assert.equal((cards.innerHTML.match(/>Alterar</g)||[]).length,1);
+ assert.equal((rows.innerHTML.match(/>Alterar</g)||[]).length,1);
+ assert.doesNotMatch(rows.innerHTML,/Excluir/);
+ cards.listeners.click(click({editOccurrence:'b'}));
+ const dialog=h.get('#inspector-occurrences-edit-dialog'),input=h.get('#inspector-occurrences-edit-text');
+ assert.equal(dialog.open,false);
+ rows.listeners.click(click({editOccurrence:'a'}));
+ assert.equal(dialog.open,true);assert.equal(input.value,item.text);
+ input.value='Novo <texto>\nSegunda linha.';
+ const submit=()=>h.get('#inspector-occurrences-edit-form').listeners.submit({preventDefault(){}});
+ submit();submit();
+ assert.equal(h.requests.length,3);
+ assert.equal(h.requests[2].url,'/api/google/occurrence-edit');
+ assert.deepEqual(JSON.parse(h.requests[2].opts.body),{type:'general',mailbox:general.email,id:'a',ocorrencia:input.value,editVersion:'version-a'});
+ h.respond(2,{mailbox:general.email,id:'a',text:input.value,editVersion:'version-b'});await settle();
+ assert.equal(dialog.open,false);
+ assert.match(rows.innerHTML,/Novo &lt;texto&gt;\nSegunda linha\./);
+ assert.match(rows.innerHTML,/Outro texto\./);
+ assert.match(rows.innerHTML,/11:00:00/);
+});
+
+test('Pessoal de Marcos com acesso só a ocorrências abre diretamente a consulta',()=>{
+ const h=ui('students.js','FarolStudents');
+ h.app.connectionChanged({...general,occurrencesOnly:true});
+ h.app.personalConnectionChanged({email:'marcos.rubo@gmail.com',name:'Marcos Rubo'},'marcos.rubo@gmail.com');
+ h.app.mount(h.root);
+ assert.equal(h.get('#inspector-tab-register').hidden,true);
+ assert.equal(h.get('#inspector-tab-consult')['aria-selected'],'true');
+ assert.equal(h.requests.length,1);
+ assert.match(h.requests[0].url,/inspector-occurrences/);
+});

@@ -236,7 +236,7 @@ function setupEmailConnections(){
       updateAccess(result);
       const registered=Boolean(result.temporary||result.generalUser||result.institutionalUser);
       const connections=registered?result.sharedConnections:result.connections;
-      const school=registered?result.school:connections?.general;
+      const school=result.school??(registered?null:connections?.general);
       const actor=result.temporary||(registered?result.occurrencesUser||result.institutionalUser
         :connections?.personal?{email:connections.personal.email,name:'Marcos Rubo'}:null);
       const access=(module,value)=>configured&&allowedModules.has(module)?value||null:null;
@@ -246,7 +246,7 @@ function setupEmailConnections(){
       window.FarolInstitutional?.connectionChanged(access('institucionais',result.institutionalConnection||connections?.general));
       window.FarolMaintenance?.connectionChanged(access('manutencao-sistema',connections?.general));
       window.FarolStudents?.connectionChanged?.(access('inspetores-monitores',school));
-      window.FarolStudents?.personalConnectionChanged?.(access('inspetores-monitores',actor));
+      window.FarolStudents?.personalConnectionChanged?.(access('inspetores-monitores',actor),activeEmails.personal);
       const settings=result.temporary?{email:result.temporary.id,name:result.temporary.name}
         :result.settingsUser||result.institutionalUser||result.connections?.general;
       window.FarolAuthorizedUsers?.connectionChanged(access('configuracoes',settings));
@@ -342,6 +342,7 @@ function setupEmailConnections(){
         if(button.dataset.disconnectEmail==='personal'){
           window.FarolArchiveInbox?.connectionChanged(null);
           window.FarolDemands?.connectionChanged(null);
+          window.FarolStudents?.personalConnectionChanged?.(null);
         }
         if(button.dataset.disconnectEmail==='general')window.FarolInstitutional?.connectionChanged(null);
         window.FarolOverview?.connectionChanged(button.dataset.disconnectEmail,null);

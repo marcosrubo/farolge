@@ -33,7 +33,7 @@ const TYPES = ['general','personal'];
 const personalActions=new Set(['board','thread','demand','inbox','classified','classify','personal-archive','archived','personal-restore','personal-archive-next']);
 const driveReadActions=new Set(['student-import','attendance-import']);
 const driveMetadataActions=new Set(['maintenance','student-files','attendance-files']);
-const schoolActions=new Set(['students','occurrence','occurrences','inspector-occurrences','attendance-analysis']);
+const schoolActions=new Set(['students','occurrence','occurrence-edit','occurrences','inspector-occurrences','attendance-analysis']);
 const actionMailbox=action=>personalActions.has(action)?'personal':'general';
 const TTL = 30 * 24 * 3600;
 const random = () => crypto.randomBytes(32).toString('base64url');
@@ -280,7 +280,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
     const temporaryPublic=['temporary-users','temporary-user','temporary-login','temporary-activate','temporary-password','temporary-logout'];
     if(!['status','access-denied','start','callback','disconnect','logout',...temporaryPublic].includes(action)
       &&!actionModules.has(action))return reply(404,{error:'not_found'});
-    const expected=['start','disconnect','logout','demand','classify','personal-archive','personal-restore','personal-archive-next','institutional-move','institutional-labels','occurrence','occurrence-delete','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
+    const expected=['start','disconnect','logout','demand','classify','personal-archive','personal-restore','personal-archive-next','institutional-move','institutional-labels','occurrence','occurrence-delete','occurrence-edit','student-import','attendance-import','authorized-email','temporary-login','temporary-activate','temporary-password','temporary-logout','temporary-confirm','temporary-reset-password'].includes(action)?'POST':'GET';
     if(req.method!==expected){res.setHeader('Allow',expected);return reply(405,{error:'method_not_allowed'});}
     if(!config)return reply(action==='status'?200:503,{
       configured:false,mode:'none',connections:{general:null,personal:null},error:'not_configured',
@@ -382,15 +382,18 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       const {admin,profiles}=await moduleIdentity(temporary);
       return Boolean(admin||profileForModule(profiles,'configuracoes'));
     }
-    async function moduleConnections(profiles,connections={},temporary=false){
-      const modules=temporary?modulesFor(profiles.personal):MODULES.filter(module=>profileForModule(profiles,module));
+    async function moduleConnections(profiles,connections={},temporary=false,occurrencesOnly=false){
+      const modules=temporary?modulesFor(profiles.personal):profiles.general||profiles.personal
+        ?MODULES.filter(module=>profileForModule(profiles,module)):modulesFor(null,connections);
+      if(occurrencesOnly)modules.push('inspetores-monitores');
       const institutionalConnection=allowsModule(profiles.general,'institucionais')?connections.general:null;
       const needsSharedGeneral=modules.includes('inicio')||modules.includes('manutencao-sistema')
         ||(modules.includes('institucionais')&&!institutionalConnection);
       const needsPersonal=modules.includes('inicio')||modules.includes('pessoais');
-      const needsSchool=needsSharedGeneral||modules.includes('radar')||modules.includes('inspetores-monitores')||(temporary&&needsPersonal);
+      const needsSchool=needsSharedGeneral||modules.includes('radar')
+        ||(!occurrencesOnly&&modules.includes('inspetores-monitores'))||(temporary&&needsPersonal);
       const owner=needsSchool?await store.getTemporaryOwner():null;
-      const school=owner?{email:FIXED_AUTHORIZED_EMAIL}:null;
+      const school=owner||occurrencesOnly?{email:FIXED_AUTHORIZED_EMAIL,...(occurrencesOnly?{occurrencesOnly:true}:{})}:null;
       const sharedConnections={general:null,personal:needsPersonal?connections.personal||null:null};
       await Promise.all(TYPES.filter(type=>type==='general'?needsSharedGeneral:temporary&&needsPersonal).map(async type=>{
         if(!owner)return;
@@ -459,7 +462,9 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const {admin,general,personal,profiles}=await moduleIdentity(temporary);
           if(action==='occurrence-delete'&&!admin)return reply(403,{error:'admin_required'});
           const profile=profileForModule(profiles,module);
-          if(!admin&&!profile){
+          const canEditAll=(admin?.personal||personal)?.user.email===FIXED_AUTHORIZED_EMAIL;
+          const occurrenceEditing=['inspector-occurrences','occurrence-edit'].includes(action);
+          if(!admin&&!profile&&!(canEditAll&&occurrenceEditing)){
             const error=temporary||profiles.general||(personal&&personal.user.email!==FIXED_AUTHORIZED_EMAIL)||schoolActions.has(action)||action==='overview'?'module_forbidden':'admin_required';
             return reply(403,{error});
           }
@@ -480,7 +485,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           const type=action==='overview'?url.searchParams.get('type'):actionMailbox(action);
           if(!TYPES.includes(type))return reply(400,{error:'invalid_type'});
           const useConnectedGeneral=action==='overview'||(module==='institucionais'&&allowsModule(profiles.general,module));
-          const direct=admin?.[type]||(type==='personal'?personal:useConnectedGeneral?general:null);
+          const direct=admin?.[type]||(type==='personal'||(canEditAll&&occurrenceEditing)?personal:useConnectedGeneral?general:null);
           if(type==='personal'&&!direct&&(!temporary||action==='personal-archive-next'))return reply(403,{error:'login_required',type});
           const owner=direct?.user.id??await store.getTemporaryOwner();
           const email=direct?.user.email??FIXED_AUTHORIZED_EMAIL;
@@ -494,9 +499,11 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
           }
           if(action==='attendance-analysis')return reply(200,await handleAttendanceAnalysis({url,store,owner,email}));
           if(schoolActions.has(action)){
-            const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:admin?{name:'Marcos Rubo',email}:{name:profile.Nome,email:profile.email};
+            const actor=temporary?{id:profile.id,name:profile.Nome,email:null}:admin?{name:'Marcos Rubo',email}:profile?{name:profile.Nome,email:profile.email}:null;
+            const editor=occurrenceEditing&&(canEditAll?{all:true}:actor?.id?{id:actor.id}:actor?.email
+              ?{email:actor.email,personalEmail:personal?.user.email}:null);
             const studentAction=action==='inspector-occurrences'?'occurrences':action;
-            const result=await handleStudents({action:studentAction,url,body,store,owner,email,actor});
+            const result=await handleStudents({action:studentAction,url,body,store,owner,email,actor,editor});
             return reply(200,action==='inspector-occurrences'?{...result,canDelete:Boolean(admin)}:result);
           }
           const connection=direct?.connection??await store.getConnection(owner,type);
@@ -525,7 +532,7 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
         } catch(error) {
           if(error.message==='access_denied')return reply(403,{error:'access_denied',email:error.email,type:error.type||actionMailbox(action)});
           if(['access_setup_required','access_unavailable'].includes(error.message))return reply(503,{error:error.message});
-          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','invalid_archive','archive_label_missing','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit','invalid_temporary_user','temporary_activation_unavailable','temporary_reset_unavailable','temporary_password_length','temporary_password_confirmation'];
+          const known=['account_changed','invalid_demand','invalid_column','invalid_page','invalid_thread','not_found','conflict','invalid_provider','invalid_classification','invalid_archive','archive_label_missing','classify_scope','labels_missing','not_inbox','classification_unconfirmed','institutional_scope','invalid_institutional','listing_limit','folder_missing','folder_ambiguous','drive_incomplete','invalid_occurrence','occurrence_missing','occurrence_edit_forbidden','student_missing','invalid_import','file_outside_folder','file_changed','unsupported_file','file_too_large','pdf_layout','pdf_runtime_unavailable','storage_access_denied','student_schema_invalid','storage_unavailable','import_unconfirmed','author_required','author_changed','author_profile_required','invalid_authorized_email','email_exists','authorized_write_denied','attendance_setup_required','attendance_layout','attendance_filename','file_download_denied','invalid_period','analysis_limit','invalid_temporary_user','temporary_activation_unavailable','temporary_reset_unavailable','temporary_password_length','temporary_password_confirmation'];
           if(known.includes(error.message))return reply(error.status||503,{error:error.message});
           if(error.message==='setup_required')return reply(503,{error:'setup_required'});
           if(error.response?.status===401 || error.response?.data?.error==='invalid_grant')return reply(401,{error:'login_required'});
@@ -685,11 +692,12 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
       }
       const mode=connections.general?(connections.personal?'both':'general'):(connections.personal?'personal':'none');
       const bothAdmin=TYPES.every(type=>connections[type]?.email===FIXED_AUTHORIZED_EMAIL);
-      const access=!bothAdmin&&(profiles.general||profiles.personal)
+      const occurrencesOnly=!bothAdmin&&connections.personal?.email===FIXED_AUTHORIZED_EMAIL&&!profileForModule(profiles,'inspetores-monitores');
+      const access=!bothAdmin&&(profiles.general||profiles.personal||occurrencesOnly)
         ?{generalUser:publicProfile(profiles.general),...(profiles.personal?{institutionalUser:publicProfile(profiles.personal)}:{}),
           settingsUser:publicProfile(profileForModule(profiles,'configuracoes')),
           occurrencesUser:publicProfile(profileForModule(profiles,'inspetores-monitores')),
-          ...await moduleConnections(profiles,connections)}
+          ...await moduleConnections(profiles,connections,false,occurrencesOnly)}
         :{modules:modulesFor(null,connections)};
       return reply(200,{configured:true,mode,connections,errors,...access,...(Object.keys(denied).length?{denied}:{})});
     } catch(error) {

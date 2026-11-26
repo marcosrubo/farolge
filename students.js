@@ -3,11 +3,12 @@ window.FarolStudents=(()=>{
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const messages={author_required:'Identifique quem vai registrar a ocorrência.',author_changed:'A identidade mudou. Feche e abra a ocorrência novamente.',author_profile_required:'Cadastre o Nome da pessoa em EmailsAutorizados antes de registrar.',storage_access_denied:'O Supabase recusou o acesso do servidor às tabelas. Confira a configuração no projeto FarolGE.',student_schema_invalid:'A estrutura de Alunos/Ocorrencias é incompatível. Confira database/students.sql no projeto FarolGE.',storage_unavailable:'Não foi possível comunicar com o Supabase. Tente atualizar os alunos.',setup_required:'Execute database/students.sql no Supabase do FAROL GE para preparar Alunos e Ocorrencias.',login_required:'Identifique-se novamente para consultar os alunos.',account_changed:'A conta mudou. Atualize a lista.',invalid_occurrence:'Confira o texto da ocorrência (até 5.000 caracteres).',student_missing:'O aluno não foi encontrado nesta conta. Atualize a lista.',conflict:'Este registro já foi enviado com outros dados. Feche e abra uma nova ocorrência.',unavailable:'Não foi possível concluir. Tente novamente.'};
   let root=null,connection=null,personal=null,actorVersion=0,students=[],version=0,busy=false,saving=false,selected=null,submission=null;
-  const occurrences=window.FarolOccurrences?.create({id:'inspector-occurrences',action:'inspector-occurrences',mobileCards:true,deleteAction:'occurrence-delete'});
+  const occurrences=window.FarolOccurrences?.create({id:'inspector-occurrences',action:'inspector-occurrences',mobileCards:true,deleteAction:'occurrence-delete',editAction:'occurrence-edit'});
+  let personalMailbox=null;
   let activeTab='register';
-  const canRecord=()=>Boolean((personal?.id||personal?.email)&&personal?.name);
+  const canRecord=()=>Boolean(!connection?.occurrencesOnly&&(personal?.id||personal?.email)&&personal?.name);
   function syncOccurrences(){
-    const viewer=personal?.id||personal?.email||null;
+    const viewer=(personal?.id||personal?.email||personalMailbox)?JSON.stringify([personal?.id,personal?.email,personalMailbox]):null;
     occurrences?.connectionChanged(viewer?connection:null,viewer);
   }
   function close(){const dialog=root?.querySelector('#student-dialog');if(dialog?.open)dialog.close();selected=null;submission=null;saving=false;}
@@ -16,8 +17,9 @@ window.FarolStudents=(()=>{
     root.querySelector('#student-actor').textContent=canRecord()?'Registrado por: '+personal.name+(personal.email?' ('+personal.email+')':''):'Identifique quem vai registrar a ocorrência.';
     root.querySelector('#student-save').disabled=saving||!canRecord();
   }
-  function personalConnectionChanged(value){
-    const changed=personal?.id!==value?.id||personal?.email!==value?.email||personal?.name!==value?.name;personal=value;
+  function personalConnectionChanged(value,mailbox=null){
+    const changed=personal?.id!==value?.id||personal?.email!==value?.email||personal?.name!==value?.name||personalMailbox!==mailbox;
+    personal=value;personalMailbox=mailbox;
     if(changed){actorVersion++;close();drawActor();syncOccurrences();}
   }
   function list(){
@@ -26,7 +28,7 @@ window.FarolStudents=(()=>{
     root.querySelector('#student-list').innerHTML=students.filter(s=>(s.Nome+' '+s.Serie+' '+s.Turma+' '+s.Turno+' '+s.CGM).toLocaleLowerCase('pt-BR').includes(query)).map(s=>`<li><button type="button" class="student-row" data-student="${escape(s.id)}"><span>${escape(s.Nome)}</span><span class="student-class">${escape(s.Serie)} · ${escape(s.Turma)} · ${escape(s.Turno)}</span></button></li>`).join('');
   }
   async function load(){
-    if(!root||!connection||busy||activeTab!=='register')return;
+    if(!root||!connection||connection.occurrencesOnly||busy||activeTab!=='register')return;
     const ticket=++version,mailbox=connection.email;busy=true;
     root.querySelector('#student-refresh').disabled=true;root.querySelector('#student-status').textContent='Consultando alunos…';
     try{
@@ -52,7 +54,7 @@ window.FarolStudents=(()=>{
   async function save(event){
     event.preventDefault();if(!root||!selected||!connection||!canRecord()||saving)return;
     const ticket=version,authorTicket=actorVersion,mailbox=connection.email;
-    const author=personal.id?{authorId:personal.id}:{authorMailbox:personal.email};
+    const author=personal.email?{authorMailbox:personal.email}:{authorId:personal.id};
     saving=true;root.querySelector('#student-save').disabled=true;root.querySelector('#student-cancel').disabled=true;
     root.querySelector('#student-feedback').textContent='Salvando ocorrência…';
     try{
@@ -65,11 +67,25 @@ window.FarolStudents=(()=>{
     finally{if(ticket===version&&authorTicket===actorVersion&&root){saving=false;drawActor();root.querySelector('#student-cancel').disabled=false;}}
   }
   function connectionChanged(value){
-    const changed=connection?.email!==value?.email;connection=value;
-    if(changed){version++;students=[];busy=false;close();if(root){list();root.querySelector('#student-refresh').disabled=!connection;root.querySelector('#student-status').textContent=connection?'':'Os dados da escola estão indisponíveis.';if(connection)load();}syncOccurrences();}
+    const changed=connection?.email!==value?.email||connection?.occurrencesOnly!==value?.occurrencesOnly;
+    connection=value;
+    if(!changed)return;
+    version++;students=[];busy=false;close();
+    if(root){
+      syncTabs();drawActor();list();
+      root.querySelector('#student-refresh').disabled=!connection||Boolean(connection.occurrencesOnly);
+      root.querySelector('#student-status').textContent=connection?'':'Os dados da escola estão indisponíveis.';
+      if(connection)load();
+    }
+    syncOccurrences();
+  }
+  function syncTabs(){
+    const consultOnly=Boolean(connection?.occurrencesOnly);
+    root.querySelector('#inspector-tab-register').hidden=consultOnly;
+    if(consultOnly)selectTab('consult');
   }
   function selectTab(tab,moveFocus=false){
-    if(tab===activeTab)return;
+    if(tab===activeTab||(tab==='register'&&connection?.occurrencesOnly))return;
     activeTab=tab;
     for(const name of ['register','consult']){
       const selected=name===tab;
@@ -116,9 +132,9 @@ window.FarolStudents=(()=>{
     root.querySelector('#student-dialog').addEventListener('cancel',event=>{if(saving)event.preventDefault();});
     root.querySelector('#student-dialog').addEventListener('close',()=>{selected=null;submission=null;});
     root.querySelector('#student-refresh').addEventListener('click',load);
-    root.querySelector('#student-refresh').disabled=!connection;
+    root.querySelector('#student-refresh').disabled=!connection||Boolean(connection.occurrencesOnly);
     root.querySelector('#student-status').textContent=connection?'':'Os dados da escola estão indisponíveis.';
-    drawActor();if(connection)load();
+    drawActor();syncTabs();if(connection)load();
   }
   function unmount(){version++;occurrences?.unmount();close();students=[];busy=false;root=null;}
   return {mount,unmount,connectionChanged,personalConnectionChanged};

@@ -522,6 +522,14 @@ Em **Inspetores/Monitores → CONSULTAR**, **Excluir** aparece em cada linha ou 
 
 A exclusão usa os filtros de proprietário e ID no Supabase e a autorização de escrita do servidor já configurada. Publicar com a Política de Privacidade revisão 38. Sem migração SQL ou mudança de escopos. [Filtros do Supabase](https://supabase.com/docs/reference/javascript/using-filters)
 
+### Alteração do texto de ocorrências (26/11/2026)
+
+Em **Inspetores/Monitores → CONSULTAR**, **Alterar** aparece nas linhas e nos cartões que a pessoa pode editar. O formulário abre com o texto atual. Aceita até 5.000 caracteres e mantém a autoria, a data, a hora e o vínculo com o aluno. A consulta atualiza a linha depois da confirmação do servidor.
+
+O servidor autoriza o autor pelo e-mail Google verificado gravado na ocorrência ou pelo identificador do cadastro autenticado na Conexão temporária. A conta **Pessoal** verificada `marcos.rubo@gmail.com` pode consultar e editar as ocorrências do acervo escolar, inclusive usando só a Pessoal. As ocorrências antigas que registraram apenas o nome, sem um identificador que comprove a autoria, ficam editáveis por Marcos. A edição confere a revisão para preservar alterações feitas em outra sessão. [Atualização com filtros no Supabase](https://supabase.com/docs/reference/javascript/update)
+
+Antes de publicar, executar `database/occurrence-edit.sql` no Supabase exclusivo do FAROL GE. A migração acrescenta uma revisão e um campo cifrado para o identificador do cadastro temporário, preservando as ocorrências existentes. Publicar com a Política de Privacidade revisão 43. Usar os escopos e variáveis atuais. Na Vercel, validar um autor, outra pessoa com acesso à consulta e Marcos usando a Pessoal.
+
 ## Demandas Anuais (24/11/2026)
 
 Demandas INSTITUCIONAIS apresenta **Caixa de Entrada**, **Classificadas**, **Anuais** e **Arquivadas**, nessa ordem. Marcar **Demanda ANUAL** em uma mensagem da entrada abre um formulário de observações e procedimentos. Após a confirmação, o servidor grava o texto e aplica o marcador `GE_Anuais` à mensagem individual, retirando-a da Caixa de Entrada. Cancelar fecha o formulário sem movimentar a mensagem.
