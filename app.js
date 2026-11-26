@@ -100,7 +100,7 @@ function render(){
   const title=analysis?'Radar / Análise de faltas':(selected||requested)?.label||'Meu espaço';
   document.title='FAROL GE · '+title;
   document.querySelector('#breadcrumb-title').textContent=title;
-  document.querySelector('#navigation').innerHTML=modules.map(item=>`${item.id==='manutencao-sistema'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item===selected?'active':''}" href="#${item.id}" ${item===selected?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span></a>`).join('');
+  document.querySelector('#navigation').innerHTML=modules.map(item=>`${item.id==='arquivo-morto'?'<div class="nav-divider"></div>':''}<a class="nav-link ${item===selected?'active':''}" href="#${item.id}" ${item===selected?'aria-current="page"':''}>${icon(item.icon)}<span>${item.label}</span></a>`).join('');
   const main=document.querySelector('#main');
   if(!selected){
     main.classList.toggle('radar-workspace',false);
@@ -387,7 +387,8 @@ window.addEventListener('hashchange',event=>{
   }
   if(location.hash!=='#inicio')overviewSelected=false;
   render();
-  document.querySelector('#main').focus({preventScroll:true});
+  const main=document.querySelector('#main');
+  if(!main.contains(document.activeElement))main.focus({preventScroll:true});
   window.scrollTo(0,0);
   window.FarolRefreshConnections?.();
 });

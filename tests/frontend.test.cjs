@@ -6,7 +6,7 @@ const adminEmail='marcos.rubo@gmail.com';
 const adminModules=['inicio','radar','inspetores-monitores','bi-seed','manutencao-sistema','configuracoes','institucionais','pessoais','arquivo-morto'];
 function ui(status={configured:false,connections:{general:null,personal:null}},search='',modules={}){
  const nodes=new Map();
- const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;},close(){this.open=false;}});
+ const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){document.activeElement=this;},contains(node){return node===this;},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;},close(){this.open=false;}});
  const get=selector=>{if(!nodes.has(selector))nodes.set(selector,make());return nodes.get(selector);};
  const connect=['general','personal'].map(type=>Object.assign(get(`[data-connect-email="${type}"]`),{dataset:{connectEmail:type}}));
  const disconnect=['general','personal'].map(type=>Object.assign(get(`[data-disconnect-email="${type}"]`),{dataset:{disconnectEmail:type}}));
@@ -14,7 +14,8 @@ function ui(status={configured:false,connections:{general:null,personal:null}},s
  let nextTimer=0;
  const window={FAROL_CONFIG:{schoolName:'Escola',schoolInitials:'E'},listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},location:{assign(url){window.destination=url;}},history:{replaceState(){}},scrollTo(){}};
  Object.assign(window,modules);
- const context=vm.createContext({window,document:{querySelector:get,querySelectorAll:s=>s==='[data-connect-email]'?connect:s==='[data-disconnect-email]'?disconnect:[]},location:{hash:'#radar',search,pathname:'/'},URL,URLSearchParams,setTimeout:(callback,delay)=>{timers.set(++nextTimer,{callback,delay});return nextTimer;},clearTimeout:id=>timers.delete(id),fetch:async(url,opts)=>{requests.push({url,opts});if(url.endsWith('/status')&&typeof status==='function')return status();return {ok:true,json:async()=>url.endsWith('/start')?{url:'https://accounts.google.com/o/oauth2/v2/auth?state=fake'}:url.endsWith('/access-denied')?{email:status.claimEmail}:status};}});
+ const document={querySelector:get,querySelectorAll:s=>s==='[data-connect-email]'?connect:s==='[data-disconnect-email]'?disconnect:[]};
+ const context=vm.createContext({window,document,location:{hash:'#radar',search,pathname:'/'},URL,URLSearchParams,setTimeout:(callback,delay)=>{timers.set(++nextTimer,{callback,delay});return nextTimer;},clearTimeout:id=>timers.delete(id),fetch:async(url,opts)=>{requests.push({url,opts});if(url.endsWith('/status')&&typeof status==='function')return status();return {ok:true,json:async()=>url.endsWith('/start')?{url:'https://accounts.google.com/o/oauth2/v2/auth?state=fake'}:url.endsWith('/access-denied')?{email:status.claimEmail}:status};}});
  vm.runInContext(fs.readFileSync('app.js','utf8'),context);
  return {get,connect,disconnect,requests,window,context,timers};
 }
@@ -438,16 +439,20 @@ test('Visão GERAL usa conexões ativas nos quadros de e-mail e a fonte escolar 
 });
 
 
-test('Arquivo Morto fica acima da Manutenção e Cancelar volta para a rota anterior',async()=>{
+test('Arquivo Morto fica abaixo do divisor, acima da Manutenção, e Cancelar volta para a rota anterior',async()=>{
  let leave;
- const archive={mount(_element,back){leave=back;},unmount(){},connectionChanged(){}};
+ const archive={mount(_element,back){leave=back;h.get('#archive-inbox-back').focus();},unmount(){},connectionChanged(){}};
  const h=ui({configured:true,connections:{},modules:['arquivo-morto','radar']},'',{FarolArchiveInbox:archive});
  await settle();
  const navigation=h.get('#navigation').innerHTML;
- assert.ok(navigation.indexOf('#arquivo-morto')<navigation.indexOf('#manutencao-sistema'));
+ assert.deepEqual([...navigation.matchAll(/class="nav-divider"|href="#([^"]+)"/g)].map(match=>match[1]||'divisor').slice(-5),
+  ['bi-seed','divisor','arquivo-morto','manutencao-sistema','configuracoes']);
+ const cancel=h.get('#archive-inbox-back');
+ h.get('#main').contains=node=>node===cancel;
  h.context.location.hash='#arquivo-morto';
  h.window.listeners.hashchange({oldURL:'https://farol.invalid/#radar'});
  assert.match(h.get('#main').innerHTML,/archive-inbox-board/);
+ assert.equal(h.context.document.activeElement,cancel);
  leave();
  assert.equal(h.context.location.hash,'#radar');
 });

@@ -14,7 +14,7 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
-- Em 26/11/2026, Marcos pediu Arquivo Morto acima de Manutenção do Sistema, com duas confirmações e movimentação da Caixa de Entrada Pessoal mensagem por mensagem. Exigir conexão Pessoal própria e permissão Arquivo Morto. Mostrar remetente, destinatário, data e assunto. Cancelar interrompe a fila, e uma requisição já iniciada pode concluir. SQL atualizado em database/module-access.sql para a permissão, política revisão 42 e escopos já existentes.
+- Em 26/11/2026, Marcos pediu Arquivo Morto abaixo do divisor, acima de Manutenção do Sistema, com duas confirmações e movimentação da Caixa de Entrada Pessoal mensagem por mensagem. Exigir conexão Pessoal própria e permissão Arquivo Morto. Mostrar remetente, destinatário, data e assunto. Cancelar interrompe a fila, e uma requisição já iniciada pode concluir. SQL atualizado em database/module-access.sql para a permissão, política revisão 42 e escopos já existentes.
 
 - Em 26/11/2026, Marcos pediu a lista Arquivo Morto abaixo do quadro institucional e, na Pessoal, abaixo das duas colunas Caixa de Entrada e Despachadas. O botão Voltar p/ Cx Entrada da mensagem aplica INBOX e remove o Arquivo Morto da caixa em uso. Política revisão 41.
 
@@ -98,7 +98,7 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 - Em 05/11/2026, Marcos pediu telas vazias: ao selecionar qualquer opção, mostrar somente “Meu espaço / nome da opção”. Preservar logos e menu, sem avisos, perfil de demonstração, slogans inferiores, rodapé, dados de exemplo ou conteúdo nos módulos, inclusive Configurações. Construir os conteúdos com a equipe conforme novos pedidos.
 
-- Uma aplicação, um repositório e um projeto Vercel. Menu definido: Visão GERAL, Radar, Demandas INSTITUCIONAIS, Demandas PESSOAIS e BI SEED; manter o divisor antes de Configurações. BI SEED exibe o texto de desenvolvimento solicitado; indicadores reais ainda aguardam definição.
+- Uma aplicação, um repositório e um projeto Vercel. Menu definido: Visão GERAL, Radar, Demandas INSTITUCIONAIS, Demandas PESSOAIS e BI SEED; as ferramentas do sistema ficam abaixo do divisor, na ordem Arquivo Morto, Manutenção do Sistema e Configurações. BI SEED exibe o texto de desenvolvimento solicitado; indicadores reais ainda aguardam definição.
 - Demandas INSTITUCIONAIS usa a caixa geral; Demandas PESSOAIS usa a caixa individual institucional. As funções dos módulos serão detalhadas conforme os pedidos de Marcos.
 - Plataforma destinada a qualquer escola do Paraná. As contas são selecionadas em cada conexão; a arquitetura de cadastro/identificação das escolas, vínculos de pessoas e isolamento de dados por escola ainda será definida. Não inferir vínculo escolar somente pelo endereço de e-mail.
 - Demandas usa Gmail; contas pessoais e institucionais serão atendidas. Cada caixa exige autorização própria. Uma sessão no Gmail não comprova autorização do aplicativo.

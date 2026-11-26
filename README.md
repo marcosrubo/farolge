@@ -5,7 +5,7 @@ Protótipo para apresentar a proposta da plataforma à equipe da escola. Fronten
 ## Estrutura atual para apresentação
 
 - Logos da plataforma e do colégio, com o nome da instituição em três linhas.
-- Menu: Visão GERAL, Inspetores/Monitores, Radar, Demandas INSTITUCIONAIS, Demandas PESSOAIS e BI SEED; abaixo do divisor ficam Manutenção do Sistema e Configurações. Inspetores/Monitores apresenta alunos e registro manual de ocorrências. Manutenção do Sistema lista os nomes de arquivos da pasta FarolGE/FaltasSemanais da conta GERAL, conforme a seção ao final.
+- Menu: Visão GERAL, Inspetores/Monitores, Radar, Demandas INSTITUCIONAIS, Demandas PESSOAIS e BI SEED; abaixo do divisor ficam Arquivo Morto, Manutenção do Sistema e Configurações. Inspetores/Monitores apresenta alunos e registro manual de ocorrências. Manutenção do Sistema lista os nomes de arquivos da pasta FarolGE/FaltasSemanais da conta GERAL, conforme a seção ao final.
 - As opções mostram “Meu espaço / nome da opção”. Radar também apresenta o fluxo solicitado: RCO, SINAN, SERP, ATAS, Busca ATIVA e Alunos convergem para ANÁLISES, com saídas DOSSIÊ individual e Relação diária de FALTAS.
 - BI SEED e Configurações exibem “em Desenvolvimento” e os textos definidos por Marcos em 06/11/2026. A Visão GERAL apresenta os totais de mensagens dos marcadores da Escola e Pessoal descritos ao final deste README. BI SEED apresenta o texto sobre os indicadores/resumos previstos para uma visão simplificada da situação da escola.
 - O menu destaca a opção ativa e o título da aba acompanha a seleção.
@@ -567,7 +567,7 @@ Sem novo SQL, escopo ou variável. Publicar com a Política de Privacidade revis
 
 ### Arquivo Morto pelo menu (26/11/2026)
 
-O menu **Arquivo Morto**, acima de Manutenção do Sistema, abre uma confirmação que identifica a conta Pessoal. Depois da primeira confirmação, um diálogo sobreposto pede a confirmação final e destaca o aviso em vermelho sobre fundo amarelo. Cancelar na primeira tela volta à tela anterior. Cancelar no diálogo volta à primeira confirmação.
+O menu **Arquivo Morto**, logo abaixo do divisor e acima de Manutenção do Sistema, abre uma confirmação que identifica a conta Pessoal. Depois da primeira confirmação, um diálogo sobreposto pede a confirmação final e destaca o aviso em vermelho sobre fundo amarelo. Cancelar na primeira tela volta à tela anterior. Cancelar no diálogo volta à primeira confirmação.
 
 Após a confirmação final, o navegador solicita uma movimentação por vez. Cada requisição verifica a permissão **Arquivo Morto** e a conexão Pessoal própria, resolve `GE_ArquivoMorto_Pessoal` e consulta a próxima mensagem de INBOX. A consulta sempre parte do início da caixa, de modo que mensagens que chegam durante a execução também podem entrar na fila. A operação segue a movimentação individual do FAROL e preserva o estado de leitura, os demais marcadores e o acompanhamento. Rascunhos, spam e lixeira ficam fora da operação. [Listagem de mensagens no Gmail](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/list)
 

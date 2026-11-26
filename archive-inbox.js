@@ -30,16 +30,16 @@ window.FarolArchiveInbox=(()=>{
         <p id="archive-inbox-account" role="status"></p>
         <p>O FAROL consulta a Caixa de Entrada ao longo da operação, até ela ficar vazia.</p>
         <div class="button-row">
-          <button class="button" type="button" id="archive-inbox-back">Cancelar</button>
-          <button class="button primary" type="button" id="archive-inbox-review" aria-haspopup="dialog">Confirmar, é isso mesmo que eu quero!</button>
+          <button class="button primary" type="button" id="archive-inbox-back">Cancelar</button>
+          <button class="button" type="button" id="archive-inbox-review" aria-haspopup="dialog">Confirmar, é isso mesmo que eu quero!</button>
         </div>
       </section>
       <dialog id="archive-inbox-confirmation" aria-labelledby="archive-inbox-question">
         <h2 id="archive-inbox-question">Você quer mesmo fazer isso?</h2>
         <p><mark class="archive-inbox-warning">MOVER TODAS AS MENSAGENS DA CAIXA DE ENTRADA PARA O ARQUIVO MORTO?</mark></p>
         <div class="button-row">
-          <button class="button" type="button" id="archive-inbox-dismiss" autofocus>Cancelar</button>
-          <button class="button primary" type="button" id="archive-inbox-start">Confirmar, REALMENTE é isso mesmo que eu quero!</button>
+          <button class="button primary" type="button" id="archive-inbox-dismiss" autofocus>Cancelar</button>
+          <button class="button" type="button" id="archive-inbox-start">Confirmar, REALMENTE é isso mesmo que eu quero!</button>
         </div>
       </dialog>
       <section id="archive-inbox-progress" aria-labelledby="archive-inbox-progress-title" hidden>
@@ -53,13 +53,22 @@ window.FarolArchiveInbox=(()=>{
     get('account').textContent=ready()?'Conta Pessoal: '+connection.email
       :connection?.email?'Revise a autorização da conta Pessoal para movimentar as mensagens.'
       :'Conecte sua conta Pessoal para continuar.';
-    get('back').addEventListener('click',leave);
+    const first=get('first'),back=get('back'),confirmation=get('confirmation'),dismiss=get('dismiss');
+    back.addEventListener('click',leave);
     get('review').disabled=!ready();
-    get('review').addEventListener('click',()=>{if(ready()&&!job)get('confirmation').showModal();});
-    get('dismiss').addEventListener('click',()=>get('confirmation').close());
+    get('review').addEventListener('click',()=>{
+      if(!ready()||job)return;
+      confirmation.showModal();
+      dismiss.focus({preventScroll:true});
+    });
+    dismiss.addEventListener('click',()=>confirmation.close());
+    confirmation.addEventListener('close',()=>{
+      if(root&&get('confirmation')===confirmation&&!confirmation.open&&!first.hidden)back.focus({preventScroll:true});
+    });
     get('start').addEventListener('click',start);
     get('stop').addEventListener('click',cancel);
     get('close').addEventListener('click',leave);
+    back.focus({preventScroll:true});
   }
   function cancel(){
     if(!job||job.cancelled)return;

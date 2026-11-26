@@ -4,7 +4,8 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 
 function harness(){
- const make=()=>({listeners:{},children:[],textContent:'',focus(){},close(){this.open=false;},showModal(){this.open=true;},
+ let focused;
+ const make=()=>({listeners:{},children:[],textContent:'',focus(){focused=this;},close(){this.open=false;this.listeners.close?.();},showModal(){this.open=true;},
   addEventListener(event,callback){this.listeners[event]=callback;},
   append(...children){this.children.push(...children);},prepend(child){this.children.unshift(child);}
  });
@@ -18,18 +19,21 @@ function harness(){
  api.connectionChanged({email:mailbox,gmail:true,classify:true});
  api.mount(element,()=>left++);
  const get=id=>element.querySelector('#archive-inbox-'+id);
- return {api,element,get,requests,mailbox,click:id=>get(id).listeners.click(),left:()=>left};
+ return {api,element,get,requests,mailbox,click:id=>get(id).listeners.click(),left:()=>left,focused:()=>focused};
 }
 
 test('duas confirmações precedem qualquer movimentação e Cancelar na segunda mantém a primeira tela',()=>{
  const h=harness();
  assert.match(h.element.innerHTML,/MOVERÁ TODOS OS SEUS E-MAILS/);
  assert.match(h.element.innerHTML,/<mark[^>]*>MOVER TODAS AS MENSAGENS DA CAIXA DE ENTRADA PARA O ARQUIVO MORTO\?<\/mark>/);
+ assert.equal(h.focused(),h.get('back'));
  h.click('review');
  assert.equal(h.get('confirmation').open,true);
+ assert.equal(h.focused(),h.get('dismiss'));
  assert.equal(h.requests.length,0);
  h.click('dismiss');
  assert.equal(h.get('confirmation').open,false);
+ assert.equal(h.focused(),h.get('back'));
  assert.equal(h.requests.length,0);
  h.click('back');
  assert.equal(h.left(),1);
