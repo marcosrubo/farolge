@@ -2,6 +2,7 @@
   "functions": {
     "api/google/*.js": {
       "maxDuration": 60,
+      "supportsCancellation": true,
       "includeFiles": "node_modules/{pdfjs-dist,@napi-rs}/**"
     }
   }

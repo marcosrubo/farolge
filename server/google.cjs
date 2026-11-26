@@ -1,4 +1,5 @@
 'use strict';
+const {once}=require('node:events');
 const crypto = require('node:crypto');
 const {makeAttendanceStore}=require('./attendance-store.cjs');
 const {handleAttendanceAnalysis}=require('./attendance-analysis.cjs');
@@ -277,7 +278,15 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
   return async function handler(req,res) {
     res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
     const url=new URL(req.url,'https://farol.invalid'),action=url.pathname.split('/').pop(),config=configuration(env);
-    const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));};
+    let previewSignal;
+    const reply=(status,data)=>{
+      if(previewSignal?.aborted){
+        if(!res.destroyed&&!res.writableEnded)res.end();
+        return;
+      }
+      if(previewSignal&&res.headersSent)return res.end(JSON.stringify(data)+'\n');
+      res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));
+    };
     const temporaryPublic=['temporary-users','temporary-user','temporary-login','temporary-activate','temporary-password','temporary-logout'];
     if(!['status','access-denied','start','callback','disconnect','logout',...temporaryPublic].includes(action)
       &&!actionModules.has(action))return reply(404,{error:'not_found'});
@@ -529,6 +538,21 @@ function makeHandler({env=process.env,storeFactory=makeStore,authFactory=makeAut
             return reply(200,{mailbox:email,labels:labelDetails.status,labelDetails});
           }
           const context={action,url,body,store,client,owner,email};
+          if(action==='student-import'&&body.preview===true){
+            const controller=new AbortController();
+            previewSignal=controller.signal;
+            const abort=()=>controller.abort();
+            req.on('error',abort);
+            res.once('close',()=>{if(!res.writableFinished)abort();});
+            if(res.destroyed)abort();
+            const onPage=async rows=>{
+              previewSignal.throwIfAborted();
+              if(!res.headersSent)res.setHeader('Content-Type','application/x-ndjson; charset=utf-8');
+              if(!res.write(JSON.stringify({rows})+'\n'))await once(res,'drain',{signal:previewSignal});
+            };
+            const result=await handleStudentImport({...context,signal:previewSignal,onPage});
+            return reply(200,{preview:result});
+          }
           const result=action.startsWith('attendance-')?await handleAttendanceImport(context)
             :action.startsWith('student-')?await handleStudentImport({...context,canRead:connection.capabilities.driveRead===true})
             :action==='maintenance'?await handleMaintenance(context)

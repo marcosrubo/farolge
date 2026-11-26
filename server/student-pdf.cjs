@@ -27,9 +27,9 @@ function groupLines(items){
   }
   return lines.map(line=>({...line,items:line.items.sort((a,b)=>a.x-b.x),text:clean(line.items.sort((a,b)=>a.x-b.x).map(i=>i.text).join(' '))}));
 }
-function parsePages(pages){
+function studentParser(){
   let escola=null,totalRows=0;const students=new Map();
-  for(const lines of pages){
+  function addPage(lines,onStudent){
     const title=lines.find(l=>l.text==='RELAÇÃO DE ALUNOS POR TURMA');
     if(title){
       const schoolLine=lines.find(l=>l.y>title.y&&l.items.some(i=>i.x>500&&/^\d{4}$/.test(i.text))&&l.items.some(i=>i.x<100&&i.text.length>3));
@@ -57,35 +57,54 @@ function parsePages(pages){
       if(students.has(key)&&students.get(key).Nome!==Nome)fail('pdf_layout');
       students.set(key,student);count++;totalRows++;
       if(totalRows>10000)fail('listing_limit');
+      onStudent?.(student);
     }
     if(!count)fail('pdf_layout');
   }
-  if(!students.size)fail('pdf_layout');
-  return {students:[...students.values()],totalRows};
+  function finish(){
+    if(!students.size)fail('pdf_layout');
+    return {students:[...students.values()],totalRows};
+  }
+  return {addPage,finish};
 }
-async function readStudentPdf(bytes,{loadEngine=loadPdfEngine}={}){
+function parsePages(pages){
+  const parser=studentParser();
+  for(const page of pages)parser.addPage(page);
+  return parser.finish();
+}
+async function readStudentPdf(bytes,{loadEngine=loadPdfEngine,signal,onPage}={}){
   if(bytes.length>10*1024*1024)fail('file_too_large');
   if(Buffer.from(bytes).subarray(0,5).toString()!=='%PDF-')fail('unsupported_file');
   const {getDocument}=await loadEngine();
+  signal?.throwIfAborted();
   let task;
   try{task=getDocument({data:new Uint8Array(bytes),isEvalSupported:false,verbosity:0,useSystemFonts:true,disableFontFace:true,standardFontDataUrl:path.join(path.dirname(require.resolve('pdfjs-dist/package.json')),'standard_fonts')+path.sep});}catch{throw Object.assign(new Error('pdf_runtime_unavailable'),{status:503});}
+  let cleanup;
+  const destroy=()=>cleanup??=Promise.resolve().then(()=>task.destroy()).catch(()=>{});
+  signal?.addEventListener('abort',destroy,{once:true});
   try{
     const pdf=await task.promise;
     if(pdf.numPages>100)fail('file_too_large');
-    const pages=[];
+    const parser=studentParser();
     for(let i=1;i<=pdf.numPages;i++){
       const page=await pdf.getPage(i),{items}=await page.getTextContent();
+      signal?.throwIfAborted();
       if(items.length>20000)fail('file_too_large');
-      pages.push(groupLines(items));page.cleanup();
+      const rows=[];
+      parser.addPage(groupLines(items),onPage&&(({Serie,Turma,CGM,Nome})=>rows.push({Serie,Turma,CGM,Nome})));
+      page.cleanup();
+      if(onPage)await onPage(rows);
+      signal?.throwIfAborted();
     }
     const info=(await pdf.getMetadata()).info;
-    return {...parsePages(pages),generatedAt:pdfDate(info?.CreationDate)};
+    return {...parser.finish(),generatedAt:pdfDate(info?.CreationDate)};
   }catch(error){
+    signal?.throwIfAborted();
     if(error.status)throw error;
     // Inspect runtime signatures only; never return/log raw PDF.js errors.
     if(/worker|module|DOMMatrix|native binding/i.test(String(error.message||'')))throw Object.assign(new Error('pdf_runtime_unavailable'),{status:503});
     fail('pdf_layout');
   }
-  finally{try{await task.destroy();}catch{}}
+  finally{signal?.removeEventListener('abort',destroy);await destroy();}
 }
 module.exports={readStudentPdf,parsePages,groupLines,pdfDate,loadPdfEngine};

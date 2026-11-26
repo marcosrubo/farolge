@@ -1,4 +1,5 @@
 'use strict';
+const {addAbortSignal}=require('node:stream');
 const {resolveFolder,handleMaintenance}=require('./maintenance.cjs');
 const {readStudentPdf,pdfDate}=require('./student-pdf.cjs');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -6,7 +7,8 @@ const MAX_BYTES=10*1024*1024;
 async function step(stage,operation){
   try{return await operation();}catch(error){error.studentImportStage=stage;throw error;}
 }
-async function collect(stream,limit){
+async function collect(stream,limit,signal){
+  if(signal)addAbortSignal(signal,stream);
   const chunks=[];let size=0;
   const timer=setTimeout(()=>stream.destroy(new Error('download_timeout')),10000);
   try{
@@ -14,7 +16,7 @@ async function collect(stream,limit){
     return Buffer.concat(chunks);
   }finally{clearTimeout(timer);}
 }
-async function handleStudentImport({action,url,body,client,store,owner,email,readPdf=readStudentPdf,canRead=false}){
+async function handleStudentImport({action,url,body,client,store,owner,email,readPdf=readStudentPdf,canRead=false,signal,onPage}){
   if(action==='student-files'){
     const result=await handleMaintenance({url,client,email,subfolder:'ListaAlunos',details:true,pageSize:'10'});
     let cursor=0;
@@ -36,12 +38,16 @@ async function handleStudentImport({action,url,body,client,store,owner,email,rea
     return result;
   }
   if(body.mailbox!==email)fail('account_changed',409);
-  if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox','fileId','version','folder'].includes(key)))fail('invalid_import');
+  if(body.type!=='general'||Object.keys(body).some(key=>!['type','mailbox','fileId','version','folder','preview'].includes(key))||
+    (Object.hasOwn(body,'preview')&&(body.preview!==true||!onPage)))fail('invalid_import');
   if(typeof body.fileId!=='string'||!/^[-\w]{1,256}$/.test(body.fileId)||typeof body.version!=='string'||!/^\d{1,30}$/.test(body.version))fail('invalid_import');
-  const folder=await step('folder',()=>resolveFolder(client,'ListaAlunos'));
+  const folder=await step('folder',()=>resolveFolder(client,'ListaAlunos',signal));
   if(body.folder!==folder.id)fail('account_changed',409);
   const base='https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(body.fileId);
-  const metadata=async()=>(await client.request({url:base+'?fields=id,name,mimeType,parents,trashed,size,version',method:'GET',timeout:10000,retry:false})).data;
+  const metadata=async()=>{
+    signal?.throwIfAborted();
+    return (await client.request({url:base+'?fields=id,name,mimeType,parents,trashed,size,version',method:'GET',timeout:10000,retry:false,signal})).data;
+  };
   const validate=file=>{
     if(file?.id!==body.fileId||file.trashed||!Array.isArray(file.parents)||!file.parents.includes(folder.id))fail('file_outside_folder',403);
     if(file.version!==body.version)fail('file_changed',409);
@@ -50,15 +56,20 @@ async function handleStudentImport({action,url,body,client,store,owner,email,rea
   };
   const file=await step('metadata',metadata);validate(file);
   const bytes=await step('download',async()=>{
-    const {data:stream}=await client.request({url:base+'?alt=media',method:'GET',responseType:'stream',timeout:15000,retry:false});
-    return collect(stream,MAX_BYTES);
+    signal?.throwIfAborted();
+    const {data:stream}=await client.request({url:base+'?alt=media',method:'GET',responseType:'stream',timeout:15000,retry:false,signal});
+    return collect(stream,MAX_BYTES,signal);
   });
   const size=bytes.length;
   if(size!==Number(file.size))fail('file_changed',409);
-  const result=await step('pdf',()=>readPdf(bytes));
+  signal?.throwIfAborted();
+  const result=await step('pdf',()=>readPdf(bytes,{signal,onPage}));
   // A changed/moved/deleted file is rejected before the database transaction.
   validate(await step('metadata',metadata));
+  signal?.throwIfAborted();
+  const summary={mailbox:email,fileId:file.id,rows:result.totalRows,generatedAt:result.generatedAt};
+  if(body.preview)return {...summary,count:result.students.length};
   const count=await step('storage',()=>store.loadStudents(owner,result.students));
-  return {mailbox:email,fileId:file.id,count,rows:result.totalRows,generatedAt:result.generatedAt};
+  return {...summary,count};
 }
 module.exports={handleStudentImport,collect};

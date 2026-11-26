@@ -43,7 +43,9 @@ function fixturePdf(){
  return Buffer.from(pdf);
 }
 test('PDF.js lê arquivo fictício e extrai a geração do PDF, sem depender da criação do Drive',async()=>{
- const result=await readStudentPdf(fixturePdf());assert.equal(result.students.length,1);assert.equal(result.students[0].CGM,student.CGM);assert.equal(result.generatedAt,'2026-11-17T08:53:56-03:00');
+ const pages=[];
+ const result=await readStudentPdf(fixturePdf(),{onPage:rows=>pages.push(rows)});assert.equal(result.students.length,1);assert.equal(result.students[0].CGM,student.CGM);assert.equal(result.generatedAt,'2026-11-17T08:53:56-03:00');
+ assert.deepEqual(pages,[[{Serie:'8 Ano',Turma:'A',CGM:student.CGM,Nome:student.Nome}]]);
  await assert.rejects(readStudentPdf(Buffer.from('not pdf')),{message:'unsupported_file'});
 });
 test('alunos ordenados em português e ocorrências derivam identidade, escola/aluno e horário de Brasília',async()=>{
@@ -75,6 +77,27 @@ test('carga resolve ListaAlunos, confere versão/local e grava só após validar
  const outside=importHarness();outside.state.parent=false;await assert.rejects(outside.run(),{message:'file_outside_folder'});assert.equal(outside.loads.length,0);
  const changed=importHarness();changed.state.changed=true;await assert.rejects(changed.run(),{message:'file_changed'});assert.equal(changed.loads.length,0);
  const invalid=importHarness();await assert.rejects(invalid.run({readPdf:async()=>{throw Object.assign(new Error('pdf_layout'),{status:422});}}),{message:'pdf_layout'});assert.equal(invalid.loads.length,0);
+});
+test('prévia valida a versão e devolve o resumo sem gravar alunos',async()=>{
+ const h=importHarness(),onPage=()=>{};
+ const result=await h.run({body:{...h.body,preview:true},onPage});
+ assert.equal(result.count,1);
+ assert.equal(h.loads.length,0);
+ const changed=importHarness();changed.state.changed=true;
+ await assert.rejects(changed.run({body:{...changed.body,preview:true},onPage}),{message:'file_changed'});
+ assert.equal(changed.loads.length,0);
+});
+test('cancelar a prévia durante a leitura encerra o leitor e impede a conferência final',async()=>{
+ const h=importHarness(),controller=new AbortController(),{signal}=controller;
+ const bytes=fixturePdf();
+ await assert.rejects(h.run({
+  body:{...h.body,preview:true},signal,
+  readPdf:(unused,options)=>readStudentPdf(bytes,options),
+  onPage:()=>controller.abort()
+ }),{name:'AbortError'});
+ assert.equal(h.calls.length,4);
+ assert.ok(h.calls.every(call=>call.signal===signal));
+ assert.equal(h.loads.length,0);
 });
 test('armazenamento cifra todos os campos, separa proprietários/vínculos e importa em uma transação RPC',async()=>{
  const calls=[],cfg={storage:'https://example.supabase.co',serviceKey:'test',key:Buffer.alloc(32,3)};

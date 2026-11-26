@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 26/11/2026, Marcos pediu que Carga de Alunos abra uma janela mostrando Série, Turma, CGM e Nome durante a leitura e ofereça Parar. A prévia recebe as linhas por página, pode ser cancelada antes da confirmação e não grava. Confirmar carga relê a versão conferida e grava em uma transação. Política revisão 47. Sem novo SQL, escopo ou variável.
+
 - Em 26/11/2026, Marcos pediu Alterar na consulta de Inspetores/Monitores, somente para o autor identificado ou a conta Pessoal verificada marcos.rubo@gmail.com. Alterar apenas o texto e a revisão. Identificar autoria pelo e-mail verificado salvo ou pelo identificador cifrado do cadastro temporário. Registros sem identificação de autoria podem ser editados por Marcos. SQL database/occurrence-edit.sql e política revisão 43.
 
 - Em 26/11/2026, Marcos pediu Arquivo Morto abaixo do divisor, acima de Manutenção do Sistema, com duas confirmações e movimentação da Caixa de Entrada Pessoal mensagem por mensagem. Exigir conexão Pessoal própria e permissão Arquivo Morto. Mostrar remetente, destinatário, data e assunto. Cancelar interrompe a fila, e uma requisição já iniciada pode concluir. SQL atualizado em database/module-access.sql para a permissão, política revisão 42 e escopos já existentes.

@@ -321,6 +321,14 @@ Arquivos: `database/students.sql`, `server/student-store.cjs`, `server/students.
 Referências: [download e leitura parcial Drive](https://developers.google.com/workspace/drive/api/guides/manage-downloads), [escopos Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [PDF.js](https://mozilla.github.io/pdf.js/examples/) e [RLS Supabase](https://supabase.com/docs/guides/database/postgres/row-level-security).
 
 
+### Acompanhamento e cancelamento da Carga de Alunos (26/11/2026)
+
+**Carregar** abre uma janela com Série, Turma, CGM e Nome. A tabela recebe as linhas conforme o servidor lê as páginas do PDF. **Parar** ou Esc interrompe a leitura e limpa a prévia. Até a confirmação, nenhuma linha é enviada ao Supabase. A revisão pode ser interrompida mesmo depois da última página.
+
+**Confirmar carga** relê a mesma versão do arquivo e grava todos os vínculos em uma única transação. O botão **Parar** fica indisponível após a confirmação, pois a transação enviada ao banco pode concluir. A troca de conta ou a saída da manutenção encerra a prévia, e os dados da janela ficam apenas em memória.
+
+Publicar com a Política de Privacidade revisão 47. A Vercel recebe a configuração de cancelamento para a função da API existente. Sem migração SQL, escopo Google ou variável nova. Na Vercel, conferir o preenchimento da tabela e testar **Parar** durante a leitura, **Parar** após a leitura e **Confirmar carga**.
+
 ## Falha genérica na carga de alunos — 17/11/2026
 
 Após conceder leitura, Marcos mostrou a geração do PDF identificada e o botão habilitado, mas o POST de carga terminou com mensagem genérica. Confirmou que `database/students.sql` executou sem erro. A captura não identifica a etapa remota e o diagnóstico do POST não pôde ser lido pelas ferramentas de navegador desta sessão; não afirmar que os alunos foram ou não gravados, nem atribuir automaticamente a falha ao Google/Supabase.

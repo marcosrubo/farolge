@@ -7,11 +7,11 @@ const crypto=require('node:crypto');
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function ui(file,name){
  const nodes=new Map(),requests=[],window={FAROL_CONFIG:{schoolName:'Do not use this as identity'}};
- const get=key=>{if(!nodes.has(key))nodes.set(key,{value:'',innerHTML:'',textContent:'',listeners:{},open:false,setAttribute(key,value){this[key]=value;},addEventListener(e,fn){this.listeners[e]=fn;},focus(){},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();}});return nodes.get(key);};
+ const get=key=>{if(!nodes.has(key))nodes.set(key,{value:'',innerHTML:'',textContent:'',listeners:{},open:false,setAttribute(key,value){this[key]=value;},addEventListener(e,fn){this.listeners[e]=fn;},insertAdjacentHTML(position,html){this.innerHTML+=html;},focus(){},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();}});return nodes.get(key);};
  get('#inspector-panel-consult').querySelector=get;
  get('#active-search-panel-consult').querySelector=get;
- const root={innerHTML:'',querySelector:get};
- const context=vm.createContext({window,crypto,Intl,Date,URLSearchParams,AbortController,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
+ const root={innerHTML:'',querySelector:get,insertAdjacentHTML(position,html){this.innerHTML+=html;}};
+ const context=vm.createContext({window,crypto,Intl,Date,URLSearchParams,AbortController,TextDecoder,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
  if(['students.js','active-search.js'].includes(file))vm.runInContext(fs.readFileSync('occurrences.js','utf8'),context);
  vm.runInContext(fs.readFileSync(file,'utf8'),context);
  return {app:window[name],window,root,get,requests,respond:(i,data,ok=true)=>requests[i].resolve({ok,json:async()=>data})};
@@ -36,13 +36,71 @@ test('Inspetores descarta respostas antigas e limpa aluno/modal na troca da Gera
  h.app.connectionChanged(null);assert.equal(h.get('#student-list').innerHTML,'');assert.equal(h.get('#student-dialog').open,false);
 });
 const file={id:'pdf-a',name:'alunos <teste>.pdf',mimeType:'application/pdf',version:'7',size:'100',createdTime:'2026-11-17T12:00:00Z',generatedAt:'2026-11-17T08:53:56-03:00',generationStatus:'ready'};
+const previewSummary={mailbox:general.email,fileId:file.id,count:1,rows:1,generatedAt:file.generatedAt};
+function streamPreview(h,index){
+ const encoder=new TextEncoder();
+ let controller;
+ const body=new ReadableStream({start(value){controller=value;}});
+ h.requests[index].opts.signal.addEventListener('abort',()=>{try{controller.error(new Error('aborted'));}catch{}},{once:true});
+ h.requests[index].resolve({ok:true,headers:new Headers({'Content-Type':'application/x-ndjson'}),body});
+ return {
+  write:event=>controller.enqueue(encoder.encode(JSON.stringify(event)+'\n')),
+  close:()=>controller.close()
+ };
+}
 test('Carga de Alunos mostra nome e geração, exige ação explícita e bloqueia POST duplicado',async()=>{
  const h=ui('student-import.js','FarolStudentImport');h.app.mount(h.root);assert.equal(h.requests.length,0);
  h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,folder:{id:'lista'},files:[file],nextPageToken:null});await settle();
  const html=h.get('#student-import-list').innerHTML;assert.ok(html.includes('alunos &lt;teste&gt;.pdf'));assert.ok(html.includes('17/11/2026'));assert.ok(html.includes('08:53:56'));assert.equal(h.requests.length,1);
  h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));assert.equal(h.requests.length,2);
- const body=JSON.parse(h.requests[1].opts.body);assert.equal(body.folder,'lista');assert.equal(body.fileId,file.id);assert.equal(body.version,'7');assert.equal(body.mailbox,general.email);
- h.respond(1,{mailbox:general.email,fileId:file.id,count:341,rows:374,generatedAt:file.generatedAt});await settle();assert.ok(h.get('#student-import-status').textContent.includes('341 vínculos'));
+ const body=JSON.parse(h.requests[1].opts.body);assert.equal(body.folder,'lista');assert.equal(body.fileId,file.id);assert.equal(body.version,'7');assert.equal(body.mailbox,general.email);assert.equal(body.preview,true);
+ const stream=streamPreview(h,1);
+ assert.equal(h.get('#student-import-dialog').open,true);
+ stream.write({rows:[student]});await settle();
+ assert.match(h.get('#student-import-rows').innerHTML,/<td>8º Ano<\/td><td>A<\/td><td>0000123<\/td><td>ALUNA &lt;TESTE&gt;<\/td>/);
+ assert.equal(h.get('#student-import-save').hidden,true);
+ stream.write({preview:previewSummary});stream.close();await settle();
+ assert.equal(h.get('#student-import-save').hidden,false);
+ assert.equal(h.requests.length,2);
+ h.get('#student-import-save').listeners.click();h.get('#student-import-save').listeners.click();
+ assert.equal(h.requests.length,3);
+ assert.equal(h.get('#student-import-stop').disabled,true);
+ assert.equal(JSON.parse(h.requests[2].opts.body).preview,undefined);
+ h.respond(2,previewSummary);await settle();
+ assert.match(h.get('#student-import-status').textContent,/Carga concluída/);
+ assert.equal(h.get('#student-import-dialog').open,false);
+});
+test('Parar aborta a leitura ou dispensa a revisão sem iniciar a gravação',async()=>{
+ const h=ui('student-import.js','FarolStudentImport');h.app.mount(h.root);h.app.connectionChanged(general);
+ h.respond(0,{mailbox:general.email,folder:{id:'lista'},files:[file]});await settle();
+ for(const ready of [false,true]){
+  h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));
+  const index=h.requests.length-1,stream=streamPreview(h,index);
+  stream.write({rows:[student]});
+  if(ready){stream.write({preview:previewSummary});stream.close();}
+  await settle();
+  h.get('#student-import-stop').listeners.click();
+  assert.equal(h.requests[index].opts.signal.aborted,true);
+  assert.equal(h.get('#student-import-dialog').open,false);
+  assert.equal(h.get('#student-import-rows').innerHTML,'');
+  assert.match(h.get('#student-import-status').textContent,/Nenhum aluno/);
+  h.get('#student-import-save').listeners.click();await settle();
+  assert.equal(h.requests.length,index+1);
+ }
+});
+test('prévia interrompida após mostrar alunos nunca habilita a confirmação',async()=>{
+ const h=ui('student-import.js','FarolStudentImport');h.app.mount(h.root);h.app.connectionChanged(general);
+ h.respond(0,{mailbox:general.email,folder:{id:'lista'},files:[file]});await settle();
+ h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));
+ const stream=streamPreview(h,1);
+ stream.write({rows:[student]});await settle();
+ assert.match(h.get('#student-import-rows').innerHTML,/ALUNA/);
+ stream.close();await settle();
+ assert.equal(h.get('#student-import-dialog').open,false);
+ assert.equal(h.get('#student-import-rows').innerHTML,'');
+ assert.match(h.get('#student-import-status').textContent,/Nenhum aluno/);
+ h.get('#student-import-save').listeners.click();
+ assert.equal(h.requests.length,2);
 });
 test('Carga preserva lista em falha, exige nova permissão para importar e ignora resposta depois da troca',async()=>{
  const h=ui('student-import.js','FarolStudentImport');h.app.mount(h.root);h.app.connectionChanged({...general,driveRead:false});h.respond(0,{mailbox:general.email,folder:{id:'lista'},files:[file],nextPageToken:null});await settle();
@@ -55,8 +113,10 @@ test('Carga identifica falha do leitor e do Supabase sem repetir POST ou apagar 
  const h=ui('student-import.js','FarolStudentImport');h.app.mount(h.root);h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,folder:{id:'lista'},files:[file],nextPageToken:null});await settle();
  h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));h.respond(1,{error:'pdf_runtime_unavailable'},false);await settle();
  assert.ok(h.get('#student-import-status').textContent.includes('leitor de PDF não iniciou'));assert.ok(h.get('#student-import-list').innerHTML.includes('alunos'));assert.equal(h.requests.length,2);
- h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));h.respond(2,{error:'storage_access_denied'},false);await settle();
- assert.ok(h.get('#student-import-status').textContent.includes('Supabase recusou'));assert.equal(h.requests.length,3);
+ h.get('#student-import-list').listeners.click(click({loadStudents:file.id}));
+ const stream=streamPreview(h,2);stream.write({rows:[student]});stream.write({preview:previewSummary});stream.close();await settle();
+ h.get('#student-import-save').listeners.click();h.respond(3,{error:'storage_access_denied'},false);await settle();
+ assert.ok(h.get('#student-import-status').textContent.includes('Supabase recusou'));assert.equal(h.requests.length,4);
 });
 
 test('ocorrência exige Pessoal com nome e fecha o formulário quando o autor muda',async()=>{

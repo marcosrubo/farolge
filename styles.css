@@ -297,3 +297,10 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
   #active-search-records-refresh{width:100%;margin:0 0 6px}
   #active-search-dialog .button-row button,#active-search-panel-consult .button-row button{flex:1 1 auto}
 }
+
+#student-import-dialog{width:min(760px,calc(100% - 32px));max-width:none;max-height:90dvh}
+#student-import-filename{overflow-wrap:anywhere}
+#student-import-table{max-height:45dvh;margin-bottom:16px}
+#student-import-table th{position:sticky;top:0}
+#student-import-table th,#student-import-table td{padding:10px 12px}
+#student-import-table td:last-child{min-width:12ch;white-space:normal;overflow-wrap:anywhere}
