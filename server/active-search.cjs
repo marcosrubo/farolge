@@ -20,7 +20,8 @@ async function handleActiveSearch({action,url,body,store,owner,email,author,edit
   }
   if(action==='active-search-students'){
     const students=(await store.getStudents(owner)).map(({id,Nome,CGM,Escola,Serie,Turma,Turno})=>({
-      id,name:Nome,cgm:CGM,school:Escola,className:[Serie,Turma,Turno].filter(Boolean).join(' · ')
+      id,name:Nome,cgm:CGM,school:Escola,serie:Serie,turma:Turma,turno:Turno,
+      className:[Serie,Turma,Turno].filter(Boolean).join(' · ')
     }));
     return {mailbox:email,author,students};
   }

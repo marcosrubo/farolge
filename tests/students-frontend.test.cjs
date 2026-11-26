@@ -12,7 +12,10 @@ function ui(file,name){
  get('#active-search-panel-consult').querySelector=get;
  const root={innerHTML:'',querySelector:get,insertAdjacentHTML(position,html){this.innerHTML+=html;}};
  const context=vm.createContext({window,crypto,Intl,Date,URLSearchParams,AbortController,TextDecoder,fetch:(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}))});
- if(['students.js','active-search.js'].includes(file))vm.runInContext(fs.readFileSync('occurrences.js','utf8'),context);
+ if(['students.js','active-search.js'].includes(file)){
+  vm.runInContext(fs.readFileSync('occurrences.js','utf8'),context);
+  vm.runInContext(fs.readFileSync('student-list.js','utf8'),context);
+ }
  vm.runInContext(fs.readFileSync(file,'utf8'),context);
  return {app:window[name],window,root,get,requests,respond:(i,data,ok=true)=>requests[i].resolve({ok,json:async()=>data})};
 }
@@ -22,16 +25,21 @@ const click=id=>({target:{closest:()=>({dataset:id})}});
 test('Inspetores mantém explicação sem conexão e mostra nome/turma com texto seguro',async()=>{
  const h=ui('students.js','FarolStudents');h.app.mount(h.root);assert.equal(h.requests.length,0);assert.ok(h.root.innerHTML.includes('Inspetores/Monitores'));
  const other={...student,id:'b'.repeat(64),Nome:'BRUNO',CGM:'0000456',Serie:'1ª Série'};
- h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student,other]});await settle();
+ const sameSeries={...student,id:'c'.repeat(64),Nome:'CARLA',CGM:'0000789',Turma:'B'};
+ h.app.personalConnectionChanged({email:'monitor@example.com',name:'Monitor Fictício'});h.app.connectionChanged(general);h.respond(0,{mailbox:general.email,students:[student,other,sameSeries]});await settle();
  const list=h.get('#student-list'),filter=h.get('#student-search');
- assert.match(list.innerHTML,/ALUNA &lt;TESTE&gt; · CGM 0000123/);
- assert.match(list.innerHTML,/8o Ano · A · Manhã/);
- assert.match(list.innerHTML,/1a Série · A · Manhã/);
+ assert.match(list.innerHTML,/ALUNA &lt;TESTE&gt; · CGM 0000123 · 8oA<\/span><span class="student-class">Manhã/);
+ assert.match(list.innerHTML,/BRUNO · CGM 0000456 · 1aA/);
+ assert.match(list.innerHTML,/CARLA · CGM 0000789 · 8oB/);
+ for(const value of ['8oa','8ºA']){
+  filter.value=value;filter.listeners.input();
+  assert.match(list.innerHTML,/ALUNA/);assert.doesNotMatch(list.innerHTML,/BRUNO|CARLA/);
+ }
  for(const value of ['8o','8º','0000123']){
   filter.value=value;filter.listeners.input();
   assert.match(list.innerHTML,/ALUNA/);assert.doesNotMatch(list.innerHTML,/BRUNO/);
  }
- for(const value of ['1a','1ª']){
+ for(const value of ['1a','1ª','1aA','1ªA']){
   filter.value=value;filter.listeners.input();
   assert.match(list.innerHTML,/BRUNO/);assert.doesNotMatch(list.innerHTML,/ALUNA/);
  }

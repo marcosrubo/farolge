@@ -1,8 +1,7 @@
 'use strict';
 window.FarolStudents=(()=>{
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const formatSeries=value=>String(value??'').replace(/[º°]/g,'o').replace(/ª/g,'a');
-  const fold=value=>formatSeries(value).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/\p{M}/gu,'');
+  const {fold,classCode}=window.FarolStudentList;
   const messages={author_required:'Identifique quem vai registrar a ocorrência.',author_changed:'A identidade mudou. Feche e abra a ocorrência novamente.',author_profile_required:'Cadastre o Nome da pessoa em EmailsAutorizados antes de registrar.',storage_access_denied:'O Supabase recusou o acesso do servidor às tabelas. Confira a configuração no projeto FarolGE.',student_schema_invalid:'A estrutura de Alunos/Ocorrencias é incompatível. Confira database/students.sql no projeto FarolGE.',storage_unavailable:'Não foi possível comunicar com o Supabase. Tente atualizar os alunos.',setup_required:'Execute database/students.sql no Supabase do FAROL GE para preparar Alunos e Ocorrencias.',login_required:'Identifique-se novamente para consultar os alunos.',account_changed:'A conta mudou. Atualize a lista.',invalid_occurrence:'Confira o texto da ocorrência (até 5.000 caracteres).',student_missing:'O aluno não foi encontrado nesta conta. Atualize a lista.',conflict:'Este registro já foi enviado com outros dados. Feche e abra uma nova ocorrência.',unavailable:'Não foi possível concluir. Tente novamente.'};
   let root=null,connection=null,personal=null,actorVersion=0,students=[],version=0,busy=false,saving=false,selected=null,submission=null;
   const occurrences=window.FarolOccurrences?.create({id:'inspector-occurrences',action:'inspector-occurrences',mobileCards:true,deleteAction:'occurrence-delete',editAction:'occurrence-edit'});
@@ -28,8 +27,8 @@ window.FarolStudents=(()=>{
     if(!root)return;
     const query=fold(root.querySelector('#student-search').value.trim());
     root.querySelector('#student-list').innerHTML=students
-      .filter(s=>fold([s.Nome,s.Serie,s.Turma,s.Turno,s.CGM].join(' ')).includes(query))
-      .map(s=>`<li><button type="button" class="student-row" data-student="${escape(s.id)}"><span>${escape(s.Nome)} · CGM ${escape(s.CGM)}</span><span class="student-class">${escape(formatSeries(s.Serie))} · ${escape(s.Turma)} · ${escape(s.Turno)}</span></button></li>`).join('');
+      .filter(s=>s.search.includes(query))
+      .map(s=>`<li><button type="button" class="student-row" data-student="${escape(s.id)}"><span>${escape(s.Nome)} · CGM ${escape(s.CGM)}${s.code?' · '+escape(s.code):''}</span><span class="student-class">${escape(s.Turno)}</span></button></li>`).join('');
   }
   async function load(){
     if(!root||!connection||connection.occurrencesOnly||busy||activeTab!=='register')return;
@@ -40,7 +39,12 @@ window.FarolStudents=(()=>{
       if(!response.ok)throw new Error(result.error||'unavailable');
       if(ticket!==version||!root)return;
       if(result.mailbox!==mailbox||!Array.isArray(result.students))throw new Error('account_changed');
-      students=result.students;list();root.querySelector('#student-status').textContent=students.length?'':'Nenhum aluno cadastrado. Use Carga de Alunos na Manutenção do Sistema.';
+      students=result.students.map(student=>{
+        const {Nome,Serie,Turma,Turno,CGM}=student;
+        const code=classCode(Serie,Turma);
+        return {...student,code,search:fold([Nome,Serie,Turma,Turno,CGM,code].join(' '))};
+      });
+      list();root.querySelector('#student-status').textContent=students.length?'':'Nenhum aluno cadastrado. Use Carga de Alunos na Manutenção do Sistema.';
     }catch(error){if(ticket===version&&root){students=[];close();list();root.querySelector('#student-status').textContent=messages[error.message]||messages.unavailable;}}
     finally{if(ticket===version&&root){busy=false;root.querySelector('#student-refresh').disabled=!connection;}}
   }

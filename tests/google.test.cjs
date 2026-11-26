@@ -1231,6 +1231,9 @@ test('Busca Ativa autoriza pelo Radar e grava com a conta institucional verifica
  const choices=(await list(personal.cookie)).json();
  assert.equal(choices.author,author);
  assert.equal(choices.students[0].id,studentId);
+ assert.equal(choices.students[0].serie,student.Serie);
+ assert.equal(choices.students[0].turma,student.Turma);
+ assert.equal(choices.students[0].turno,student.Turno);
  assert.equal((await post(personal.cookie,{authorMailbox:'outra@escola.pr.gov.br'})).json().error,'author_changed');
  assert.equal((await post(personal.cookie,{searchDate:'2026-02-30'})).status,400);
  assert.equal((await post(personal.cookie,{searchTime:'24:00'})).status,400);

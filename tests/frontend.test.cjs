@@ -513,18 +513,20 @@ test('Busca Ativa preserva o fluxo de registro com ditado '+mode,async()=>{
  }
  const author='docente@escola.pr.gov.br',id='12345678-1234-4234-8234-123456789abc';
  class FixedDate extends Date{constructor(){super('2026-11-27T01:35:30Z');}}
- vm.runInNewContext(fs.readFileSync('active-search.js','utf8'),{
+ const context=vm.createContext({
   window,Date:FixedDate,Intl,URLSearchParams,AbortController,crypto:{randomUUID:()=>id},
   Option:class{constructor(text,value){this.text=text;this.value=value;}},
   async fetch(url,options){
    requests.push({url,options});
    const result=options.method==='POST'?{saved:true,id,date:'2026-11-26',time:'22:35:30'}:{mailbox:adminEmail,author,students:[
-    {id:'1',name:'Ágata',cgm:'00123',className:'8º B',school:'Escola Fictícia'},
-    {id:'2',name:'Bruno',cgm:'00234',className:'1ª Série · A · Manhã',school:'Escola Fictícia'}
+    {id:'1',name:'Ágata',cgm:'00123',serie:'8º Ano',turma:'B',turno:'Tarde',className:'8º Ano · B · Tarde',school:'Escola Fictícia'},
+    {id:'2',name:'Bruno',cgm:'00234',serie:'1ª Série',turma:'A',turno:'Manhã',className:'1ª Série · A · Manhã',school:'Escola Fictícia'}
    ]};
    return {ok:true,json:async()=>result};
   }
  });
+ vm.runInContext(fs.readFileSync('student-list.js','utf8'),context);
+ vm.runInContext(fs.readFileSync('active-search.js','utf8'),context);
  window.FarolActiveSearch.connectionChanged(adminEmail,author);
  window.FarolActiveSearch.mount({querySelector:get});
  await settle();
@@ -532,14 +534,13 @@ test('Busca Ativa preserva o fluxo de registro com ditado '+mode,async()=>{
  assert.equal(get('#active-search-tab-register')['aria-selected'],'true');
  assert.equal(get('#active-search-panel-consult').hidden,true);
  assert.equal(dialog.open,undefined);
- assert.match(list.innerHTML,/Ágata · CGM 00123/);
- assert.match(list.innerHTML,/8o B/);
- assert.match(list.innerHTML,/1a Série · A · Manhã/);
- for(const value of ['1a','1ª']){
+ assert.match(list.innerHTML,/Ágata · CGM 00123 · 8oB<\/span><span class="student-class">Tarde/);
+ assert.match(list.innerHTML,/Bruno · CGM 00234 · 1aA<\/span><span class="student-class">Manhã/);
+ for(const value of ['1a','1ª','1aA','1ªA']){
   filter.value=value;filter.listeners.input();
   assert.match(list.innerHTML,/Bruno/);assert.doesNotMatch(list.innerHTML,/Ágata/);
  }
- for(const value of ['8o','8º','00123','agata']){
+ for(const value of ['8o','8º','8ob','8ºB','00123','agata']){
   filter.value=value;filter.listeners.input();
   assert.match(list.innerHTML,/Ágata/);assert.doesNotMatch(list.innerHTML,/Bruno/);
  }

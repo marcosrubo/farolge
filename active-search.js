@@ -3,8 +3,7 @@
     timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
     hour:'2-digit',minute:'2-digit',hourCycle:'h23'
   });
-  const formatSeries=value=>value.replace(/[º°]/g,'o').replace(/ª/g,'a');
-  const fold=value=>formatSeries(value).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/\p{M}/gu,'');
+  const {fold,classCode}=window.FarolStudentList;
   const errors={
     account_changed:'A conexão mudou. Volte ao Radar e abra o formulário novamente.',
     author_changed:'A conta institucional mudou. Volte ao Radar e abra o formulário novamente.',
@@ -190,10 +189,7 @@
     function showStudents(){
       const term=fold(filter.value.trim());
       const matches=students.filter(item=>item.search.includes(term));
-      list.innerHTML=matches.map(item=>{
-        const className=item.className.replace(/^[^·]+/,formatSeries);
-        return `<li><button type="button" class="student-row" data-student="${escape(item.id)}"><span>${escape(item.name)} · CGM ${escape(item.cgm)}</span><span class="student-class">${escape(className)}</span></button></li>`;
-      }).join('');
+      list.innerHTML=matches.map(item=>`<li><button type="button" class="student-row" data-student="${escape(item.id)}"><span>${escape(item.name)} · CGM ${escape(item.cgm)}${item.code?' · '+escape(item.code):''}</span><span class="student-class">${escape(item.turno??item.className)}</span></button></li>`).join('');
       listStatus.textContent=matches.length?'':students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.';
     }
 
@@ -206,7 +202,10 @@
         if(signal.aborted)return;
         if(result.mailbox!==source||!Array.isArray(result.students))throw new Error('account_changed');
         author=result.author;
-        students=result.students.map(item=>({...item,search:fold([item.name,item.cgm,item.className].join(' '))}))
+        students=result.students.map(item=>{
+          const code=classCode(item.serie,item.turma);
+          return {...item,code,search:fold([item.name,item.cgm,item.className,code].join(' '))};
+        })
           .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{sensitivity:'base'})
             ||a.className.localeCompare(b.className,'pt-BR')||a.cgm.localeCompare(b.cgm));
         filter.disabled=!students.length;
