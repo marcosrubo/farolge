@@ -477,7 +477,7 @@ test('Marcos recebe todos os módulos e registra ocorrências com as duas conex�
   assert.equal((await h.request('students',{cookie:credentials,query})).json().error,'module_forbidden');
   assert.equal((await h.request('occurrence',{cookie:credentials,method:'POST',body})).json().error,'module_forbidden');
  }
- assert.equal((await h.request('status',{cookie})).json().modules.length,8);
+ assert.equal((await h.request('status',{cookie})).json().modules.length,9);
  assert.equal((await h.request('students',{cookie,query})).status,200);
  assert.equal((await h.request('occurrence',{cookie,method:'POST',body:{...body,authorMailbox:GENERAL_EMAIL}})).status,200);
  assert.equal((await h.request('occurrence',{method:'POST',cookie,body,origin:'https://elsewhere.invalid'})).status,403);
@@ -551,7 +551,7 @@ test('contas Workspace @escola conectam nas duas opções com autorização apen
  assert.equal((await h.request('status',{cookie:admin.general.cookie+'; '+personal.cookie})).json().modules.length,1);
  await h.request('disconnect',{method:'POST',cookie,body:{type:'general'}});
  assert.equal((await h.request('status',{cookie})).json().mode,'personal');
- assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,9);
 });
 
 test('conta escolar exige domínio de e-mail exato e identidade Workspace validada pelo Google',async()=>{
@@ -954,7 +954,7 @@ test('Pessoal institucional usa o cadastro por e-mail e a caixa própria, com re
  assert.equal((await h.request('students',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
  assert.equal((await h.request('inspector-occurrences',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,200);
  assert.equal((await h.request('authorized-emails',{cookie,query:'?mailbox='+GENERAL_EMAIL})).status,409);
- assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,9);
  profile.permissions=[];
  assert.equal((await h.request('inspector-occurrences',{cookie,query:'?mailbox='+GENERAL_EMAIL})).json().error,'module_forbidden');
  assert.equal((await h.request('board',{cookie,query:'?column=0&mailbox='+email})).json().error,'module_forbidden');
@@ -1078,7 +1078,7 @@ test('concede módulos pela Geral ou Pessoal, dá prioridade à Geral e isola a 
  personalProfile.permissions=[];
  assert.equal((await h.request('institutional',{cookie,query:query(GENERAL_EMAIL)})).json().error,'module_forbidden');
  assert.deepEqual((await h.request('status',{cookie})).json().modules,[]);
- assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,8);
+ assert.equal((await h.request('status',{cookie:admin.cookie})).json().modules.length,9);
 });
 
 test('Visão GERAL usa cada conta ativa para seu total, preservando a fonte escolar das ocorrências',async()=>{
@@ -1139,4 +1139,26 @@ test('a consulta e o retorno do Arquivo Morto pessoal seguem as permissões de D
  const restore=await h.request('personal-restore',{method:'POST',body,cookie:admin.cookie});
  assert.equal(restore.status,409);
  assert.equal(restore.json().error,'archive_label_missing');
+});
+
+
+test('Arquivo Morto em lote exige permissão própria e conexão Pessoal direta',async()=>{
+ const h=harness(),admin=await h.admin(),email='arquivo@escola.pr.gov.br';
+ const profile={id:temporaryId,Nome:'Docente',email,permissions:['pessoais']};
+ h.store.getRegisteredUser=async address=>address===email?profile:null;
+ h.setIdentity({hd:'escola.pr.gov.br'});
+ const general=await h.login(email,'','general');
+ const post=(cookie,mailbox,options={})=>h.request('personal-archive-next',{method:'POST',body:{type:'personal',mailbox},cookie,...options});
+ assert.equal((await post(admin.cookie,GENERAL_EMAIL,{origin:'https://other.example'})).status,403);
+ assert.equal((await h.request('personal-archive-next',{cookie:admin.cookie})).status,405);
+ assert.equal((await post(general.cookie,email)).json().error,'module_forbidden');
+ profile.permissions=['arquivo-morto'];
+ assert.equal((await post(general.cookie,email)).json().error,'login_required');
+ const personal=await h.login(email,general.cookie,'personal');
+ const cookie=general.cookie+'; '+personal.cookie;
+ assert.equal((await post(cookie,GENERAL_EMAIL)).json().error,'account_changed');
+ const result=await post(cookie,email);
+ assert.deepEqual(result.json(),{mailbox:email,status:'empty'});
+ profile.permissions=['pessoais'];
+ assert.equal((await post(cookie,email)).json().error,'module_forbidden');
 });

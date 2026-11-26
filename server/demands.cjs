@@ -32,9 +32,9 @@ function publicDemand(row){
 }
 async function handleDemands({action,url,body,client,store,owner,email,canClassify=false}){
   const request=async(path)=>{const {data}=await client.request({url:BASE+path,timeout:10000});return data;};
-  const archiving=action==='personal-archive';
+  const bulk=action==='personal-archive-next';
   const restoring=action==='personal-restore';
-  const archiveMove=archiving||restoring;
+  const archiveMove=bulk||restoring||action==='personal-archive';
   const expected=archiveMove||['demand','classify'].includes(action)?body.mailbox:url.searchParams.get('mailbox');
   if(expected!==email)fail('account_changed',409);
   if(action==='demand'){
@@ -45,7 +45,8 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
     if(!canClassify)fail('classify_scope',403);
   }
   if(archiveMove){
-    if(body.type!=='personal'||!validId(body.messageId)||Object.keys(body).some(key=>!['type','mailbox','messageId'].includes(key)))fail('invalid_archive',400);
+    const fields=bulk?['type','mailbox']:['type','mailbox','messageId'];
+    if(body.type!=='personal'||(!bulk&&!validId(body.messageId))||Object.keys(body).some(key=>!fields.includes(key)))fail('invalid_archive',400);
     if(!canClassify)fail('classify_scope',403);
   }
   const {labels=[]}=await request('/labels');
@@ -67,10 +68,27 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
   };
   if(archiveMove){
     if(!archiveId)fail('archive_label_missing',409);
-    const {messageId}=body,path=BASE+'/messages/'+messageId;
-    const {data:message}=await readGmail(client,{url:path+'?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To',timeout:10000});
+    let messageId=body.messageId;
+    if(bulk){
+      // Each step starts at the front of INBOX because the previous step may have removed a message.
+      const params=new URLSearchParams({labelIds:'INBOX',maxResults:'1',includeSpamTrash:'false',q:'-is:draft'});
+      const {messages=[]}=await request('/messages?'+params);
+      if(!Array.isArray(messages)||messages.length>1)fail('invalid_provider',502);
+      if(!messages.length)return {mailbox:email,status:'empty'};
+      messageId=messages[0]?.id;
+      if(!validId(messageId))fail('invalid_provider',502);
+    }
+    const path=BASE+'/messages/'+messageId;
+    let message;
+    try{
+      ({data:message}=await readGmail(client,{url:path+'?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To',timeout:10000}));
+    }catch(error){
+      if(bulk&&error.response?.status===404)return {mailbox:email,status:'skipped',messageId};
+      throw error;
+    }
     if(message?.id!==messageId||!validId(message.threadId))fail('invalid_provider',502);
     const current=message.labelIds||[];
+    if(bulk&&(!current.includes('INBOX')||current.some(id=>excluded.includes(id))))return {mailbox:email,status:'skipped',messageId};
     const eligible=restoring?current.includes('INBOX'):canArchiveMessage(message);
     if(current.some(id=>excluded.includes(id))||(!eligible&&!inArchive(message)))fail('not_inbox',409);
     const target=restoring?'INBOX':archiveId;
@@ -81,6 +99,10 @@ async function handleDemands({action,url,body,client,store,owner,email,canClassi
     }
     const after=result?.labelIds||[];
     if(result?.id!==messageId||!after.includes(target)||remove.some(id=>after.includes(id)))fail('classification_unconfirmed',502);
+    if(bulk){
+      const {from,to,date,subject}=inboxMessage(message);
+      return {mailbox:email,status:'moved',messageId,item:{from,to,date,subject}};
+    }
     return {mailbox:email,messageId,threadId:message.threadId,item:inboxMessage({...message,labelIds:after})};
   }
   const inInbox=message=>(message.labelIds||[]).includes('INBOX') && !(message.labelIds||[]).some(id=>['TRASH','SPAM','DRAFT'].includes(id));

@@ -247,3 +247,13 @@ dialog.demand-dialog{width:min(850px,94vw);max-width:94vw;max-height:90vh;overfl
 #inspector-panel-consult .inspector-occurrence-delete{min-height:44px;color:#9a2828;border-color:#e5c2c2;background:#fff}
 #inspector-panel-consult .inspector-occurrence-delete:hover:not(:disabled){background:#fff2f2}
 .inspector-occurrence-cards .inspector-occurrence-delete{margin-top:10px}
+
+.archive-inbox-warning{color:#a30000;background:#ffeb3b;font-weight:800}
+#archive-inbox-board .button{font-size:13px;overflow-wrap:anywhere}
+#archive-inbox-progress-title{margin-top:18px}
+.archive-inbox-messages{list-style:none;padding:0;margin:18px 0 0;max-height:55vh;overflow:auto}
+.archive-inbox-messages li{padding:12px 16px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;background:#fff}
+.archive-inbox-messages dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 12px;margin:0}
+.archive-inbox-messages dt{font-weight:700}
+.archive-inbox-messages dd{margin:0;overflow-wrap:anywhere}
+@media(min-width:601px){.sidebar nav{min-height:0;overflow-y:auto}}

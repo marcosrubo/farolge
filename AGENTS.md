@@ -14,6 +14,8 @@ Ler este arquivo e o README.md antes de iniciar trabalho. Este projeto sucede o 
 
 ## Direção confirmada
 
+- Em 26/11/2026, Marcos pediu Arquivo Morto acima de Manutenção do Sistema, com duas confirmações e movimentação da Caixa de Entrada Pessoal mensagem por mensagem. Exigir conexão Pessoal própria e permissão Arquivo Morto. Mostrar remetente, destinatário, data e assunto. Cancelar interrompe a fila, e uma requisição já iniciada pode concluir. SQL atualizado em database/module-access.sql para a permissão, política revisão 42 e escopos já existentes.
+
 - Em 26/11/2026, Marcos pediu a lista Arquivo Morto abaixo do quadro institucional e, na Pessoal, abaixo das duas colunas Caixa de Entrada e Despachadas. O botão Voltar p/ Cx Entrada da mensagem aplica INBOX e remove o Arquivo Morto da caixa em uso. Política revisão 41.
 
 - Em 26/11/2026, Marcos solicitou Arquivo Morto nas Demandas INSTITUCIONAIS e PESSOAIS. Ao conectar, preparar somente se ausentes GE_ArquivoMorto_Geral e GE_ArquivoMorto_Pessoal em suas conexões. Mover apenas a mensagem escolhida, retirar os marcadores dos quadros do módulo e preservar leitura, outros marcadores e acompanhamento. Nas categorias pessoais, escolher a mensagem na conversa. Sem novo SQL, escopo ou variável. Política revisão 40.

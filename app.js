@@ -7,6 +7,7 @@ const icons = {
   radar:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 7-7"/><circle cx="12" cy="12" r="1"/>',
   indicadores:'<path d="M4 20V10m6 10V4m6 16v-7m5 7H2"/>',
   equipe:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m1-16a3 3 0 0 1 0 6m3 10v-2a6 6 0 0 0-3-5"/>',
+  arquivo:'<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9m-9 4h4"/>',
   manutencao:'<path d="M14.7 6.3a5 5 0 0 0-6.4 6.4l-5 5a2.1 2.1 0 0 0 3 3l5-5a5 5 0 0 0 6.4-6.4l-3 3-3-3z"/>',
   configuracoes:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/>'
 };
@@ -17,10 +18,12 @@ const modules = [
   {id:'institucionais',icon:'demandas',label:'Demandas INSTITUCIONAIS'},
   {id:'pessoais',icon:'demandas',label:'Demandas PESSOAIS'},
   {id:'bi-seed',icon:'indicadores',label:'BI SEED'},
+  {id:'arquivo-morto',icon:'arquivo',label:'Arquivo Morto'},
   {id:'manutencao-sistema',icon:'manutencao',label:'Manutenção do Sistema'},
   {id:'configuracoes',icon:'configuracoes',label:'Configurações'}
 ];
 window.FarolMenuModules=modules;
+let archiveReturnHash='';
 let allowedModules=new Set(['bi-seed']),temporaryUser=null,moduleUserKey=null,overviewSelected=false;
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 
@@ -80,6 +83,7 @@ function renderDevelopment(id){
 }
 
 function render(){
+  window.FarolArchiveInbox?.unmount();
   window.FarolDemands?.unmount();
   window.FarolInstitutional?.unmount();
   window.FarolOverview?.unmount();
@@ -106,10 +110,14 @@ function render(){
     return;
   }
   main.classList.toggle('radar-workspace',selected.id==='radar'&&!analysis);
-  main.innerHTML=analysis?'<section id="attendance-analysis-board" class="demands-workspace"></section>':selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de Entrada, Classificadas, Anuais e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
+  main.innerHTML=analysis?'<section id="attendance-analysis-board" class="demands-workspace"></section>':selected.id==='inicio'?'<section class="demands-workspace" id="overview-board"></section>':selected.id==='pessoais'?`<section class="demands-workspace"><h1>Demandas PESSOAIS</h1><p class="demand-intro">Acompanhe o que espera de outras pessoas, suas pendências e seus compromissos. Os e-mails são organizados pelos três marcadores da conta Pessoal; cada conversa tem prazo e conclusão compartilhados, com responsável por categoria. Ao classificar, a mensagem sai da entrada e fica em Despachadas e nas categorias escolhidas.</p><div id="demands-board"></div></section>`:selected.id==='institucionais'?`<section class="demands-workspace"><h1>Demandas INSTITUCIONAIS</h1><p class="demand-intro">Organize as mensagens da conta GERAL em Caixa de Entrada, Classificadas, Anuais e Arquivadas. Para classificar uma mensagem, confirme sua data limite de execução.</p><div id="institutional-board"></div></section>`:selected.id==='inspetores-monitores'?'<section id="students-board" class="demands-workspace"></section>':selected.id==='arquivo-morto'?'<section id="archive-inbox-board" class="demands-workspace"></section>':selected.id==='manutencao-sistema'?'<section id="maintenance-board" class="demands-workspace"></section>':selected.id==='configuracoes'?'<section id="authorized-users-board" class="demands-workspace"></section>':selected.id==='radar'?renderRadar():renderDevelopment(selected.id);
   if(analysis)window.FarolAttendanceAnalysis?.mount(document.querySelector('#attendance-analysis-board'));
   if(selected.id==='configuracoes')window.FarolAuthorizedUsers?.mount(document.querySelector('#authorized-users-board'));
   if(selected.id==='inspetores-monitores')window.FarolStudents?.mount(document.querySelector('#students-board'));
+  if(selected.id==='arquivo-morto')window.FarolArchiveInbox?.mount(document.querySelector('#archive-inbox-board'),()=>{
+    if(archiveReturnHash==='#inicio')overviewSelected=true;
+    location.hash=archiveReturnHash;
+  });
   if(selected.id==='manutencao-sistema')window.FarolMaintenance?.mount(document.querySelector('#maintenance-board'));
   if(selected.id==='inicio')window.FarolOverview?.mount(document.querySelector('#overview-board'));
   if(selected.id==='institucionais')window.FarolInstitutional?.mount(document.querySelector('#institutional-board'));
@@ -153,7 +161,7 @@ function setupEmailConnections(){
   }
   function clearConnection(type){
     activeEmails[type]=null;
-    if(type==='personal'){window.FarolDemands?.connectionChanged(null);window.FarolStudents?.personalConnectionChanged?.(null);}
+    if(type==='personal'){window.FarolArchiveInbox?.connectionChanged(null);window.FarolDemands?.connectionChanged(null);window.FarolStudents?.personalConnectionChanged?.(null);}
     else{window.FarolInstitutional?.connectionChanged(null);window.FarolMaintenance?.connectionChanged(null);window.FarolStudents?.connectionChanged?.(null);window.FarolAuthorizedUsers?.connectionChanged(null);window.FarolAttendanceAnalysis?.connectionChanged(null);}
     window.FarolOverview?.connectionChanged(type,null);
     document.querySelector('#email-'+type+'-status').textContent='Acesso não autorizado ou não verificado';
@@ -182,6 +190,7 @@ function setupEmailConnections(){
     temporaryExpiry=null;
     if(user?.expiresAt)scheduleTemporaryExpiry(user.expiresAt);
     if(changed){
+      window.FarolArchiveInbox?.connectionChanged(null);
       window.FarolDemands?.connectionChanged(null);
       window.FarolInstitutional?.connectionChanged(null);
       window.FarolMaintenance?.connectionChanged(null);
@@ -232,6 +241,7 @@ function setupEmailConnections(){
         :connections?.personal?{email:connections.personal.email,name:'Marcos Rubo'}:null);
       const access=(module,value)=>configured&&allowedModules.has(module)?value||null:null;
       for(const type of types)activeEmails[type]=configured?result.connections?.[type]?.email||null:null;
+      window.FarolArchiveInbox?.connectionChanged(access('arquivo-morto',result.connections?.personal));
       window.FarolDemands?.connectionChanged(access('pessoais',connections?.personal));
       window.FarolInstitutional?.connectionChanged(access('institucionais',result.institutionalConnection||connections?.general));
       window.FarolMaintenance?.connectionChanged(access('manutencao-sistema',connections?.general));
@@ -276,6 +286,7 @@ function setupEmailConnections(){
       if(version!==statusVersion)return;
       configured=false;
       updateAccess(null);
+      window.FarolArchiveInbox?.connectionChanged(null);
       window.FarolDemands?.connectionChanged(null);
       window.FarolInstitutional?.connectionChanged(null);
       window.FarolMaintenance?.connectionChanged(null);
@@ -328,7 +339,10 @@ function setupEmailConnections(){
       button.disabled=true;
       try {
         ++statusVersion;
-        if(button.dataset.disconnectEmail==='personal')window.FarolDemands?.connectionChanged(null);
+        if(button.dataset.disconnectEmail==='personal'){
+          window.FarolArchiveInbox?.connectionChanged(null);
+          window.FarolDemands?.connectionChanged(null);
+        }
         if(button.dataset.disconnectEmail==='general')window.FarolInstitutional?.connectionChanged(null);
         window.FarolOverview?.connectionChanged(button.dataset.disconnectEmail,null);
         await api('disconnect',{type:button.dataset.disconnectEmail});
@@ -366,7 +380,11 @@ document.querySelector('#navigation').addEventListener('click',event=>{
   }
   if(link.getAttribute?.('href')===location.hash)window.FarolRefreshConnections?.();
 });
-window.addEventListener('hashchange',()=>{
+window.addEventListener('hashchange',event=>{
+  if(location.hash==='#arquivo-morto'&&event?.oldURL){
+    const previous=new URL(event.oldURL).hash;
+    if(previous!=='#arquivo-morto')archiveReturnHash=previous;
+  }
   if(location.hash!=='#inicio')overviewSelected=false;
   render();
   document.querySelector('#main').focus({preventScroll:true});

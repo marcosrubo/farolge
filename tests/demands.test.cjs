@@ -23,7 +23,12 @@ function harness(){
  const client={async request({url,method='GET',data}){
   calls.push({url,method,data});if(providerFailure)throw Object.assign(new Error('provider'),{response:{status:providerFailure}});
   const parsed=new URL(url),path=parsed.pathname.split('/').at(-1);
-  if(path==='messages')return {data:{messages:[...messages.values()].filter(m=>m.labelIds.includes(parsed.searchParams.get('labelIds'))).map(m=>({id:m.id,threadId:m.threadId})),nextPageToken:parsed.searchParams.has('pageToken')?undefined:'inbox-next'}};
+  if(path==='messages'){
+    const limit=Number(parsed.searchParams.get('maxResults'))||20;
+    const matching=[...messages.values()].filter(m=>m.labelIds.includes(parsed.searchParams.get('labelIds'))
+      &&(parsed.searchParams.get('q')!=='-is:draft'||!m.labelIds.includes('DRAFT')));
+    return {data:{messages:matching.slice(0,limit).map(m=>({id:m.id,threadId:m.threadId})),nextPageToken:parsed.searchParams.has('pageToken')?undefined:'inbox-next'}};
+  }
   if(parsed.pathname.includes('/messages/')){
     const id=path==='modify'?parsed.pathname.split('/').at(-2):path;
     const message=messages.get(id);if(!message)throw Object.assign(new Error('missing'),{response:{status:404}});
@@ -473,4 +478,26 @@ test('Pessoal mostra as duas colunas acima do Arquivo Morto e move o cartão ap�
  assert.match(ui.root.querySelector('#inbox-list').innerHTML,/data-inbox-archive="message1"/);
  assert.match(ui.root.querySelector('#archived-feedback').textContent,/voltou para a Caixa de Entrada/);
  ui.api.unmount();
+});
+
+
+test('Arquivo Morto em lote move uma mensagem por execução, sempre consultando o início de INBOX',async()=>{
+ const h=harness(),body={type:'personal',mailbox:h.email};
+ h.messages.set('draft',h.message('draft',['INBOX','DRAFT']));
+ await assert.rejects(h.run('personal-archive-next',{body,canClassify:false}),{message:'classify_scope'});
+ await assert.rejects(h.run('personal-archive-next',{body:{...body,messageId:'draft'}}),{message:'invalid_archive'});
+ const first=await h.run('personal-archive-next',{body});
+ assert.equal(first.status,'moved');
+ assert.deepEqual(Object.keys(first.item),['from','to','date','subject']);
+ assert.equal(first.messageId,'message1');
+ assert.deepEqual(h.messages.get('message1').labelIds,['UNREAD','CUSTOM','L4']);
+ assert.ok(h.messages.get('inbox2').labelIds.includes('INBOX'));
+ assert.equal((await h.run('personal-archive-next',{body})).messageId,'inbox2');
+ assert.equal((await h.run('personal-archive-next',{body})).status,'empty');
+ assert.deepEqual(h.messages.get('draft').labelIds,['INBOX','DRAFT']);
+ assert.equal(h.calls.filter(call=>call.method==='POST').length,2);
+ assert.ok(h.calls.filter(call=>call.url.includes('/messages?')).every(call=>{
+  const params=new URL(call.url).searchParams;
+  return params.get('maxResults')==='1'&&!params.has('pageToken');
+ }));
 });

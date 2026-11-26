@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const adminEmail='marcos.rubo@gmail.com';
-const adminModules=['inicio','radar','inspetores-monitores','bi-seed','manutencao-sistema','configuracoes','institucionais','pessoais'];
+const adminModules=['inicio','radar','inspetores-monitores','bi-seed','manutencao-sistema','configuracoes','institucionais','pessoais','arquivo-morto'];
 function ui(status={configured:false,connections:{general:null,personal:null}},search='',modules={}){
  const nodes=new Map();
  const make=()=>({hidden:false,textContent:'',innerHTML:'',disabled:false,classList:{toggle(){}},listeners:{},focus(){},addEventListener(name,fn){this.listeners[name]=fn;},showModal(){this.open=true;},close(){this.open=false;}});
@@ -74,7 +74,7 @@ test('sem identificação, hashes diretos não abrem módulos restritos',async()
   h.context.location.hash='#'+route;h.window.listeners.hashchange();
   assert.match(h.get('#main').innerHTML,/<section class="development-content module-unavailable"[^>]*><h1[^>]*>[^<]+<\/h1><h2>Módulo indisponível/);
   assert.ok(h.get('#navigation').innerHTML.includes('href="#bi-seed"'));
-  assert.equal((h.get('#navigation').innerHTML.match(/<a /g)||[]).length,8);
+  assert.equal((h.get('#navigation').innerHTML.match(/<a /g)||[]).length,9);
  }
 });
 test('desconectar Geral preserva Pessoal e a explicação do módulo',async()=>{
@@ -435,4 +435,19 @@ test('Visão GERAL usa conexões ativas nos quadros de e-mail e a fonte escolar 
  await h.window.FarolRefreshConnections();
  assert.deepEqual(calls.at(-2),{type:'general',account:null,source:school});
  assert.deepEqual(calls.at(-1),{type:'personal',account:personal,source:school});
+});
+
+
+test('Arquivo Morto fica acima da Manutenção e Cancelar volta para a rota anterior',async()=>{
+ let leave;
+ const archive={mount(_element,back){leave=back;},unmount(){},connectionChanged(){}};
+ const h=ui({configured:true,connections:{},modules:['arquivo-morto','radar']},'',{FarolArchiveInbox:archive});
+ await settle();
+ const navigation=h.get('#navigation').innerHTML;
+ assert.ok(navigation.indexOf('#arquivo-morto')<navigation.indexOf('#manutencao-sistema'));
+ h.context.location.hash='#arquivo-morto';
+ h.window.listeners.hashchange({oldURL:'https://farol.invalid/#radar'});
+ assert.match(h.get('#main').innerHTML,/archive-inbox-board/);
+ leave();
+ assert.equal(h.context.location.hash,'#radar');
 });
